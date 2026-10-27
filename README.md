@@ -18,7 +18,7 @@ build\Release\Testbed.exe
 
 - `src/main.c` builds the scene and runs it
 - `Deps/` holds the engine headers (`Includes/PBR`) and prebuilt libraries (`Libs`)
-- `Assets/Shaders/shaders` holds the engine's shaders. They are copied to `<exe>/engine/shaders` at build time
+- `Assets/Shaders/shaders` holds the engine's shaders. They are copied to `<exe>/assets/shaders` at build time
 - `Assets/models` and `Assets/hdri` hold the models and HDRI the scene loads. They are copied to `<exe>/assets` at build time
 
-The build output folder (`build/Release`) needs nothing else at runtime. You can copy it to another machine and run it there.
+At runtime the program loads everything from the `assets/` folder next to it. `PBR_Engine.lib` was built with no absolute paths, so nothing outside the build folder is used. You can copy `build/Release` to another machine and run it there.

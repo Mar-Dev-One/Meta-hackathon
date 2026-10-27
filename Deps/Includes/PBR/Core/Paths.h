@@ -8,20 +8,19 @@
 //
 //   engine root   the engine's own data: shaders/. The first that has
 //                 shaders/pbr.vert of
-//                   1. <executable's folder>/engine   (an exported game)
-//                   2. DEV_ENGINE_ROOT                (engine/ in the source tree)
+//                   1. <executable's folder>/assets
+//                   2. DEV_ENGINE_ROOT
 //
 //   project root  what a game is made of: scenes/, models/, hdri/,
 //                 textures/. Paths stored in scenes ("models/Avocado.glb",
 //                 "hdri/sky.hdr") are relative to it.
 //                   1. paths_set_project_root() (the apps' --project <dir>)
-//                   2. DEV_PROJECT_ROOT         (assets/ in the source tree)
+//                   2. DEV_PROJECT_ROOT
 //
-// DEV_ENGINE_ROOT and DEV_PROJECT_ROOT are injected by CMake as absolute
-// source-tree paths: the development fallback, so builds run from any working
-// directory (IDE run buttons, ctest, double-clicking the binary). Code that
-// runs during development uses the source tree's shaders, so hot reload edits
-// the real files.
+// This build of PBR_Engine.lib was compiled with DEV_ENGINE_ROOT and
+// DEV_PROJECT_ROOT both "assets" (relative to the working directory), so it
+// holds no absolute paths: a program finds everything in the assets/ folder
+// next to it.
 //
 // Roots use '/' separators and have no trailing '/'.
 

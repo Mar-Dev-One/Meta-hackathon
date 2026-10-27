@@ -47,14 +47,14 @@ target_link_libraries(PBR_Engine INTERFACE
 add_executable(Testbed src/main.c)
 target_link_libraries(Testbed PRIVATE PBR_Engine)
 
-# Everything the program loads at runtime goes next to it, so the build
-# folder runs on its own and can be copied elsewhere:
-#   engine/shaders  the engine looks here first (Core/Paths.h)
-#   assets          models/ and hdri/; main.c makes it the project root
+# Everything the program loads at runtime goes in assets/ next to it, so the
+# build folder runs on its own and can be copied elsewhere:
+#   assets/shaders          the engine's root (Core/Paths.h)
+#   assets/models, /hdri    the project root; main.c sets it
 add_custom_command(TARGET Testbed POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Shaders/shaders
-            $<TARGET_FILE_DIR:Testbed>/engine/shaders
+            $<TARGET_FILE_DIR:Testbed>/assets/shaders
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/Assets/models
             $<TARGET_FILE_DIR:Testbed>/assets/models
