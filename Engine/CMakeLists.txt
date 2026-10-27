@@ -1,0 +1,13 @@
+# Meta_Engine: the studio built on PBR_Engine during the hackathon -- the
+# commands an agent sets up a shot with, and (docs/ROADMAP.md, Phase 1) the
+# timeline, text, products and shot rendering that follow.
+#
+# It uses the engine only through its installed headers and library; the
+# engine itself is not changed.
+
+add_library(Meta_Engine STATIC
+    src/Studio/Studio.c
+    src/Studio/StudioCommands.c
+)
+target_include_directories(Meta_Engine PUBLIC src)
+target_link_libraries(Meta_Engine PUBLIC PBR_Engine)

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.26)
 
-# The testbed: builds a scene in code with the engine's PBR_Engine and draws it
-# -- the engine used as a library, with no scene file and no editor.
+# The Studio: the renderer the agents drive over the command server, built on
+# the engine's PBR_Engine and on Meta_Engine (Engine/, written here).
 #
 # The engine comes prebuilt in Deps/ (headers in Deps/Includes/PBR, MSVC
 # Release libraries in Deps/Libs), so this needs MSVC:
@@ -42,25 +42,29 @@ target_link_libraries(PBR_Engine INTERFACE
     ws2_32
 )
 
-# --- Testbed ------------------------------------------------------------------
+# --- Meta_Engine (built here) -------------------------------------------------
 
-add_executable(Testbed src/main.c)
-target_link_libraries(Testbed PRIVATE PBR_Engine)
+add_subdirectory(Engine)
+
+# --- Studio -------------------------------------------------------------------
+
+add_executable(Studio src/main.c)
+target_link_libraries(Studio PRIVATE Meta_Engine)
 
 # Everything the program loads at runtime goes in assets/ next to it, so the
 # build folder runs on its own and can be copied elsewhere:
 #   assets/shaders          the engine's root (Core/Paths.h)
 #   assets/models, /hdri    the project root; main.c sets it
-add_custom_command(TARGET Testbed POST_BUILD
+add_custom_command(TARGET Studio POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Shaders/shaders
-            $<TARGET_FILE_DIR:Testbed>/assets/shaders
+            $<TARGET_FILE_DIR:Studio>/assets/shaders
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/Assets/models
-            $<TARGET_FILE_DIR:Testbed>/assets/models
+            $<TARGET_FILE_DIR:Studio>/assets/models
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/Assets/hdri
-            $<TARGET_FILE_DIR:Testbed>/assets/hdri
+            $<TARGET_FILE_DIR:Studio>/assets/hdri
 )
 
 # vcruntime140.dll goes next to the program too: Windows 10/11 ship the rest
@@ -73,10 +77,10 @@ list(FILTER CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS INCLUDE REGEX "/vcruntime140\\.dll
 if(NOT CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
     message(FATAL_ERROR "vcruntime140.dll not found in the MSVC redist folder")
 endif()
-add_custom_command(TARGET Testbed POST_BUILD
+add_custom_command(TARGET Studio POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
-            $<TARGET_FILE_DIR:Testbed>
+            $<TARGET_FILE_DIR:Studio>
 )
 
-set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT Testbed)
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT Studio)

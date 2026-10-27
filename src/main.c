@@ -1,30 +1,34 @@
-// testbed/main.c
+// src/main.c
 //
-// The testbed: builds a scene in code with the engine's World API -- no scene
-// file -- and draws it with the scene renderer. What a program using the
-// engine as a library looks like, and a quick way to try a renderer change.
+// The Studio: the renderer the agents drive. It starts on an empty stage and
+// runs the command server (Net/CommandServer.h): other processes build the
+// shot over a localhost WebSocket with JSON-RPC, with undo history -- the
+// engine's commands plus the studio's (Engine/src/Studio/Studio.h:
+// environment, render settings, cameras). Its URL, token included, is logged
+// and written to server.json next to the executable.
 //
-//   Testbed [--check PNG] [--view NAME] [--port N]
-//     --check PNG   render a few frames in a hidden window, save the picture
-//                   to PNG and exit (0 if it was written)
+//   Studio [--demo-scene] [--hidden] [--width W --height H] [--check PNG] [--view NAME] [--port N]
+//     --demo-scene  start with the demo scene below instead of an empty stage
+//     --hidden      no visible window: a renderer for the agents only
+//     --width, --height
+//                   the window's (and the frame's) size in pixels
+//     --check PNG   render the demo scene a few frames in a hidden window,
+//                   save the picture to PNG and exit (0 if it was written)
 //     --view NAME   a debug view instead of the lit scene: albedo, normals,
 //                   roughness, metallic, ao, shadow, lighting, wireframe,
 //                   lights (Renderer/SceneRenderer.h)
 //     --port N      the command server's port (default 7468)
 //
-// The command server (Net/CommandServer.h) runs while the window is open
-// (not for --check): other processes drive the world over a localhost
-// WebSocket with JSON-RPC, with undo history. Its URL, token included, is
-// logged and written to server.json next to the executable.
+// The frame is seen through the studio's active camera once camera.set has
+// made one; until then through an orbit camera (left-drag orbits, the
+// wheel zooms). Esc quits.
 //
-// The scene (build_scene()): a ground plane; the material grid -- two rows
+// The demo scene (build_scene()): a ground plane; the material grid -- two rows
 // of spheres, dielectric in front and metal behind, going from smooth to
 // rough left to right; a polished Suzanne turning on a pedestal; a sun that
 // casts shadows, a warm point light and a spot light; an HDRI sky. Models
 // and the HDRI come from the assets/ folder next to the executable, which
 // the build fills from Assets/models and Assets/hdri (use_bundled_assets()).
-//
-// Left-drag orbits, the wheel zooms, Esc quits.
 
 #include "App.h"
 #include "Assets/AssetCache.h"
@@ -42,6 +46,7 @@
 #include "Scene/Camera.h"
 #include "Scene/Light.h"
 #include "Scene/OrbitCamera.h"
+#include "Studio/Studio.h"
 #include "World/Environment.h"
 #include "World/World.h"
 
@@ -61,18 +66,23 @@
 
 #define GRID_COLUMNS 7
 
-typedef struct testbed_state
+#define DEFAULT_WIDTH  1600
+#define DEFAULT_HEIGHT 900
+
+typedef struct studio_state
 {
     const char*      check_path;
     uint32           check_frames;
     b8               check_passed;
     scene_debug_view debug_view;
+    b8               demo_scene;
 
     asset_cache       assets;
     world             world;
     scene_renderer    renderer;
     scene_environment env;
     ibl_cache         ibl;
+    studio            stage;
 
     camera       cam;
     orbit_camera orbit;
@@ -84,7 +94,7 @@ typedef struct testbed_state
     command_server*  server;
     command_context  commands;
     command_history  history;
-} testbed_state;
+} studio_state;
 
 // --- Scene -----------------------------------------------------------------------
 
@@ -168,7 +178,7 @@ build_scene(world* w, asset_cache* assets)
         }
     }
     else
-        LOG_WARN("testbed: models/suzanne.obj didn't load; the pedestal stays empty\n");
+        LOG_WARN("studio: models/suzanne.obj didn't load; the pedestal stays empty\n");
 
     // Lights: a sun from the upper left, a warm point light by the grid and
     // a cool spot light on the pedestal.
@@ -192,7 +202,7 @@ build_scene(world* w, asset_cache* assets)
 // Points the orbit camera at the grid and the pedestal (not the whole ground,
 // which would leave them small in the middle).
 static void
-frame_scene(testbed_state* state)
+frame_scene(studio_state* state)
 {
     vec3 lo = { -4.0f, 0.0f, -1.8f };
     vec3 hi = { 4.0f, 1.6f, 2.8f };
@@ -205,10 +215,11 @@ frame_scene(testbed_state* state)
 
 // --- Command server --------------------------------------------------------------
 
-// Starts the server on the world, its environment and an undo history.
-// Failing to start is logged and leaves the testbed running without it.
+// Starts the server on the world, its environment, an undo history and the
+// studio's commands. Failing to start is logged and leaves the studio
+// running without it.
 static void
-start_server(testbed_state* state)
+start_server(studio_state* state)
 {
     const char* exe_dir = paths_executable_dir();
     snprintf(state->discovery_path, sizeof(state->discovery_path), "%s%sserver.json", exe_dir, *exe_dir ? "/" : "");
@@ -225,8 +236,10 @@ start_server(testbed_state* state)
         .environment    = &state->env,
         .on_change      = server_on_change,
         .on_change_user = state->server,
+        .host_user      = &state->stage,
     };
-    LOG_INFO("testbed: command server at %s\n", server_url(state->server));
+    state->commands.host_commands = studio_commands(&state->commands.host_command_count);
+    LOG_INFO("studio: command server at %s\n", server_url(state->server));
 }
 
 // --- App hooks -------------------------------------------------------------------
@@ -234,21 +247,25 @@ start_server(testbed_state* state)
 static void
 on_init(App* app)
 {
-    testbed_state* state = (testbed_state*)app->user_data;
-    window_size    size  = window_get_size(get_renderer()->drawing_window);
-    state->aspect        = size.height ? (f32)size.width / (f32)size.height : 1.0f;
+    studio_state* state = (studio_state*)app->user_data;
+    window_size   size  = window_get_size(get_renderer()->drawing_window);
+    state->aspect       = size.height ? (f32)size.width / (f32)size.height : 1.0f;
 
     if (!scene_renderer_create(&state->renderer, size.width, size.height, CASCADE_COUNT, SHADOW_MAP_SIZE))
-        FATAL("testbed: failed to create the scene renderer");
+        FATAL("studio: failed to create the scene renderer");
 
     assets_init(&state->assets);
     world_init(&state->world, &state->assets);
-    build_scene(&state->world, &state->assets);
-    world_update(&state->world);
-    LOG_INFO("testbed: built %u entities\n", world_count(&state->world));
-
     state->env = scene_environment_default();
-    snprintf(state->env.hdri, sizeof(state->env.hdri), "%s", HDRI);
+    studio_init(&state->stage, &state->world, &state->env);
+
+    if (state->demo_scene)
+    {
+        build_scene(&state->world, &state->assets);
+        world_update(&state->world);
+        LOG_INFO("studio: built %u entities\n", world_count(&state->world));
+        snprintf(state->env.hdri, sizeof(state->env.hdri), "%s", HDRI);
+    }
     ibl_cache_sync(&state->ibl, state->env.hdri);
 
     frame_scene(state);
@@ -260,7 +277,7 @@ on_init(App* app)
 static void
 on_resize(App* app, uint16 width, uint16 height)
 {
-    testbed_state* state = (testbed_state*)app->user_data;
+    studio_state* state = (studio_state*)app->user_data;
     if (width == 0 || height == 0)   // minimized
         return;
 
@@ -272,10 +289,10 @@ on_resize(App* app, uint16 width, uint16 height)
 // --check: the frame as a PNG at check_path. False (logged) if it can't be
 // rendered or written.
 static b8
-save_check_picture(testbed_state* state, const scene_render_settings* settings)
+save_check_picture(studio_state* state, const camera* cam, const scene_render_settings* settings)
 {
     uint16 width, height;
-    uint8* rgba = scene_renderer_capture(&state->renderer, &state->world, &state->cam, settings, &width, &height);
+    uint8* rgba = scene_renderer_capture(&state->renderer, &state->world, cam, settings, &width, &height);
     if (!rgba)
     {
         LOG_ERROR("check: nothing was rendered\n");
@@ -302,7 +319,7 @@ save_check_picture(testbed_state* state, const scene_render_settings* settings)
 static void
 on_frame(App* app, f32 dt)
 {
-    testbed_state* state = (testbed_state*)app->user_data;
+    studio_state* state = (studio_state*)app->user_data;
 
     if (input_key_pressed(INPUT_KEY_ESCAPE))
         app->should_close = true;
@@ -334,14 +351,19 @@ on_frame(App* app, f32 dt)
 
     scene_render_settings settings = scene_render_settings_default();
     scene_render_settings_apply_environment(&settings, &state->env, ibl_cache_maps(&state->ibl));
+    studio_apply_render_settings(&state->stage, &settings);
     settings.debug_view = state->debug_view;
     settings.delta_time = state->check_path ? -1.0f : dt;
 
-    scene_renderer_draw(&state->renderer, &state->world, &state->cam, &settings);
+    // Through the studio's active camera once there is one, else the orbit camera.
+    camera        studio_view;
+    const camera* view = studio_camera_view(&state->stage, state->aspect, &studio_view) ? &studio_view : &state->cam;
+
+    scene_renderer_draw(&state->renderer, &state->world, view, &settings);
 
     if (state->check_path && ++state->check_frames >= CHECK_FRAMES)
     {
-        state->check_passed = save_check_picture(state, &settings);
+        state->check_passed = save_check_picture(state, view, &settings);
         app->should_close   = true;
     }
 }
@@ -349,7 +371,7 @@ on_frame(App* app, f32 dt)
 static void
 on_shutdown(App* app)
 {
-    testbed_state* state = (testbed_state*)app->user_data;
+    studio_state* state = (studio_state*)app->user_data;
 
     if (state->server)
     {
@@ -375,28 +397,69 @@ use_bundled_assets(void)
 
     if (paths_set_project_root(directory))
         return true;
-    LOG_ERROR("testbed: no assets folder at %s\n", directory);
+    LOG_ERROR("studio: no assets folder at %s\n", directory);
     return false;
 }
 
 static void
 print_usage(void)
 {
-    printf("usage: Testbed [--check PNG] [--view NAME] [--port N]\n"
-           "  --check  render the scene once, hidden, into PNG and exit (0 = it was written)\n"
-           "  --view   a debug view: albedo, normals, roughness, metallic, ao, shadow, lighting, wireframe, lights\n"
-           "  --port   the command server's port (default %d; another free one if it's taken)\n",
-           SERVER_DEFAULT_PORT);
+    printf("usage: Studio [--demo-scene] [--hidden] [--width W --height H] [--check PNG] [--view NAME] [--port N]\n"
+           "  --demo-scene  start with the demo scene instead of an empty stage\n"
+           "  --hidden      no visible window (the command server still runs)\n"
+           "  --width, --height\n"
+           "                the window's and frame's size in pixels (default %dx%d)\n"
+           "  --check       render the demo scene once, hidden, into PNG and exit (0 = it was written)\n"
+           "  --view        a debug view: albedo, normals, roughness, metallic, ao, shadow, lighting, wireframe, lights\n"
+           "  --port        the command server's port (default %d; another free one if it's taken)\n",
+           DEFAULT_WIDTH, DEFAULT_HEIGHT, SERVER_DEFAULT_PORT);
+}
+
+// The pixel count after `flag` at argv[*i] (advancing *i), or 0 (reported) if
+// it's missing or out of range.
+static uint16
+parse_size(int argc, char** argv, int* i, const char* flag)
+{
+    int value = *i + 1 < argc ? atoi(argv[++*i]) : 0;
+    if (value < 16 || value > 8192)
+    {
+        fprintf(stderr, "%s needs a size in pixels (16-8192)\n", flag);
+        return 0;
+    }
+    return (uint16)value;
 }
 
 int main(int argc, char** argv)
 {
-    testbed_state state = { 0 };
+    studio_state state  = { 0 };
+    b8           hidden = false;
+    uint16       width  = 0, height = 0;
 
     for (int i = 1; i < argc; ++i)
     {
         const char* arg = argv[i];
-        if (strcmp(arg, "--check") == 0)
+        if (strcmp(arg, "--demo-scene") == 0)
+        {
+            state.demo_scene = true;
+        }
+        else if (strcmp(arg, "--hidden") == 0)
+        {
+            hidden = true;
+        }
+        else if (strcmp(arg, "--width") == 0 || strcmp(arg, "--height") == 0)
+        {
+            uint16 size = parse_size(argc, argv, &i, arg);
+            if (!size)
+            {
+                print_usage();
+                return 1;
+            }
+            if (arg[2] == 'w')
+                width = size;
+            else
+                height = size;
+        }
+        else if (strcmp(arg, "--check") == 0)
         {
             state.check_path = i + 1 < argc ? argv[++i] : NULL;
             if (!state.check_path)
@@ -439,14 +502,23 @@ int main(int argc, char** argv)
         }
     }
 
+    // A check pictures the demo scene, at a small size unless one is given.
+    if (state.check_path)
+    {
+        state.demo_scene = true;
+        hidden           = true;
+        if (!width)  width  = 960;
+        if (!height) height = 540;
+    }
+
     if (!use_bundled_assets())
         return 1;
 
     App app = {
-        .name       = "PBR Testbed",
-        .hidden      = state.check_path != NULL,
-        .width       = state.check_path ? 960 : 1600,
-        .height      = state.check_path ? 540 : 900,
+        .name        = "Studio",
+        .hidden      = hidden,
+        .width       = width ? width : DEFAULT_WIDTH,
+        .height      = height ? height : DEFAULT_HEIGHT,
         .on_init     = on_init,
         .on_frame    = on_frame,
         .on_shutdown = on_shutdown,
