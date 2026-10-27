@@ -7,9 +7,12 @@
 
 add_library(Meta_Engine STATIC
     src/Common/Json.c
+    src/Products/Geometry.c
+    src/Products/Products.c
     src/Shot/Shot.c
     src/Shot/ShotCommands.c
     src/Studio/CameraMoves.c
+    src/Studio/Lighting.c
     src/Studio/Studio.c
     src/Studio/StudioCommands.c
     src/Timeline/Timeline.c

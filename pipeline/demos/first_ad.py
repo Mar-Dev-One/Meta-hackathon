@@ -5,13 +5,12 @@ Absolu": the shot list a director agent will later write for itself.
     python -m pipeline.demos.first_ad              # the video: pipeline/demos/out/first_ad.mp4
     python -m pipeline.demos.first_ad --preview    # a few frames as PNGs, to check the look first
 
-Until the Studio builds product meshes (docs/ROADMAP.md, Phase 1.6) the
-bottle is two boxes: a deep plum glass body and a gold cap.
+The bottle is the Studio's perfume template with a label drawn here with
+Pillow; the brand analyst will later make both from a product photo.
 """
 
 import argparse
 import asyncio
-import math
 import time
 from pathlib import Path
 
@@ -21,66 +20,59 @@ from pipeline.studio import Studio
 OUT = Path(__file__).resolve().parent / "out"
 
 
-async def spot(studio: Studio, name: str, position, target, color, intensity: float, cone: float = 30.0):
-    """A spot light at `position` aimed at `target`."""
-    d = [t - p for p, t in zip(position, target)]
-    length = math.sqrt(sum(x * x for x in d))
-    await studio.call("entity.create", name=name, components={
-        "Transform": {"position": list(position)},
-        "Light": {"type": "spot", "color": list(color), "intensity": intensity, "direction": [x / length for x in d],
-                  "range": 6.0, "inner_cone_degrees": cone * 0.6, "outer_cone_degrees": cone, "cast_shadows": True},
-    })
+def make_label(path: Path) -> Path:
+    """The label artwork: cream paper, a thin gold border, the name in a serif."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    w, h = 1200, 800
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))   # transparent outside the rounded corners
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([0, 0, w - 1, h - 1], radius=60, fill=(236, 226, 206, 255))
+    d.rounded_rectangle([30, 30, w - 31, h - 31], radius=40, outline=(160, 122, 62, 255), width=6)
+    for text, size, y, color in (("N O C T I S", 170, 250, (30, 22, 18)), ("NOIR ABSOLU", 64, 560, (120, 90, 50))):
+        font = ImageFont.truetype("C:/Windows/Fonts/georgia.ttf", size)
+        d.text(((w - d.textlength(text, font=font)) / 2, y), text, font=font, fill=color + (255,))
+    img.save(path)
+    return path
 
 
-async def box(studio: Studio, name: str, center, size, color, metallic: float, roughness: float):
-    """A built-in cube (1 unit across) scaled to `size`, centred on `center`."""
-    await studio.call("entity.create", name=name, components={
-        "Transform": {"position": list(center), "scale": list(size)},
-        "MeshRenderer": {"model": "builtin:cube", "material.base_color": list(color),
-                         "material.metallic": metallic, "material.roughness": roughness},
-    })
-
-
-async def build_scene(studio: Studio) -> None:
+async def build_scene(studio: Studio) -> dict:
+    """The set; returns the preset's lights by entity name, with their intensities."""
     await studio.call("studio.reset")
     # The HDRI only lights and reflects; the background stays near black.
     await studio.call("environment.set", hdri="hdri/citrus_orchard_road_puresky_4k.hdr", use_ibl=True,
-                      show_skybox=False, ambient_strength=0.05, exposure=1.0, bloom=0.08, tonemap="agx", ssao=True)
+                      show_skybox=False, ambient_strength=0.06, exposure=1.0, bloom=0.08, tonemap="agx", ssao=True)
     await studio.call("render.set", antialiasing="taa", clear_color=[0.004, 0.004, 0.006])
 
-    await studio.call("entity.create", name="floor", components={
-        "Transform": {"scale": [12, 1, 12]},
-        "MeshRenderer": {"model": "builtin:plane", "material.base_color": [0.012, 0.012, 0.014], "material.roughness": 0.65},
-    })
-    await box(studio, "pedestal", (0, 0.15, 0), (0.5, 0.3, 0.5), (0.015, 0.015, 0.017), 0.0, 0.75)
-    await box(studio, "bottle", (0, 0.41, 0), (0.16, 0.22, 0.07), (0.12, 0.03, 0.08), 0.0, 0.06)
-    await box(studio, "cap", (0, 0.55, 0), (0.075, 0.06, 0.075), (1.0, 0.77, 0.38), 1.0, 0.22)
-
-    product = (0, 0.45, 0)
-    await spot(studio, "key", (-0.9, 1.2, 1.3), product, (1.0, 0.92, 0.82), 2.5, cone=22)
-    await spot(studio, "rim_warm", (-0.7, 0.55, -1.1), product, (1.0, 0.62, 0.30), 30.0, cone=14)
-    await spot(studio, "rim_cool", (0.75, 0.55, -1.0), product, (0.45, 0.60, 1.0), 22.0, cone=14)
+    await studio.call("backdrop.create", kind="cyclorama", color="#0a0a0c", roughness=0.6)
+    await studio.call("backdrop.create", kind="pedestal", width=0.32, height=0.22, color="#0e0e10", roughness=0.85)
+    await studio.call("product.create", name="product", template="perfume", position=[0, 0.22, 0],
+                      parts={"body": {"color": "#4a1030", "opacity": 0.92, "roughness": 0.04},
+                             "cap": {"color": "#d4af6a", "roughness": 0.18}},
+                      label={"image": str(make_label(OUT / "noctis_label.png")), "arc": 110})
+    lights = await studio.call("lighting.preset", name="rim_dark", subject="product")
+    return {light["entity"]: light["intensity"] for light in lights["lights"]}
 
 
-async def build_shots(studio: Studio) -> float:
+async def build_shots(studio: Studio, lights: dict) -> float:
     """The shot list; returns the ad's length in seconds."""
     shots = [
         # Out of the dark: the aim comes down onto the bottle as the rims come up.
-        dict(move="reveal", start=0, duration=3, fill=0.45, azimuth=-15, elevation=4, **{"from": "above"}),
+        dict(move="reveal", start=0, duration=3, fill=0.5, azimuth=-15, elevation=4, **{"from": "above"}),
         # Around it, low: the rim lights slide across the glass.
-        dict(move="orbit", start=3, duration=4, azimuth=-60, to_azimuth=10, elevation=3, fill=0.55),
-        # In close on the cap.
-        dict(move="dolly", start=7, duration=3, azimuth=20, elevation=8, from_fill=0.5, to_fill=0.8),
+        dict(move="orbit", start=3, duration=4, azimuth=-60, to_azimuth=10, elevation=3, fill=0.6),
+        # In close on the label and cap.
+        dict(move="dolly", start=7, duration=3, azimuth=12, elevation=8, from_fill=0.55, to_fill=0.95),
         # The hero: still, room below for the name.
-        dict(move="static", start=10, duration=3, azimuth=0, elevation=2, fill=0.42),
+        dict(move="static", start=10, duration=3, azimuth=0, elevation=2, fill=0.45),
     ]
     for shot in shots:
-        await studio.call("camera.move", subject="bottle", **shot)
+        await studio.call("camera.move", subject="product", **shot)
 
     # The rims rise from darkness during the first shot.
-    for name, full in (("rim_warm", 30.0), ("rim_cool", 22.0)):
+    for name in ("light_rim_left", "light_rim_right"):
         await studio.call("timeline.set_track", entity=name, component="Light", field="intensity",
-                          keys=[{"t": 0, "value": 0.0, "ease": "in"}, {"t": 2.5, "value": full}])
+                          keys=[{"t": 0, "value": 0.0, "ease": "in"}, {"t": 2.5, "value": lights[name]}])
     return shots[-1]["start"] + shots[-1]["duration"]
 
 
@@ -93,8 +85,8 @@ TITLES = [
 async def main(args) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     async with Studio() as studio:
-        await build_scene(studio)
-        length = await build_shots(studio)
+        lights = await build_scene(studio)
+        length = await build_shots(studio, lights)
 
         if args.preview:
             times = [0.4, 1.5, 2.9, 3.5, 5.0, 6.9, 7.2, 9.8, 11.5]

@@ -5,6 +5,8 @@
 
 #include "CameraMoves.h"
 #include "Common/Json.h"
+#include "LightingCommands.h"
+#include "Products/ProductCommands.h"
 #include "Shot/ShotCommands.h"
 #include "Timeline/TimelineCommands.h"
 
@@ -235,12 +237,17 @@ studio_commands(uint32* out_count)
     static uint32            all_count;
     if (!all)
     {
-        uint32                  counts[4] = { sizeof(STUDIO_COMMANDS) / sizeof(STUDIO_COMMANDS[0]) };
-        const cmd_host_command* tables[4] = { STUDIO_COMMANDS, camera_move_commands(&counts[1]),
-                                              timeline_commands(&counts[2]), shot_commands(&counts[3]) };
+        enum { TABLES = 6 };
+        uint32                  counts[TABLES] = { sizeof(STUDIO_COMMANDS) / sizeof(STUDIO_COMMANDS[0]) };
+        const cmd_host_command* tables[TABLES] = { STUDIO_COMMANDS, camera_move_commands(&counts[1]),
+                                                   lighting_commands(&counts[2]), product_commands(&counts[3]),
+                                                   timeline_commands(&counts[4]), shot_commands(&counts[5]) };
+        uint32 total = 0;
+        for (int i = 0; i < TABLES; ++i)
+            total += counts[i];
 
-        all = malloc((counts[0] + counts[1] + counts[2] + counts[3]) * sizeof(*all));
-        for (int i = 0; i < 4; ++i)
+        all = malloc(total * sizeof(*all));
+        for (int i = 0; i < TABLES; ++i)
         {
             memcpy(all + all_count, tables[i], counts[i] * sizeof(*all));
             all_count += counts[i];

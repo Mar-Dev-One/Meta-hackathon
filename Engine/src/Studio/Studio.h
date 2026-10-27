@@ -26,6 +26,9 @@
 //   camera.set         creates or moves a Camera entity, aims it once, makes it the active one
 //   camera.move        a shot's camera move: keys for an orbit, dolly, crane, ...
 //                      around a subject (Studio/CameraMoves.c)
+//   lighting.preset    a studio lighting setup around a subject (Studio/Lighting.c)
+//   product.create     a product model spun from a profile, with a label (Products/Products.c)
+//   backdrop.create    a cyclorama or a round pedestal (Products/Products.c)
 //   timeline.*         keyframes (Timeline/TimelineCommands.c): set_track, add_key,
 //                      remove_track, clear, get, seek, play, pause
 //   shot.*             frames to PNG or video (Shot/ShotCommands.c): preview, render, bounds

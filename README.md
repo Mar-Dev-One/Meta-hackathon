@@ -48,6 +48,9 @@ The method is the command name and the params are its arguments:
   | `environment.get` / `environment.set` | HDRI, image-based lighting, exposure, bloom, tone mapping, SSAO |
   | `render.get` / `render.set` | Antialiasing, shadows, background colour |
   | `camera.get` / `camera.set` | Creates or moves a Camera entity, aims it at a point once and makes it the one the frame is seen through |
+  | `product.create` | A product spun from a profile: a template (`perfume`, `bottle`, `jar`, `can`, `dropper`) or your own parts, colours as `"#RRGGBB"`, and an optional label image wrapped round its body |
+  | `backdrop.create` | A cyclorama (a floor curving up into a wall) or a round pedestal, optionally covered with an image |
+  | `lighting.preset` | A lighting setup around a subject: `three_point`, `rim_dark`, `high_key`, `top_soft`, `split`, `neon_dual`; its lights are `light_*` entities |
   | `camera.move` | A shot's camera move around a subject: `static`, `orbit`, `dolly`, `crane`, `truck`, `reveal` or `zoom`, framed so the subject fills a share of the frame. Written as timeline keys; moves placed end to end are cuts |
   | `timeline.set_track` / `timeline.add_key` | Keyframes any number, vec3 or colour field of any component (`Transform.position`, `Camera.fov_degrees`, `Light.intensity`, `MeshRenderer.material.roughness`, ...) with easing: linear, in, out, in_out, step or a cubic bezier |
   | `timeline.remove_track` / `timeline.clear` / `timeline.get` | Edit and read the tracks |
@@ -58,6 +61,8 @@ The method is the command name and the params are its arguments:
   | `shot.bounds` | Where an entity is in the frame at a time: its box, centre, how much of the frame it fills, which edges cut it |
 
 A failed command changes nothing and says which argument is wrong and what it accepts. Every change is also pushed to all clients as a `scene.changed` notification.
+
+Products and backdrops are written as glTF files under the project's `products/` folder (`<exe>/assets/products`) and loaded by the engine like any model, so scenes that use them reload after a restart. A file's name carries a hash of what it was made from: the same request reuses it.
 
 The Studio's own state (the timeline, the active camera and what it looks at, the render settings) is saved and loaded with the scene (`scene.save` / `scene.load`), as `scenes/<name>.studio.json` next to the scene file. A track names its entity, so it keeps working through undo and scene loads.
 
@@ -101,7 +106,7 @@ runs the timeline's tests (`Engine/tests/timeline_tests.c`: easing, sampling, ed
 ## Layout
 
 - `src/main.c` is the Studio program
-- `Engine/` is `Meta_Engine`, the library written for this project on top of the engine: `src/Studio` (studio commands), `src/Timeline` (keyframe animation), `src/Shot` (frames, video), `src/Common` (JSON helpers), `tests/`; text and products to come
+- `Engine/` is `Meta_Engine`, the library written for this project on top of the engine: `src/Studio` (studio commands), `src/Timeline` (keyframe animation), `src/Shot` (frames, video), `src/Products` (product and backdrop models as glTF), `src/Common` (JSON helpers), `tests/`; text to come
 - `pipeline/` is the Python side: the Studio client, finishing with ffmpeg, demos, the Meta model smoke tests
 - `Deps/` holds the engine headers (`Includes/PBR`) and prebuilt libraries (`Libs`)
 - `Assets/Shaders/shaders` holds the engine's shaders. They are copied to `<exe>/assets/shaders` at build time
@@ -114,6 +119,6 @@ At runtime the program loads everything from the `assets/` folder next to it. `P
 
 The engine (`PBR_Engine`, [AI-Powered-PBR-Renderer](https://github.com/Mar-Dev-One/AI-Powered-PBR-Renderer)) existed before the hackathon and is used unchanged, as a prebuilt library. Everything in this repository was written during the hackathon (from 2026-10-27):
 
-- `Engine/`: the Studio library (`Meta_Engine`): studio commands, the timeline and its tests, shot rendering to PNG and video
+- `Engine/`: the Studio library (`Meta_Engine`): studio commands, the timeline and its tests, shot rendering to PNG and video, camera moves, lighting presets, product and backdrop models
 - `src/main.c`: the Studio program
 - `pipeline/`: the Studio client, the ffmpeg finishing pass, the first hand-made ad, the Meta model smoke tests
