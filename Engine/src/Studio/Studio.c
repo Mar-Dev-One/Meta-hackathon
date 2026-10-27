@@ -1,6 +1,10 @@
 #include "Studio.h"
 
+#include "Core/Paths.h"
+
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define RAD_TO_DEG (180.0f / 3.14159265358979f)
@@ -22,6 +26,13 @@ studio_init(studio* s, world* w, scene_environment* env)
     s->w   = w;
     s->env = env;
     reset_render_settings(s);
+    timeline_init(&s->timeline);
+}
+
+void
+studio_destroy(studio* s)
+{
+    timeline_destroy(&s->timeline);
 }
 
 void
@@ -30,6 +41,48 @@ studio_reset(studio* s)
     world_clear(s->w);
     *s->env = scene_environment_default();
     reset_render_settings(s);
+    timeline_clear(&s->timeline);
+}
+
+void
+studio_update(studio* s, f32 dt)
+{
+    timeline* tl = &s->timeline;
+    if (!tl->playing)
+        return;
+
+    f32 duration = timeline_duration(tl);
+    f32 t        = tl->time + dt;
+    if (t >= duration)
+    {
+        if (tl->loop && duration > 0.0f)
+            t = fmodf(t, duration);
+        else
+        {
+            t           = duration;
+            tl->playing = false;
+        }
+    }
+    timeline_evaluate(tl, s->w, t, NULL);
+}
+
+void
+studio_scene_file(studio* s, cmd_scene_file_op op, const char* name)
+{
+    char relative[256];
+    snprintf(relative, sizeof(relative), "scenes/%s.timeline.json", name);
+    char* path = project_path(relative);
+    if (!path)
+        return;
+
+    if (op == CMD_SCENE_SAVED)
+        timeline_save(&s->timeline, path);
+    else if (timeline_load(&s->timeline, path))
+    {
+        timeline_evaluate(&s->timeline, s->w, 0.0f, NULL);
+        world_update(s->w);
+    }
+    free(path);
 }
 
 void

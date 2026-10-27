@@ -4,23 +4,30 @@
 #include "Core/Defines.h"
 #include "Renderer/SceneRenderer.h"
 #include "Scene/Camera.h"
+#include "Timeline/Timeline.h"
 #include "World/Environment.h"
 #include "World/World.h"
 
 // The studio: what a shot is set up with, on top of the engine's World --
 // the environment (HDRI, exposure, tone mapping), the render settings the
-// environment doesn't hold, and which Camera entity the frame is seen
-// through. Agents drive it with the commands below, which the app installs
-// as its host commands (command_context.host_commands, host_user = the
-// studio):
+// environment doesn't hold, which Camera entity the frame is seen through,
+// and the timeline that animates it all. Agents drive it with the commands
+// below, which the app installs as its host commands
+// (command_context.host_commands = studio_commands(), host_user = the studio):
 //
-//   studio.reset       empty stage: no entities, default environment and settings
+//   studio.reset       empty stage: no entities or tracks, default environment and settings
 //   environment.get    the environment, in World/Environment.h's JSON
 //   environment.set    any of its keys; the app bakes a new HDRI on the next frame
 //   render.get         antialiasing, shadows, clear_color
 //   render.set         any of them
 //   camera.get         the active camera, or null
 //   camera.set         creates or moves a Camera entity and makes it the active one
+//   timeline.*         keyframes (Timeline/TimelineCommands.c): set_track, add_key,
+//                      remove_track, clear, get, seek, play, pause
+//
+// The timeline is saved and loaded with the scene, next to its file
+// (scenes/<name>.timeline.json): the app calls studio_scene_file() from the
+// command layer's on_scene_file.
 
 #define STUDIO_DEFAULT_CAMERA "camera"
 
@@ -43,15 +50,27 @@ typedef struct studio
     // The Camera entity the frame is seen through, by name (so it survives
     // undo and scene loads); "" = the app's own camera.
     char active_camera[ENTITY_NAME_MAX];
+
+    timeline timeline;
 } studio;
 
 // `w` and `env` must outlive the studio. Starts with the default render
-// settings and no active camera; leaves the world and environment as they are.
+// settings, no active camera and an empty timeline; leaves the world and
+// environment as they are.
 void studio_init(studio* s, world* w, scene_environment* env);
+void studio_destroy(studio* s);
 
-// An empty stage: destroys every entity, and puts the environment and the
-// render settings back to their defaults, with no active camera.
+// An empty stage: destroys every entity and track, and puts the environment
+// and the render settings back to their defaults, with no active camera.
 void studio_reset(studio* s);
+
+// Once a frame, before world_update(): while the timeline plays, advances it
+// by `dt` seconds (looping or stopping at the end) and writes it into the world.
+void studio_update(studio* s, f32 dt);
+
+// A scene was saved or loaded under `name` (cmd_scene_file_fn's arguments):
+// saves the timeline next to it, or loads the one saved with it (none = empty).
+void studio_scene_file(studio* s, cmd_scene_file_op op, const char* name);
 
 // Writes the studio's render settings into `settings` -- call after
 // scene_render_settings_apply_environment().
@@ -66,5 +85,5 @@ b8 studio_camera_view(const studio* s, f32 aspect, camera* out);
 // `direction`. False, and no change, if `direction` is (almost) zero.
 b8 studio_look_rotation(const vec3 direction, vec3 out_rotation_deg);
 
-// The studio's commands, for command_context.host_commands.
+// Every studio command (the timeline's included), for command_context.host_commands.
 const cmd_host_command* studio_commands(uint32* out_count);

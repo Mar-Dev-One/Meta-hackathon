@@ -215,6 +215,23 @@ frame_scene(studio_state* state)
 
 // --- Command server --------------------------------------------------------------
 
+// The command layer's on_change: every change to the world goes to the
+// server's clients as a notification.
+static void
+on_world_change(void* user, const cJSON* event)
+{
+    server_on_change(((studio_state*)user)->server, event);
+}
+
+// The command layer's on_scene_file: the studio saves and loads the
+// timeline with the scene.
+static void
+on_scene_file(void* user, command_context* ctx, cmd_scene_file_op op, const char* name)
+{
+    (void)ctx;
+    studio_scene_file(&((studio_state*)user)->stage, op, name);
+}
+
 // Starts the server on the world, its environment, an undo history and the
 // studio's commands. Failing to start is logged and leaves the studio
 // running without it.
@@ -234,8 +251,9 @@ start_server(studio_state* state)
         .w              = &state->world,
         .history        = &state->history,
         .environment    = &state->env,
-        .on_change      = server_on_change,
-        .on_change_user = state->server,
+        .on_change      = on_world_change,
+        .on_scene_file  = on_scene_file,
+        .on_change_user = state,
         .host_user      = &state->stage,
     };
     state->commands.host_commands = studio_commands(&state->commands.host_command_count);
@@ -335,7 +353,10 @@ on_frame(App* app, f32 dt)
 
     // A check's picture is the scene as built, whatever the frame times.
     if (!state->check_path)
+    {
+        studio_update(&state->stage, fminf(dt, 0.1f));
         world_tick(&state->world, fminf(dt, 0.1f));
+    }
     world_update(&state->world);
 
     f32 dx = 0.0f, dy = 0.0f;
@@ -378,6 +399,7 @@ on_shutdown(App* app)
         server_stop(state->server);   // also removes server.json
         history_shutdown(&state->history, &state->world);
     }
+    studio_destroy(&state->stage);
     world_shutdown(&state->world);    // releases the world's assets...
     assets_shutdown(&state->assets);  // ...then the models themselves
     ibl_cache_destroy(&state->ibl);

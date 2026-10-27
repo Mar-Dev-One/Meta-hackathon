@@ -1,0 +1,5 @@
+openai>=1.60
+python-dotenv>=1.0
+requests>=2.31
+pillow>=10.0
+meta-sam-parser>=0.1

@@ -3,9 +3,12 @@
 
 #include "Studio.h"
 
+#include "Timeline/TimelineCommands.h"
+
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // --- Arguments -------------------------------------------------------------------
@@ -300,7 +303,7 @@ static const cmd_arg CAMERA_SET_ARGS[] = {
 };
 
 static const cmd_host_command STUDIO_COMMANDS[] = {
-    { "studio.reset", "Empties the stage: destroys every entity and resets the environment, render settings and active camera.",
+    { "studio.reset", "Empties the stage: destroys every entity and timeline track, and resets the environment, render settings and active camera.",
       NULL, 0, true, cmd_studio_reset },
     { "environment.get", "The environment: HDRI, image-based lighting, exposure, bloom, tone mapping, SSAO.",
       NULL, 0, false, cmd_environment_get },
@@ -319,6 +322,21 @@ static const cmd_host_command STUDIO_COMMANDS[] = {
 const cmd_host_command*
 studio_commands(uint32* out_count)
 {
-    *out_count = sizeof(STUDIO_COMMANDS) / sizeof(STUDIO_COMMANDS[0]);
-    return STUDIO_COMMANDS;
+    // The studio's own commands, then each part's, in one table (the
+    // command layer takes one), built on first use.
+    static cmd_host_command* all;
+    static uint32            all_count;
+    if (!all)
+    {
+        uint32                  timeline_count;
+        const cmd_host_command* timeline     = timeline_commands(&timeline_count);
+        uint32                  studio_count = sizeof(STUDIO_COMMANDS) / sizeof(STUDIO_COMMANDS[0]);
+
+        all = malloc((studio_count + timeline_count) * sizeof(*all));
+        memcpy(all, STUDIO_COMMANDS, sizeof(STUDIO_COMMANDS));
+        memcpy(all + studio_count, timeline, timeline_count * sizeof(*all));
+        all_count = studio_count + timeline_count;
+    }
+    *out_count = all_count;
+    return all;
 }

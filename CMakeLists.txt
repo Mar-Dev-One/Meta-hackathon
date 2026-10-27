@@ -44,6 +44,7 @@ target_link_libraries(PBR_Engine INTERFACE
 
 # --- Meta_Engine (built here) -------------------------------------------------
 
+enable_testing()
 add_subdirectory(Engine)
 
 # --- Studio -------------------------------------------------------------------

@@ -8,6 +8,14 @@
 add_library(Meta_Engine STATIC
     src/Studio/Studio.c
     src/Studio/StudioCommands.c
+    src/Timeline/Timeline.c
+    src/Timeline/TimelineCommands.c
 )
 target_include_directories(Meta_Engine PUBLIC src)
 target_link_libraries(Meta_Engine PUBLIC PBR_Engine)
+
+# --- Tests: ctest --test-dir build -C Release ---------------------------------
+
+add_executable(Timeline_Tests tests/timeline_tests.c)
+target_link_libraries(Timeline_Tests PRIVATE Meta_Engine)
+add_test(NAME timeline COMMAND Timeline_Tests)

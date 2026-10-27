@@ -221,3 +221,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Smoke test outputs (images, audio, raw API responses)
+pipeline/meta/smoke/out/

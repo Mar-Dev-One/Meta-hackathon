@@ -48,13 +48,33 @@ The method is the command name and the params are its arguments:
   | `environment.get` / `environment.set` | HDRI, image-based lighting, exposure, bloom, tone mapping, SSAO |
   | `render.get` / `render.set` | Antialiasing, shadows, background colour |
   | `camera.get` / `camera.set` | Creates or moves a Camera entity, aims it at a target and makes it the one the frame is seen through |
+  | `timeline.set_track` / `timeline.add_key` | Keyframes any number, vec3 or colour field of any component (`Transform.position`, `Camera.fov_degrees`, `Light.intensity`, `MeshRenderer.material.roughness`, ...) with easing: linear, in, out, in_out, step or a cubic bezier |
+  | `timeline.remove_track` / `timeline.clear` / `timeline.get` | Edit and read the tracks |
+  | `timeline.seek` | Shows the scene at a time: every animated field set to its value then |
+  | `timeline.play` / `timeline.pause` | Plays the timeline in real time in the window |
 
 A failed command changes nothing and says which argument is wrong and what it accepts. Every change is also pushed to all clients as a `scene.changed` notification.
+
+The timeline is saved and loaded with the scene (`scene.save` / `scene.load`), as `scenes/<name>.timeline.json` next to the scene file. A track names its entity, so it keeps working through undo and scene loads.
+
+```json
+-> {"jsonrpc": "2.0", "id": 2, "method": "timeline.set_track", "params": {"entity": "camera", "component": "Transform",
+    "field": "position", "keys": [{"t": 0, "value": [0, 1, 4], "ease": "in_out"}, {"t": 4, "value": [3, 1, 3]}]}}
+```
+
+## Tests
+
+```
+ctest --test-dir build -C Release
+```
+
+runs the timeline's tests (`Engine/tests/timeline_tests.c`: easing, sampling, editing, writing into a World, JSON). They need no window or GPU.
 
 ## Layout
 
 - `src/main.c` is the Studio program
-- `Engine/` is `Meta_Engine`, the library written for this project on top of the engine (studio commands; timeline, text, products and shot rendering to come)
+- `Engine/` is `Meta_Engine`, the library written for this project on top of the engine: `src/Studio` (studio commands), `src/Timeline` (keyframe animation), `tests/`; text, products and shot rendering to come
+- `pipeline/` is the Python side; so far `pipeline/meta/smoke`, one test call to each Meta model
 - `Deps/` holds the engine headers (`Includes/PBR`) and prebuilt libraries (`Libs`)
 - `Assets/Shaders/shaders` holds the engine's shaders. They are copied to `<exe>/assets/shaders` at build time
 - `Assets/models` and `Assets/hdri` hold the models and HDRI the demo scene loads. They are copied to `<exe>/assets` at build time
@@ -66,5 +86,6 @@ At runtime the program loads everything from the `assets/` folder next to it. `P
 
 The engine (`PBR_Engine`, [AI-Powered-PBR-Renderer](https://github.com/Mar-Dev-One/AI-Powered-PBR-Renderer)) existed before the hackathon and is used unchanged, as a prebuilt library. Everything in this repository was written during the hackathon (from 2026-10-27):
 
-- `Engine/`: the Studio library (`Meta_Engine`)
+- `Engine/`: the Studio library (`Meta_Engine`): studio commands, the timeline and its tests
 - `src/main.c`: the Studio program
+- `pipeline/`: the Meta model smoke tests
