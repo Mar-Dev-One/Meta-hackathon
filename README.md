@@ -14,6 +14,25 @@ build\Release\Testbed.exe
 
 `Testbed.exe --check out.png` renders the scene in a hidden window, saves it and exits (0 on success). `--view NAME` shows a debug view (albedo, normals, roughness, metallic, ao, shadow, lighting, wireframe, lights).
 
+## Command server
+
+While the window is open, the testbed runs a command server that other programs can use to drive the scene. It is a WebSocket server on `127.0.0.1` that speaks JSON-RPC 2.0. The default port is 7468; `--port N` picks another, and if the port is taken it uses any free one. It doesn't run with `--check`.
+
+When the server starts, it writes `server.json` next to the exe with the URL to connect to. The URL includes a token that changes every run. The file is deleted when the testbed closes normally.
+
+```json
+{"url": "ws://127.0.0.1:7468/?token=...", "port": 7468, "token": "...", "pid": 1234}
+```
+
+The method is the command name and the params are its arguments:
+
+```json
+-> {"jsonrpc": "2.0", "id": 1, "method": "entity.get", "params": {"entity": "suzanne"}}
+<- {"jsonrpc": "2.0", "id": 1, "result": {"name": "suzanne", "components": {...}}}
+```
+
+`commands.list` describes every command (`entity.create`, `component.set`, `place_model`, `scene.save`, `history.undo`, ...). Every change is also pushed to all clients as a `scene.changed` notification. See `Deps/Includes/PBR/Net/CommandServer.h` and `Commands/Commands.h`.
+
 ## Layout
 
 - `src/main.c` builds the scene and runs it

@@ -4,12 +4,18 @@
 // file -- and draws it with the scene renderer. What a program using the
 // engine as a library looks like, and a quick way to try a renderer change.
 //
-//   Testbed [--check PNG] [--view NAME]
+//   Testbed [--check PNG] [--view NAME] [--port N]
 //     --check PNG   render a few frames in a hidden window, save the picture
 //                   to PNG and exit (0 if it was written)
 //     --view NAME   a debug view instead of the lit scene: albedo, normals,
 //                   roughness, metallic, ao, shadow, lighting, wireframe,
 //                   lights (Renderer/SceneRenderer.h)
+//     --port N      the command server's port (default 7468)
+//
+// The command server (Net/CommandServer.h) runs while the window is open
+// (not for --check): other processes drive the world over a localhost
+// WebSocket with JSON-RPC, with undo history. Its URL, token included, is
+// logged and written to server.json next to the executable.
 //
 // The scene (build_scene()): a ground plane; the material grid -- two rows
 // of spheres, dielectric in front and metal behind, going from smooth to
@@ -22,9 +28,12 @@
 
 #include "App.h"
 #include "Assets/AssetCache.h"
+#include "Commands/Commands.h"
+#include "Commands/History.h"
 #include "Core/Defines.h"
 #include "Core/Image.h"
 #include "Core/Paths.h"
+#include "Net/CommandServer.h"
 #include "Platform/Input.h"
 #include "Platform/Window.h"
 #include "Renderer/IBL.h"
@@ -68,6 +77,13 @@ typedef struct testbed_state
     camera       cam;
     orbit_camera orbit;
     f32          aspect;
+
+    // The command server; NULL for --check or if it couldn't start.
+    uint16           server_port;
+    char             discovery_path[1024];
+    command_server*  server;
+    command_context  commands;
+    command_history  history;
 } testbed_state;
 
 // --- Scene -----------------------------------------------------------------------
@@ -187,6 +203,32 @@ frame_scene(testbed_state* state)
     orbit_apply(&state->orbit, &state->cam);
 }
 
+// --- Command server --------------------------------------------------------------
+
+// Starts the server on the world, its environment and an undo history.
+// Failing to start is logged and leaves the testbed running without it.
+static void
+start_server(testbed_state* state)
+{
+    const char* exe_dir = paths_executable_dir();
+    snprintf(state->discovery_path, sizeof(state->discovery_path), "%s%sserver.json", exe_dir, *exe_dir ? "/" : "");
+
+    server_config config = { .port = state->server_port, .discovery_path = state->discovery_path };
+    state->server        = server_start(&config);
+    if (!state->server)
+        return;
+
+    history_init(&state->history);
+    state->commands = (command_context){
+        .w              = &state->world,
+        .history        = &state->history,
+        .environment    = &state->env,
+        .on_change      = server_on_change,
+        .on_change_user = state->server,
+    };
+    LOG_INFO("testbed: command server at %s\n", server_url(state->server));
+}
+
 // --- App hooks -------------------------------------------------------------------
 
 static void
@@ -210,6 +252,9 @@ on_init(App* app)
     ibl_cache_sync(&state->ibl, state->env.hdri);
 
     frame_scene(state);
+
+    if (!state->check_path)
+        start_server(state);
 }
 
 static void
@@ -262,6 +307,15 @@ on_frame(App* app, f32 dt)
     if (input_key_pressed(INPUT_KEY_ESCAPE))
         app->should_close = true;
 
+    // Commands run here, on the main thread, before the frame is built. A
+    // scene.load can change the HDRI, which the sync then bakes (a no-op
+    // while it's unchanged).
+    if (state->server)
+    {
+        server_poll(state->server, &state->commands);
+        ibl_cache_sync(&state->ibl, state->env.hdri);
+    }
+
     // A check's picture is the scene as built, whatever the frame times.
     if (!state->check_path)
         world_tick(&state->world, fminf(dt, 0.1f));
@@ -297,6 +351,11 @@ on_shutdown(App* app)
 {
     testbed_state* state = (testbed_state*)app->user_data;
 
+    if (state->server)
+    {
+        server_stop(state->server);   // also removes server.json
+        history_shutdown(&state->history, &state->world);
+    }
     world_shutdown(&state->world);    // releases the world's assets...
     assets_shutdown(&state->assets);  // ...then the models themselves
     ibl_cache_destroy(&state->ibl);
@@ -304,9 +363,9 @@ on_shutdown(App* app)
 }
 
 // Makes <executable's folder>/assets the project root. Without it the engine
-// falls back to the assets/ path baked into PBR_Engine.lib, which only
-// exists on the machine that built the library. False (logged) if the folder
-// is missing.
+// falls back to assets/ under the working directory, which is only right
+// when the program is started from its own folder. False (logged) if the
+// folder is missing.
 static b8
 use_bundled_assets(void)
 {
@@ -323,9 +382,11 @@ use_bundled_assets(void)
 static void
 print_usage(void)
 {
-    printf("usage: Testbed [--check PNG] [--view NAME]\n"
+    printf("usage: Testbed [--check PNG] [--view NAME] [--port N]\n"
            "  --check  render the scene once, hidden, into PNG and exit (0 = it was written)\n"
-           "  --view   a debug view: albedo, normals, roughness, metallic, ao, shadow, lighting, wireframe, lights\n");
+           "  --view   a debug view: albedo, normals, roughness, metallic, ao, shadow, lighting, wireframe, lights\n"
+           "  --port   the command server's port (default %d; another free one if it's taken)\n",
+           SERVER_DEFAULT_PORT);
 }
 
 int main(int argc, char** argv)
@@ -353,6 +414,17 @@ int main(int argc, char** argv)
                 print_usage();
                 return 1;
             }
+        }
+        else if (strcmp(arg, "--port") == 0)
+        {
+            int port = i + 1 < argc ? atoi(argv[++i]) : 0;
+            if (port <= 0 || port > 65535)
+            {
+                fprintf(stderr, "--port needs a port number (1-65535)\n");
+                print_usage();
+                return 1;
+            }
+            state.server_port = (uint16)port;
         }
         else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0)
         {
