@@ -1,10 +1,10 @@
 #include "Timeline.h"
 
+#include "Common/Json.h"
 #include "Core/FileIO.h"
 #include "World/Reflect.h"
 
 #include <math.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,18 +12,6 @@
 // Two keys closer than this are at the same time.
 #define SAME_TIME 1e-5f
 
-static b8
-fail(char* error, size_t error_size, const char* format, ...)
-{
-    if (error && error_size)
-    {
-        va_list args;
-        va_start(args, format);
-        vsnprintf(error, error_size, format, args);
-        va_end(args);
-    }
-    return false;
-}
 
 // --- Easing --------------------------------------------------------------------------
 
@@ -136,8 +124,27 @@ timeline_duration(const timeline* tl)
     return duration;
 }
 
-uint32
-timeline_field_width(const char* component, const char* field, char* error, size_t error_size)
+// The field's floats per value: 1 for a number, 3 for a vec3 or colour, 0
+// if it can't be animated.
+static uint32
+field_width(const field_desc* f)
+{
+    if (f->via_setter)
+        return 0;
+    return f->type == FIELD_F32 ? 1 : (f->type == FIELD_VEC3 || f->type == FIELD_COLOR3) ? 3 : 0;
+}
+
+// Whether the field limits its values -- the engine's own test (min == max
+// means unbounded).
+static b8
+has_range(const field_desc* f)
+{
+    return f->min < f->max;
+}
+
+// `component`.`field` if it can be animated; NULL (error filled) otherwise.
+static const field_desc*
+animatable_field(const char* component, const char* field, char* error, size_t error_size)
 {
     const component_desc* desc = component ? reflect_component_by_name(component) : NULL;
     if (!desc)
@@ -150,33 +157,35 @@ timeline_field_width(const char* component, const char* field, char* error, size
             if (d)
                 snprintf(names + used, sizeof(names) - used, "%s%s", used ? ", " : "", d->name);
         }
-        fail(error, error_size, "unknown component \"%s\"; components are: %s", component ? component : "", names);
-        return 0;
+        set_error(error, error_size, "unknown component \"%s\"; components are: %s", component ? component : "", names);
+        return NULL;
     }
 
     const field_desc* f = field ? reflect_field(desc, field) : NULL;
-    uint32 width = 0;
-    if (f && !f->via_setter)
-        width = f->type == FIELD_F32 ? 1 : (f->type == FIELD_VEC3 || f->type == FIELD_COLOR3) ? 3 : 0;
-    if (width)
-        return width;
+    if (f && field_width(f))
+        return f;
 
     char names[512] = "";
     for (uint32 i = 0; i < desc->field_count; ++i)
     {
-        const field_desc* d = &desc->fields[i];
-        b8 animatable = !d->via_setter && (d->type == FIELD_F32 || d->type == FIELD_VEC3 || d->type == FIELD_COLOR3);
         size_t used = strlen(names);
-        if (animatable)
-            snprintf(names + used, sizeof(names) - used, "%s%s", used ? ", " : "", d->name);
+        if (field_width(&desc->fields[i]))
+            snprintf(names + used, sizeof(names) - used, "%s%s", used ? ", " : "", desc->fields[i].name);
     }
     if (f)
-        fail(error, error_size, "%s.%s can't be animated (only numbers, vec3s and colours); %s's animatable fields are: %s",
-             desc->name, field, desc->name, *names ? names : "(none)");
+        set_error(error, error_size, "%s.%s can't be animated (only numbers, vec3s and colours); %s's animatable fields are: %s",
+                  desc->name, field, desc->name, *names ? names : "(none)");
     else
-        fail(error, error_size, "%s has no field \"%s\"; its animatable fields are: %s",
-             desc->name, field ? field : "", *names ? names : "(none)");
-    return 0;
+        set_error(error, error_size, "%s has no field \"%s\"; its animatable fields are: %s",
+                  desc->name, field ? field : "", *names ? names : "(none)");
+    return NULL;
+}
+
+uint32
+timeline_field_width(const char* component, const char* field, char* error, size_t error_size)
+{
+    const field_desc* f = animatable_field(component, field, error, error_size);
+    return f ? field_width(f) : 0;
 }
 
 timeline_track*
@@ -192,17 +201,16 @@ timeline_find_track(timeline* tl, const char* entity, const char* component, con
     return NULL;
 }
 
-// Checks the names fit and the field can be animated; *out_width gets its width.
-static b8
-check_target(const char* entity, const char* component, const char* field, uint32* out_width,
-             char* error, size_t error_size)
+// The field to animate, after checking the names fit and it can be animated;
+// NULL (error filled) otherwise.
+static const field_desc*
+check_target(const char* entity, const char* component, const char* field, char* error, size_t error_size)
 {
     if (!entity || !entity[0] || strlen(entity) >= ENTITY_NAME_MAX)
-        return fail(error, error_size, "\"entity\" must be a name of 1 to %d characters", ENTITY_NAME_MAX - 1);
+        return set_error(error, error_size, "\"entity\" must be a name of 1 to %d characters", ENTITY_NAME_MAX - 1), NULL;
     if (!component || strlen(component) >= TIMELINE_COMPONENT_MAX || !field || strlen(field) >= TIMELINE_FIELD_MAX)
-        return fail(error, error_size, "\"component\" and \"field\" must be given");
-    *out_width = timeline_field_width(component, field, error, error_size);
-    return *out_width != 0;
+        return set_error(error, error_size, "\"component\" and \"field\" must be given"), NULL;
+    return animatable_field(component, field, error, error_size);
 }
 
 static timeline_track*
@@ -242,15 +250,28 @@ compare_key_times(const void* a, const void* b)
     return (ta > tb) - (ta < tb);
 }
 
+// A key's time and ease, and its value against the field's rules -- the
+// same ones component.set applies: within the field's range, and not zero
+// for a direction.
 static b8
-check_key(const timeline_key* key, char* error, size_t error_size)
+check_key(const timeline_key* key, const field_desc* f, char* error, size_t error_size)
 {
     if (!isfinite(key->time) || key->time < 0.0f)
-        return fail(error, error_size, "a key's time must be 0 or more seconds (got %g)", key->time);
+        return set_error(error, error_size, "a key's time must be 0 or more seconds (got %g)", key->time);
     if ((uint32)key->ease >= EASE_COUNT)
-        return fail(error, error_size, "unknown ease");
+        return set_error(error, error_size, "unknown ease");
     if (key->ease == EASE_BEZIER && (key->bezier[0] < 0.0f || key->bezier[0] > 1.0f || key->bezier[2] < 0.0f || key->bezier[2] > 1.0f))
-        return fail(error, error_size, "a bezier's x1 and x2 must be in [0, 1] (got %g and %g)", key->bezier[0], key->bezier[2]);
+        return set_error(error, error_size, "a bezier's x1 and x2 must be in [0, 1] (got %g and %g)", key->bezier[0], key->bezier[2]);
+
+    uint32 width = field_width(f);
+    for (uint32 i = 0; has_range(f) && i < width; ++i)
+    {
+        if (key->value[i] < f->min || key->value[i] > f->max)
+            return set_error(error, error_size, "the key at %g s: %s must be from %g to %g (got %g)",
+                             key->time, f->name, f->min, f->max, key->value[i]);
+    }
+    if (f->nonzero && fabsf(key->value[0]) + fabsf(key->value[1]) + fabsf(key->value[2]) < 1e-6f)
+        return set_error(error, error_size, "the key at %g s: %s is a direction and can't be (0, 0, 0)", key->time, f->name);
     return true;
 }
 
@@ -258,11 +279,11 @@ b8
 timeline_set_track(timeline* tl, const char* entity, const char* component, const char* field,
                    const timeline_key* keys, uint32 key_count, char* error, size_t error_size)
 {
-    uint32 width;
-    if (!check_target(entity, component, field, &width, error, error_size))
+    const field_desc* f = check_target(entity, component, field, error, error_size);
+    if (!f)
         return false;
     if (key_count == 0)
-        return fail(error, error_size, "a track needs at least one key");
+        return set_error(error, error_size, "a track needs at least one key");
 
     timeline_key* sorted = malloc(key_count * sizeof(*sorted));
     memcpy(sorted, keys, key_count * sizeof(*sorted));
@@ -270,9 +291,9 @@ timeline_set_track(timeline* tl, const char* entity, const char* component, cons
 
     for (uint32 i = 0; i < key_count; ++i)
     {
-        b8 ok = check_key(&sorted[i], error, error_size);
+        b8 ok = check_key(&sorted[i], f, error, error_size);
         if (ok && i > 0 && sorted[i].time - sorted[i - 1].time < SAME_TIME)
-            ok = fail(error, error_size, "two keys are at %g s: a track has one key per time", sorted[i].time);
+            ok = set_error(error, error_size, "two keys are at %g s: a track has one key per time", sorted[i].time);
         if (!ok)
         {
             free(sorted);
@@ -280,7 +301,7 @@ timeline_set_track(timeline* tl, const char* entity, const char* component, cons
         }
     }
 
-    timeline_track* track = find_or_add_track(tl, entity, component, field, width);
+    timeline_track* track = find_or_add_track(tl, entity, component, field, field_width(f));
     free(track->keys);
     track->keys         = sorted;
     track->key_count    = key_count;
@@ -292,11 +313,11 @@ b8
 timeline_add_key(timeline* tl, const char* entity, const char* component, const char* field,
                  const timeline_key* key, char* error, size_t error_size)
 {
-    uint32 width;
-    if (!check_target(entity, component, field, &width, error, error_size) || !check_key(key, error, error_size))
+    const field_desc* f = check_target(entity, component, field, error, error_size);
+    if (!f || !check_key(key, f, error, error_size))
         return false;
 
-    timeline_track* track = find_or_add_track(tl, entity, component, field, width);
+    timeline_track* track = find_or_add_track(tl, entity, component, field, field_width(f));
 
     uint32 at = 0;
     while (at < track->key_count && track->keys[at].time < key->time - SAME_TIME)
@@ -387,9 +408,10 @@ write_field(world* w, const timeline_track* track, const f32* value)
     if (!data)
         return false;
 
+    // Keys are within range, but a bezier ease can overshoot between them.
     f32 v[TIMELINE_VALUE_MAX];
     memcpy(v, value, sizeof(v));
-    if (f->min != f->max)
+    if (has_range(f))
     {
         for (uint32 i = 0; i < track->width; ++i)
             v[i] = glm_clamp(v[i], f->min, f->max);
@@ -427,12 +449,6 @@ timeline_evaluate(timeline* tl, world* w, f32 t, uint32* out_skipped)
 
 // --- JSON ------------------------------------------------------------------------------
 
-static f64
-round6(f32 value)
-{
-    return round((f64)value * 1e6) / 1e6;
-}
-
 cJSON*
 timeline_track_to_json(const timeline_track* track)
 {
@@ -446,23 +462,15 @@ timeline_track_to_json(const timeline_track* track)
     {
         const timeline_key* key = &track->keys[k];
         cJSON* item = cJSON_CreateObject();
-        cJSON_AddNumberToObject(item, "t", round6(key->time));
+        cJSON_AddNumberToObject(item, "t", json_round6(key->time));
         if (track->width == 1)
-            cJSON_AddNumberToObject(item, "value", round6(key->value[0]));
+            cJSON_AddNumberToObject(item, "value", json_round6(key->value[0]));
         else
-        {
-            cJSON* value = cJSON_AddArrayToObject(item, "value");
-            for (uint32 i = 0; i < track->width; ++i)
-                cJSON_AddItemToArray(value, cJSON_CreateNumber(round6(key->value[i])));
-        }
+            json_add_floats(item, "value", key->value, (int)track->width);
         if (key->ease != EASE_LINEAR)
             cJSON_AddStringToObject(item, "ease", timeline_ease_name(key->ease));
         if (key->ease == EASE_BEZIER)
-        {
-            cJSON* bezier = cJSON_AddArrayToObject(item, "bezier");
-            for (int i = 0; i < 4; ++i)
-                cJSON_AddItemToArray(bezier, cJSON_CreateNumber(round6(key->bezier[i])));
-        }
+            json_add_floats(item, "bezier", key->bezier, 4);
         cJSON_AddItemToArray(keys, item);
     }
     return json;
@@ -472,26 +480,11 @@ cJSON*
 timeline_to_json(const timeline* tl)
 {
     cJSON* json = cJSON_CreateObject();
-    cJSON_AddNumberToObject(json, "duration", round6(timeline_duration(tl)));
+    cJSON_AddNumberToObject(json, "duration", json_round6(timeline_duration(tl)));
     cJSON* tracks = cJSON_AddArrayToObject(json, "tracks");
     for (uint32 i = 0; i < tl->track_count; ++i)
         cJSON_AddItemToArray(tracks, timeline_track_to_json(&tl->tracks[i]));
     return json;
-}
-
-static b8
-read_numbers(const cJSON* json, f32* out, int count)
-{
-    if (!cJSON_IsArray(json) || cJSON_GetArraySize(json) != count)
-        return false;
-    for (int i = 0; i < count; ++i)
-    {
-        const cJSON* v = cJSON_GetArrayItem(json, i);
-        if (!cJSON_IsNumber(v) || !isfinite(v->valuedouble))
-            return false;
-        out[i] = (f32)v->valuedouble;
-    }
-    return true;
 }
 
 b8
@@ -499,41 +492,74 @@ timeline_key_from_json(const cJSON* json, uint32 width, timeline_key* out, char*
 {
     memset(out, 0, sizeof(*out));
     if (!cJSON_IsObject(json))
-        return fail(error, error_size, "a key must be an object like {\"t\": 0, \"value\": ...}");
+        return set_error(error, error_size, "a key must be an object like {\"t\": 0, \"value\": ...}");
 
     const cJSON* item;
     cJSON_ArrayForEach(item, json)
     {
         if (strcmp(item->string, "t") && strcmp(item->string, "value") && strcmp(item->string, "ease")
             && strcmp(item->string, "bezier"))
-            return fail(error, error_size, "a key doesn't take \"%s\"; it takes t, value, ease, bezier", item->string);
+            return set_error(error, error_size, "a key doesn't take \"%s\"; it takes t, value, ease, bezier", item->string);
     }
 
     const cJSON* t = cJSON_GetObjectItemCaseSensitive(json, "t");
     if (!cJSON_IsNumber(t))
-        return fail(error, error_size, "a key needs \"t\": its time in seconds");
+        return set_error(error, error_size, "a key needs \"t\": its time in seconds");
     out->time = (f32)t->valuedouble;
 
     const cJSON* value = cJSON_GetObjectItemCaseSensitive(json, "value");
     b8 value_ok = width == 1 ? cJSON_IsNumber(value) && isfinite(value->valuedouble)
-                             : read_numbers(value, out->value, (int)width);
+                             : json_read_floats(value, out->value, (int)width);
     if (!value_ok)
-        return width == 1 ? fail(error, error_size, "this field's key \"value\" must be a number")
-                          : fail(error, error_size, "this field's key \"value\" must be an array of %u numbers", width);
+        return width == 1 ? set_error(error, error_size, "this field's key \"value\" must be a number")
+                          : set_error(error, error_size, "this field's key \"value\" must be an array of %u numbers", width);
     if (width == 1)
         out->value[0] = (f32)value->valuedouble;
 
     const cJSON* ease = cJSON_GetObjectItemCaseSensitive(json, "ease");
     if (ease && (!cJSON_IsString(ease) || !timeline_ease_from_name(ease->valuestring, &out->ease)))
-        return fail(error, error_size, "\"ease\" must be \"linear\", \"in\", \"out\", \"in_out\", \"step\" or \"bezier\"");
+        return set_error(error, error_size, "\"ease\" must be \"linear\", \"in\", \"out\", \"in_out\", \"step\" or \"bezier\"");
 
     const cJSON* bezier = cJSON_GetObjectItemCaseSensitive(json, "bezier");
-    if (out->ease == EASE_BEZIER && !read_numbers(bezier, out->bezier, 4))
-        return fail(error, error_size, "\"ease\": \"bezier\" needs \"bezier\": [x1, y1, x2, y2] (CSS cubic-bezier)");
+    if (out->ease == EASE_BEZIER && !json_read_floats(bezier, out->bezier, 4))
+        return set_error(error, error_size, "\"ease\": \"bezier\" needs \"bezier\": [x1, y1, x2, y2] (CSS cubic-bezier)");
     if (out->ease != EASE_BEZIER && bezier)
-        return fail(error, error_size, "\"bezier\" only goes with \"ease\": \"bezier\"");
+        return set_error(error, error_size, "\"bezier\" only goes with \"ease\": \"bezier\"");
 
-    return check_key(out, error, error_size);
+    // Times, ranges and the bezier's x values are checked when the key goes
+    // into a track (timeline_set_track(), timeline_add_key()).
+    return true;
+}
+
+b8
+timeline_set_track_json(timeline* tl, const char* entity, const char* component, const char* field,
+                        const cJSON* keys, char* error, size_t error_size)
+{
+    const field_desc* f = check_target(entity, component, field, error, error_size);
+    if (!f)
+        return false;
+    if (!cJSON_IsArray(keys) || cJSON_GetArraySize(keys) == 0)
+        return set_error(error, error_size, "\"keys\" must be a non-empty array of {\"t\": seconds, \"value\": ..., \"ease\": ...}");
+
+    uint32        count  = (uint32)cJSON_GetArraySize(keys);
+    timeline_key* parsed = calloc(count, sizeof(*parsed));
+    uint32        i      = 0;
+    const cJSON*  key;
+    b8            ok = true;
+    cJSON_ArrayForEach(key, keys)
+    {
+        char key_error[256];
+        if (!timeline_key_from_json(key, field_width(f), &parsed[i], key_error, sizeof(key_error)))
+        {
+            ok = set_error(error, error_size, "keys[%u]: %s", i, key_error);
+            break;
+        }
+        ++i;
+    }
+    if (ok)
+        ok = timeline_set_track(tl, entity, component, field, parsed, count, error, error_size);
+    free(parsed);
+    return ok;
 }
 
 // One track from JSON into `tl`.
@@ -544,28 +570,10 @@ track_from_json(timeline* tl, const cJSON* json, char* error, size_t error_size)
     const cJSON* component = cJSON_GetObjectItemCaseSensitive(json, "component");
     const cJSON* field     = cJSON_GetObjectItemCaseSensitive(json, "field");
     const cJSON* keys      = cJSON_GetObjectItemCaseSensitive(json, "keys");
-    if (!cJSON_IsString(entity) || !cJSON_IsString(component) || !cJSON_IsString(field) || !cJSON_IsArray(keys))
-        return fail(error, error_size, "a track needs \"entity\", \"component\", \"field\" (strings) and \"keys\" (an array)");
-
-    uint32 width;
-    if (!check_target(entity->valuestring, component->valuestring, field->valuestring, &width, error, error_size))
-        return false;
-
-    uint32        count = (uint32)cJSON_GetArraySize(keys);
-    timeline_key* parsed = calloc(count ? count : 1, sizeof(*parsed));
-    uint32        i = 0;
-    const cJSON*  key;
-    b8            ok = true;
-    cJSON_ArrayForEach(key, keys)
-    {
-        if (!(ok = timeline_key_from_json(key, width, &parsed[i++], error, error_size)))
-            break;
-    }
-    if (ok)
-        ok = timeline_set_track(tl, entity->valuestring, component->valuestring, field->valuestring, parsed, count,
-                                error, error_size);
-    free(parsed);
-    return ok;
+    if (!cJSON_IsString(entity) || !cJSON_IsString(component) || !cJSON_IsString(field))
+        return set_error(error, error_size, "a track needs \"entity\", \"component\" and \"field\" (strings) and \"keys\"");
+    return timeline_set_track_json(tl, entity->valuestring, component->valuestring, field->valuestring, keys,
+                                   error, error_size);
 }
 
 b8
@@ -573,7 +581,7 @@ timeline_from_json(timeline* tl, const cJSON* json, char* error, size_t error_si
 {
     const cJSON* tracks = cJSON_GetObjectItemCaseSensitive(json, "tracks");
     if (!cJSON_IsArray(tracks))
-        return fail(error, error_size, "a timeline needs \"tracks\": an array");
+        return set_error(error, error_size, "a timeline needs \"tracks\": an array");
 
     timeline loaded;
     timeline_init(&loaded);

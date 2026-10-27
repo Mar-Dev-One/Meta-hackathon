@@ -62,15 +62,17 @@ test_tracks(void)
     char error[256];
 
     // Keys in any order come out sorted.
-    timeline_key keys[] = { key1(2.0f, 10.0f, EASE_LINEAR), key1(0.0f, 0.0f, EASE_LINEAR) };
+    timeline_key keys[] = { key1(2.0f, 40.0f, EASE_LINEAR), key1(0.0f, 30.0f, EASE_LINEAR) };
     CHECK(timeline_set_track(&tl, "cam", "Camera", "fov_degrees", keys, 2, error, sizeof(error)));
     timeline_track* track = timeline_find_track(&tl, "cam", "Camera", "fov_degrees");
     CHECK(track && track->key_count == 2 && track->width == 1 && track->keys[0].time == 0.0f);
+    if (!track)
+        return;
 
     f32 v[TIMELINE_VALUE_MAX];
-    timeline_sample(track, -1.0f, v); CHECK_NEAR(v[0], 0.0f);    // held before the first key
-    timeline_sample(track, 1.0f, v);  CHECK_NEAR(v[0], 5.0f);
-    timeline_sample(track, 9.0f, v);  CHECK_NEAR(v[0], 10.0f);   // held after the last
+    timeline_sample(track, -1.0f, v); CHECK_NEAR(v[0], 30.0f);   // held before the first key
+    timeline_sample(track, 1.0f, v);  CHECK_NEAR(v[0], 35.0f);
+    timeline_sample(track, 9.0f, v);  CHECK_NEAR(v[0], 40.0f);   // held after the last
     CHECK_NEAR(timeline_duration(&tl), 2.0f);
 
     // add_key inserts in order and replaces a key at the same time.
@@ -83,6 +85,8 @@ test_tracks(void)
     CHECK(track->key_count == 3 && track->keys[1].value[0] == 50.0f);
 
     // Rejected, with nothing changed.
+    timeline_key too_wide = key1(3.0f, 0.0f, EASE_LINEAR);   // fov_degrees is 1 to 179
+    CHECK(!timeline_add_key(&tl, "cam", "Camera", "fov_degrees", &too_wide, error, sizeof(error)));
     CHECK(!timeline_set_track(&tl, "cam", "Lens", "fov", keys, 2, error, sizeof(error)));
     CHECK(strstr(error, "Transform") != NULL);                          // lists the components
     CHECK(!timeline_set_track(&tl, "cam", "MeshRenderer", "visible", keys, 2, error, sizeof(error)));   // a bool
@@ -121,8 +125,18 @@ test_evaluate(void)
         { .time = 2.0f, .value = { 2.0f, 4.0f, -6.0f } },
     };
     CHECK(timeline_set_track(&tl, "box", "Transform", "position", move, 2, error, sizeof(error)));
-    timeline_key rough[] = { key1(0.0f, 0.2f, EASE_LINEAR), key1(1.0f, 3.0f, EASE_LINEAR) };   // past roughness' max of 1
+    // Keys outside the field's range are refused, as component.set refuses them...
+    timeline_key too_rough[] = { key1(0.0f, 0.2f, EASE_LINEAR), key1(1.0f, 3.0f, EASE_LINEAR) };
+    CHECK(!timeline_set_track(&tl, "box", "MeshRenderer", "material.roughness", too_rough, 2, error, sizeof(error)));
+    CHECK(strstr(error, "from 0 to 1") != NULL);
+    // ...but a bezier that overshoots between two valid keys is clamped when written.
+    timeline_key rough[] = {
+        { .time = 0.0f, .value = { 0.2f }, .ease = EASE_BEZIER, .bezier = { 0.3f, 3.0f, 0.6f, 3.0f } },
+        { .time = 2.0f, .value = { 0.9f } },
+    };
     CHECK(timeline_set_track(&tl, "box", "MeshRenderer", "material.roughness", rough, 2, error, sizeof(error)));
+    timeline_key no_direction = { .time = 0.0f, .value = { 0.0f, 0.0f, 0.0f } };
+    CHECK(!timeline_add_key(&tl, "lamp", "Light", "direction", &no_direction, error, sizeof(error)));   // nonzero field
     timeline_key ghost[] = { key1(0.0f, 1.0f, EASE_LINEAR) };
     CHECK(timeline_set_track(&tl, "nobody", "Camera", "fov_degrees", ghost, 1, error, sizeof(error)));
 
@@ -136,8 +150,14 @@ test_evaluate(void)
     CHECK_NEAR(t->position[2], -3.0f);
 
     const c_mesh_renderer* mr = world_mesh_renderer(&w, box);
-    CHECK_NEAR(mr->material.roughness, 1.0f);                      // clamped to the field's range
+    CHECK_NEAR(mr->material.roughness, 1.0f);                      // the overshoot clamped to the field's range
     CHECK(mr->material.fields & MATERIAL_OVERRIDE_ROUGHNESS);       // and the override switched on
+
+    // timeline_set_track_json() names the key at fault.
+    cJSON* keys = cJSON_Parse("[{\"t\": 0, \"value\": 0.5}, {\"t\": 1, \"value\": \"high\"}]");
+    CHECK(!timeline_set_track_json(&tl, "box", "MeshRenderer", "material.metallic", keys, error, sizeof(error)));
+    CHECK(strncmp(error, "keys[1]:", 8) == 0);
+    cJSON_Delete(keys);
 
     // JSON round trip, and the loader's all-or-nothing rule.
     cJSON* json = timeline_to_json(&tl);
@@ -171,6 +191,7 @@ test_evaluate(void)
 
 int main(void)
 {
+    setvbuf(stdout, NULL, _IONBF, 0);   // a failure is printed even if a later check crashes
     test_easing();
     test_tracks();
     test_evaluate();

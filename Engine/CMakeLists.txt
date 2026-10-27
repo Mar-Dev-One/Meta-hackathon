@@ -6,6 +6,7 @@
 # engine itself is not changed.
 
 add_library(Meta_Engine STATIC
+    src/Common/Json.c
     src/Studio/Studio.c
     src/Studio/StudioCommands.c
     src/Timeline/Timeline.c

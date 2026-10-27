@@ -120,8 +120,15 @@ uint32 timeline_evaluate(timeline* tl, world* w, f32 t, uint32* out_skipped);
 cJSON* timeline_to_json(const timeline* tl);
 cJSON* timeline_track_to_json(const timeline_track* track);
 
-// One key from JSON for a field `width` floats wide. False with `error` filled.
+// One key from JSON for a field `width` floats wide. Only reads it: its
+// time, range and so on are checked when it goes into a track. False with
+// `error` filled.
 b8 timeline_key_from_json(const cJSON* json, uint32 width, timeline_key* out, char* error, size_t error_size);
+
+// timeline_set_track() with the keys as a JSON array; errors name the key
+// ("keys[2]: ...").
+b8 timeline_set_track_json(timeline* tl, const char* entity, const char* component, const char* field,
+                           const cJSON* keys, char* error, size_t error_size);
 
 // Replaces every track with the ones in `json` (timeline_to_json()'s
 // shape). All-or-nothing: on false the timeline is unchanged.

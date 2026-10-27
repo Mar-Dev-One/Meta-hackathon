@@ -3,27 +3,17 @@
 
 #include "Studio.h"
 
+#include "Common/Json.h"
 #include "Timeline/TimelineCommands.h"
 
-#include <math.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 // --- Arguments -------------------------------------------------------------------
+// Each reader returns 1 if `name` is in `args` and valid, 0 if it's absent,
+// and -1 (error filled) if it's invalid.
 
-static b8
-fail(char* error, size_t error_size, const char* format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    vsnprintf(error, error_size, format, args);
-    va_end(args);
-    return false;
-}
-
-// 1 if `name` is in `args` and valid, 0 if absent, -1 (error filled) if invalid.
 static int
 read_number(const cJSON* args, const char* name, f32 min, f32 max, f32* out, char* error, size_t error_size)
 {
@@ -32,7 +22,7 @@ read_number(const cJSON* args, const char* name, f32 min, f32 max, f32* out, cha
         return 0;
     if (!cJSON_IsNumber(item) || item->valuedouble < min || item->valuedouble > max)
     {
-        fail(error, error_size, "\"%s\" must be a number from %g to %g", name, min, max);
+        set_error(error, error_size, "\"%s\" must be a number from %g to %g", name, min, max);
         return -1;
     }
     *out = (f32)item->valuedouble;
@@ -45,18 +35,9 @@ read_vec3(const cJSON* args, const char* name, vec3 out, char* error, size_t err
     const cJSON* item = cJSON_GetObjectItemCaseSensitive(args, name);
     if (!item)
         return 0;
-
-    b8 ok = cJSON_IsArray(item) && cJSON_GetArraySize(item) == 3;
-    for (int i = 0; ok && i < 3; ++i)
+    if (!json_read_floats(item, out, 3))
     {
-        const cJSON* v = cJSON_GetArrayItem(item, i);
-        ok = cJSON_IsNumber(v) && isfinite(v->valuedouble);
-        if (ok)
-            out[i] = (f32)v->valuedouble;
-    }
-    if (!ok)
-    {
-        fail(error, error_size, "\"%s\" must be an array of three numbers, e.g. [0, 1.5, 3]", name);
+        set_error(error, error_size, "\"%s\" must be an array of three numbers, e.g. [0, 1.5, 3]", name);
         return -1;
     }
     return 1;
@@ -70,25 +51,17 @@ read_bool(const cJSON* args, const char* name, b8* out, char* error, size_t erro
         return 0;
     if (!cJSON_IsBool(item))
     {
-        fail(error, error_size, "\"%s\" must be true or false", name);
+        set_error(error, error_size, "\"%s\" must be true or false", name);
         return -1;
     }
     *out = cJSON_IsTrue(item);
     return 1;
 }
 
-static f64
-round6(f32 value)
-{
-    return round((f64)value * 1e6) / 1e6;
-}
-
 static void
 add_vec3(cJSON* object, const char* name, const vec3 v)
 {
-    cJSON* array = cJSON_AddArrayToObject(object, name);
-    for (int i = 0; i < 3; ++i)
-        cJSON_AddItemToArray(array, cJSON_CreateNumber(round6(v[i])));
+    json_add_floats(object, name, v, 3);
 }
 
 // --- studio.reset ------------------------------------------------------------------
@@ -151,7 +124,7 @@ cmd_render_set(void* user, command_context* ctx, const cJSON* args, cJSON** out_
     scene_antialiasing aa = s->antialiasing;
     const cJSON* aa_arg = cJSON_GetObjectItemCaseSensitive(args, "antialiasing");
     if (aa_arg && (!cJSON_IsString(aa_arg) || !scene_antialiasing_from_name(aa_arg->valuestring, &aa)))
-        return fail(error, error_size, "\"antialiasing\" must be \"off\", \"fxaa\" or \"taa\"");
+        return set_error(error, error_size, "\"antialiasing\" must be \"off\", \"fxaa\" or \"taa\"");
 
     b8   shadows = s->shadows;
     vec3 clear_color;
@@ -160,7 +133,7 @@ cmd_render_set(void* user, command_context* ctx, const cJSON* args, cJSON** out_
         || read_vec3(args, "clear_color", clear_color, error, error_size) < 0)
         return false;
     if (clear_color[0] < 0.0f || clear_color[1] < 0.0f || clear_color[2] < 0.0f)
-        return fail(error, error_size, "\"clear_color\" is linear RGB and can't be negative");
+        return set_error(error, error_size, "\"clear_color\" is linear RGB and can't be negative");
 
     s->antialiasing = aa;
     s->shadows      = shadows;
@@ -187,9 +160,9 @@ describe_camera(const studio* s)
     cJSON_AddStringToObject(result, "camera", world_name(s->w, e));
     add_vec3(result, "position", t->position);
     add_vec3(result, "rotation_deg", t->rotation_deg);
-    cJSON_AddNumberToObject(result, "fov_degrees", round6(cam->fov_degrees));
-    cJSON_AddNumberToObject(result, "near_plane", round6(cam->near_plane));
-    cJSON_AddNumberToObject(result, "far_plane", round6(cam->far_plane));
+    cJSON_AddNumberToObject(result, "fov_degrees", json_round6(cam->fov_degrees));
+    cJSON_AddNumberToObject(result, "near_plane", json_round6(cam->near_plane));
+    cJSON_AddNumberToObject(result, "far_plane", json_round6(cam->far_plane));
     return result;
 }
 
@@ -213,7 +186,7 @@ cmd_camera_set(void* user, command_context* ctx, const cJSON* args, cJSON** out_
     if (entity_arg)
     {
         if (!cJSON_IsString(entity_arg) || !entity_arg->valuestring[0] || strlen(entity_arg->valuestring) >= ENTITY_NAME_MAX)
-            return fail(error, error_size, "\"entity\" must be a name of 1 to %d characters", ENTITY_NAME_MAX - 1);
+            return set_error(error, error_size, "\"entity\" must be a name of 1 to %d characters", ENTITY_NAME_MAX - 1);
         name = entity_arg->valuestring;
     }
 
@@ -222,8 +195,9 @@ cmd_camera_set(void* user, command_context* ctx, const cJSON* args, cJSON** out_
     f32  fov = STUDIO_DEFAULT_FOV, near_plane = STUDIO_DEFAULT_NEAR, far_plane = STUDIO_DEFAULT_FAR;
     int  has_position = read_vec3(args, "position", position, error, error_size);
     int  has_target   = read_vec3(args, "target", target, error, error_size);
-    int  has_fov      = read_number(args, "fov_degrees", 1.0f, 170.0f, &fov, error, error_size);
-    int  has_near     = read_number(args, "near_plane", 0.001f, 1000.0f, &near_plane, error, error_size);
+    // The ranges are the Camera component's own (World/Reflect.h), so camera.set and component.set agree.
+    int  has_fov      = read_number(args, "fov_degrees", 1.0f, 179.0f, &fov, error, error_size);
+    int  has_near     = read_number(args, "near_plane", 0.001f, 100.0f, &near_plane, error, error_size);
     int  has_far      = read_number(args, "far_plane", 0.01f, 100000.0f, &far_plane, error, error_size);
     if (has_position < 0 || has_target < 0 || has_fov < 0 || has_near < 0 || has_far < 0)
         return false;
@@ -231,13 +205,13 @@ cmd_camera_set(void* user, command_context* ctx, const cJSON* args, cJSON** out_
     entity_id e   = world_find(w, name);
     c_camera* cam = e ? world_camera(w, e) : NULL;
     if (!e && !has_position)
-        return fail(error, error_size, "there's no entity \"%s\" yet: give a \"position\" to create the camera there", name);
+        return set_error(error, error_size, "there's no entity \"%s\" yet: give a \"position\" to create the camera there", name);
 
     // Unset clip planes keep the camera's own, so check the pair it will end up with.
     if (cam && !has_near) near_plane = cam->near_plane;
     if (cam && !has_far)  far_plane  = cam->far_plane;
     if (near_plane >= far_plane)
-        return fail(error, error_size, "\"near_plane\" (%g) must be less than \"far_plane\" (%g)", near_plane, far_plane);
+        return set_error(error, error_size, "\"near_plane\" (%g) must be less than \"far_plane\" (%g)", near_plane, far_plane);
 
     if (e && !has_position)
         glm_vec3_copy(world_transform(w, e)->position, position);
@@ -248,7 +222,7 @@ cmd_camera_set(void* user, command_context* ctx, const cJSON* args, cJSON** out_
         vec3 direction;
         glm_vec3_sub(target, position, direction);
         if (!studio_look_rotation(direction, rotation))
-            return fail(error, error_size, "\"target\" is where the camera is: it needs a point to look at");
+            return set_error(error, error_size, "\"target\" is where the camera is: it needs a point to look at");
     }
 
     // Valid: make the changes.
@@ -297,7 +271,7 @@ static const cmd_arg CAMERA_SET_ARGS[] = {
     { "entity", "string", false, "the Camera entity's name (default \"" STUDIO_DEFAULT_CAMERA "\"); created if missing" },
     { "position", "vec3", false, "where the camera is, in meters; required when creating it" },
     { "target", "vec3", false, "a point to look at; without it the rotation is kept" },
-    { "fov_degrees", "number", false, "vertical field of view, 1 .. 170 (new cameras: 30)" },
+    { "fov_degrees", "number", false, "vertical field of view, 1 .. 179 (new cameras: 30)" },
     { "near_plane", "number", false, "meters" },
     { "far_plane", "number", false, "meters" },
 };

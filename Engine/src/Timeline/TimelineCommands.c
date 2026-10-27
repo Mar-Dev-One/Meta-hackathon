@@ -4,6 +4,7 @@
 
 #include "TimelineCommands.h"
 
+#include "Common/Json.h"
 #include "Studio/Studio.h"
 #include "Timeline/Timeline.h"
 
@@ -27,15 +28,9 @@ read_target(const cJSON* args, const char** entity, const char** component, cons
     const cJSON* c = cJSON_GetObjectItemCaseSensitive(args, "component");
     const cJSON* f = cJSON_GetObjectItemCaseSensitive(args, "field");
     if (!cJSON_IsString(e) || (c && !cJSON_IsString(c)) || (f && !cJSON_IsString(f)))
-    {
-        snprintf(error, error_size, "\"entity\", \"component\" and \"field\" must be strings");
-        return false;
-    }
+        return set_error(error, error_size, "\"entity\", \"component\" and \"field\" must be strings");
     if (component_required && (!c || !f))
-    {
-        snprintf(error, error_size, "give \"entity\", \"component\" and \"field\", e.g. \"camera\", \"Transform\", \"position\"");
-        return false;
-    }
+        return set_error(error, error_size, "give \"entity\", \"component\" and \"field\", e.g. \"camera\", \"Transform\", \"position\"");
     *entity    = e->valuestring;
     *component = c ? c->valuestring : NULL;
     *field     = f ? f->valuestring : NULL;
@@ -47,7 +42,7 @@ describe_track(studio* s, timeline_track* track)
 {
     cJSON* result = timeline_track_to_json(track);
     cJSON_AddBoolToObject(result, "entity_exists", world_find(s->w, track->entity) != ENTITY_NULL);
-    cJSON_AddNumberToObject(result, "duration", timeline_duration(&s->timeline));
+    cJSON_AddNumberToObject(result, "duration", json_round6(timeline_duration(&s->timeline)));
     return result;
 }
 
@@ -57,40 +52,9 @@ cmd_set_track(void* user, command_context* ctx, const cJSON* args, cJSON** out_r
     (void)ctx;
     studio*     s = (studio*)user;
     const char *entity, *component, *field;
-    if (!read_target(args, &entity, &component, &field, true, error, error_size))
-        return false;
-
-    uint32 width = timeline_field_width(component, field, error, error_size);
-    if (!width)
-        return false;
-
-    const cJSON* keys = cJSON_GetObjectItemCaseSensitive(args, "keys");
-    if (!cJSON_IsArray(keys) || cJSON_GetArraySize(keys) == 0)
-    {
-        snprintf(error, error_size, "\"keys\" must be a non-empty array of {\"t\": seconds, \"value\": ..., \"ease\": ...}");
-        return false;
-    }
-
-    uint32        count  = (uint32)cJSON_GetArraySize(keys);
-    timeline_key* parsed = calloc(count, sizeof(*parsed));
-    uint32        i      = 0;
-    const cJSON*  key;
-    b8            ok = true;
-    cJSON_ArrayForEach(key, keys)
-    {
-        char key_error[256];
-        if (!timeline_key_from_json(key, width, &parsed[i], key_error, sizeof(key_error)))
-        {
-            snprintf(error, error_size, "keys[%u]: %s", i, key_error);
-            ok = false;
-            break;
-        }
-        ++i;
-    }
-    if (ok)
-        ok = timeline_set_track(&s->timeline, entity, component, field, parsed, count, error, error_size);
-    free(parsed);
-    if (!ok)
+    if (!read_target(args, &entity, &component, &field, true, error, error_size)
+        || !timeline_set_track_json(&s->timeline, entity, component, field,
+                                    cJSON_GetObjectItemCaseSensitive(args, "keys"), error, error_size))
         return false;
 
     refresh(s);
@@ -159,7 +123,7 @@ static cJSON*
 describe_timeline(const studio* s)
 {
     cJSON* result = timeline_to_json(&s->timeline);
-    cJSON_AddNumberToObject(result, "time", round(s->timeline.time * 1e6) / 1e6);
+    cJSON_AddNumberToObject(result, "time", json_round6(s->timeline.time));
     cJSON_AddBoolToObject(result, "playing", s->timeline.playing);
     cJSON_AddBoolToObject(result, "loop", s->timeline.loop);
     return result;
@@ -180,10 +144,7 @@ cmd_seek(void* user, command_context* ctx, const cJSON* args, cJSON** out_result
     studio*      s = (studio*)user;
     const cJSON* t = cJSON_GetObjectItemCaseSensitive(args, "t");
     if (!cJSON_IsNumber(t) || !isfinite(t->valuedouble) || t->valuedouble < 0.0)
-    {
-        snprintf(error, error_size, "\"t\" must be a time of 0 or more seconds");
-        return false;
-    }
+        return set_error(error, error_size, "\"t\" must be a time of 0 or more seconds");
 
     uint32 skipped = 0;
     s->timeline.playing = false;
@@ -205,10 +166,7 @@ cmd_play(void* user, command_context* ctx, const cJSON* args, cJSON** out_result
     const cJSON* from = cJSON_GetObjectItemCaseSensitive(args, "from");
     const cJSON* loop = cJSON_GetObjectItemCaseSensitive(args, "loop");
     if ((from && (!cJSON_IsNumber(from) || from->valuedouble < 0.0)) || (loop && !cJSON_IsBool(loop)))
-    {
-        snprintf(error, error_size, "\"from\" must be 0 or more seconds and \"loop\" true or false");
-        return false;
-    }
+        return set_error(error, error_size, "\"from\" must be 0 or more seconds and \"loop\" true or false");
 
     if (from)
         s->timeline.time = (f32)from->valuedouble;
