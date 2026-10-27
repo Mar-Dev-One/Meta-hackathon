@@ -224,3 +224,6 @@ __marimo__/
 
 # Smoke test outputs (images, audio, raw API responses)
 pipeline/meta/smoke/out/
+
+# Pipeline outputs (renders, videos)
+pipeline/**/out/

@@ -77,6 +77,19 @@ Shots render offscreen at any size, independent of the window, with their own re
 
 A render blocks the Studio until it's done, and the server doesn't answer WebSocket pings meanwhile: clients should turn off their ping timeout (`websockets.connect(url, ping_interval=None)` in Python) or render in shorter ranges.
 
+## Pipeline (Python)
+
+```
+.venv\Scripts\python -m pip install -r pipeline\requirements.txt
+.venv\Scripts\python -m pipeline.demos.first_ad --preview   # a few frames as PNGs
+.venv\Scripts\python -m pipeline.demos.first_ad             # pipeline/demos/out/first_ad.mp4
+```
+
+- `pipeline/studio`: `Studio`, an async client that starts `Studio.exe --hidden`, connects through `server.json` and turns failed commands into `StudioError`s.
+- `pipeline/encode`: `finish()`, the last ffmpeg pass: titles faded over the picture, fades from and to black.
+- `pipeline/demos/first_ad.py`: a 13-second perfume spot written by hand from the Studio's commands, the fallback demo and the shot list the director agent will write for itself.
+- `pipeline/meta/smoke`: one test call to each Meta model.
+
 ## Tests
 
 ```
@@ -89,7 +102,7 @@ runs the timeline's tests (`Engine/tests/timeline_tests.c`: easing, sampling, ed
 
 - `src/main.c` is the Studio program
 - `Engine/` is `Meta_Engine`, the library written for this project on top of the engine: `src/Studio` (studio commands), `src/Timeline` (keyframe animation), `src/Shot` (frames, video), `src/Common` (JSON helpers), `tests/`; text and products to come
-- `pipeline/` is the Python side; so far `pipeline/meta/smoke`, one test call to each Meta model
+- `pipeline/` is the Python side: the Studio client, finishing with ffmpeg, demos, the Meta model smoke tests
 - `Deps/` holds the engine headers (`Includes/PBR`) and prebuilt libraries (`Libs`)
 - `Assets/Shaders/shaders` holds the engine's shaders. They are copied to `<exe>/assets/shaders` at build time
 - `Assets/models` and `Assets/hdri` hold the models and HDRI the demo scene loads. They are copied to `<exe>/assets` at build time
@@ -103,4 +116,4 @@ The engine (`PBR_Engine`, [AI-Powered-PBR-Renderer](https://github.com/Mar-Dev-O
 
 - `Engine/`: the Studio library (`Meta_Engine`): studio commands, the timeline and its tests, shot rendering to PNG and video
 - `src/main.c`: the Studio program
-- `pipeline/`: the Meta model smoke tests
+- `pipeline/`: the Studio client, the ffmpeg finishing pass, the first hand-made ad, the Meta model smoke tests
