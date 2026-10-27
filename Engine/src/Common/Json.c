@@ -45,3 +45,50 @@ json_read_floats(const cJSON* json, f32* out, int count)
     }
     return true;
 }
+
+int
+arg_number(const cJSON* args, const char* name, f32 min, f32 max, f32* out, char* error, size_t error_size)
+{
+    const cJSON* item = cJSON_GetObjectItemCaseSensitive(args, name);
+    if (!item)
+        return 0;
+    if (!cJSON_IsNumber(item) || !isfinite(item->valuedouble) || item->valuedouble < min || item->valuedouble > max)
+        return set_error(error, error_size, "\"%s\" must be a number from %g to %g", name, min, max), -1;
+    *out = (f32)item->valuedouble;
+    return 1;
+}
+
+int
+arg_vec3(const cJSON* args, const char* name, f32 out[3], char* error, size_t error_size)
+{
+    const cJSON* item = cJSON_GetObjectItemCaseSensitive(args, name);
+    if (!item)
+        return 0;
+    if (!json_read_floats(item, out, 3))
+        return set_error(error, error_size, "\"%s\" must be an array of three numbers, e.g. [0, 1.5, 3]", name), -1;
+    return 1;
+}
+
+int
+arg_bool(const cJSON* args, const char* name, b8* out, char* error, size_t error_size)
+{
+    const cJSON* item = cJSON_GetObjectItemCaseSensitive(args, name);
+    if (!item)
+        return 0;
+    if (!cJSON_IsBool(item))
+        return set_error(error, error_size, "\"%s\" must be true or false", name), -1;
+    *out = cJSON_IsTrue(item);
+    return 1;
+}
+
+int
+arg_string(const cJSON* args, const char* name, const char** out, char* error, size_t error_size)
+{
+    const cJSON* item = cJSON_GetObjectItemCaseSensitive(args, name);
+    if (!item)
+        return 0;
+    if (!cJSON_IsString(item) || !item->valuestring[0])
+        return set_error(error, error_size, "\"%s\" must be a non-empty string", name), -1;
+    *out = item->valuestring;
+    return 1;
+}

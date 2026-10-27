@@ -52,6 +52,9 @@ The method is the command name and the params are its arguments:
   | `timeline.remove_track` / `timeline.clear` / `timeline.get` | Edit and read the tracks |
   | `timeline.seek` | Shows the scene at a time: every animated field set to its value then |
   | `timeline.play` / `timeline.pause` | Plays the timeline in real time in the window |
+  | `shot.preview` | Renders the frames at given times as PNGs, through the active camera, and returns their paths |
+  | `shot.render` | Renders a time range at an fps straight into an `.mp4` (`video`; needs ffmpeg on the PATH) or as PNG frames (`out_dir`) |
+  | `shot.bounds` | Where an entity is in the frame at a time: its box, centre, how much of the frame it fills, which edges cut it |
 
 A failed command changes nothing and says which argument is wrong and what it accepts. Every change is also pushed to all clients as a `scene.changed` notification.
 
@@ -61,6 +64,10 @@ The timeline is saved and loaded with the scene (`scene.save` / `scene.load`), a
 -> {"jsonrpc": "2.0", "id": 2, "method": "timeline.set_track", "params": {"entity": "camera", "component": "Transform",
     "field": "position", "keys": [{"t": 0, "value": [0, 1, 4], "ease": "in_out"}, {"t": 4, "value": [3, 1, 3]}]}}
 ```
+
+Shots render offscreen at any size, independent of the window, with their own renderer. Each frame is rendered from scratch at its time (the timeline evaluated there, TAA restarted, then `samples` sub-frames), so a frame looks the same whether it's rendered alone or in a sequence: the critic can re-check one frame. Defaults: previews 960x540 with 8 samples, renders 1920x1080 with 16 samples at 30 fps. On an Intel Iris Xe, a 1080p frame takes about 0.4 s into a video; PNGs are slower (about 1.2 s at 1080p, mostly compression), so use them for previews.
+
+A render blocks the Studio until it's done, and the server doesn't answer WebSocket pings meanwhile: clients should turn off their ping timeout (`websockets.connect(url, ping_interval=None)` in Python) or render in shorter ranges.
 
 ## Tests
 
@@ -73,7 +80,7 @@ runs the timeline's tests (`Engine/tests/timeline_tests.c`: easing, sampling, ed
 ## Layout
 
 - `src/main.c` is the Studio program
-- `Engine/` is `Meta_Engine`, the library written for this project on top of the engine: `src/Studio` (studio commands), `src/Timeline` (keyframe animation), `tests/`; text, products and shot rendering to come
+- `Engine/` is `Meta_Engine`, the library written for this project on top of the engine: `src/Studio` (studio commands), `src/Timeline` (keyframe animation), `src/Shot` (frames, video), `src/Common` (JSON helpers), `tests/`; text and products to come
 - `pipeline/` is the Python side; so far `pipeline/meta/smoke`, one test call to each Meta model
 - `Deps/` holds the engine headers (`Includes/PBR`) and prebuilt libraries (`Libs`)
 - `Assets/Shaders/shaders` holds the engine's shaders. They are copied to `<exe>/assets/shaders` at build time
@@ -86,6 +93,6 @@ At runtime the program loads everything from the `assets/` folder next to it. `P
 
 The engine (`PBR_Engine`, [AI-Powered-PBR-Renderer](https://github.com/Mar-Dev-One/AI-Powered-PBR-Renderer)) existed before the hackathon and is used unchanged, as a prebuilt library. Everything in this repository was written during the hackathon (from 2026-10-27):
 
-- `Engine/`: the Studio library (`Meta_Engine`): studio commands, the timeline and its tests
+- `Engine/`: the Studio library (`Meta_Engine`): studio commands, the timeline and its tests, shot rendering to PNG and video
 - `src/main.c`: the Studio program
 - `pipeline/`: the Meta model smoke tests

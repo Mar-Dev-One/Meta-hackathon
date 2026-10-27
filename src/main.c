@@ -275,7 +275,7 @@ on_init(App* app)
     assets_init(&state->assets);
     world_init(&state->world, &state->assets);
     state->env = scene_environment_default();
-    studio_init(&state->stage, &state->world, &state->env);
+    studio_init(&state->stage, &state->world, &state->env, &state->ibl);
 
     if (state->demo_scene)
     {
@@ -370,9 +370,8 @@ on_frame(App* app, f32 dt)
     if (wheel != 0.0f)
         orbit_zoom(&state->orbit, &state->cam, wheel);
 
-    scene_render_settings settings = scene_render_settings_default();
-    scene_render_settings_apply_environment(&settings, &state->env, ibl_cache_maps(&state->ibl));
-    studio_apply_render_settings(&state->stage, &settings);
+    scene_render_settings settings;
+    studio_render_settings(&state->stage, &settings);
     settings.debug_view = state->debug_view;
     settings.delta_time = state->check_path ? -1.0f : dt;
 

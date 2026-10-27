@@ -2,8 +2,10 @@
 
 #include "Commands/Commands.h"
 #include "Core/Defines.h"
+#include "Renderer/IBL.h"
 #include "Renderer/SceneRenderer.h"
 #include "Scene/Camera.h"
+#include "Shot/Shot.h"
 #include "Timeline/Timeline.h"
 #include "World/Environment.h"
 #include "World/World.h"
@@ -24,6 +26,7 @@
 //   camera.set         creates or moves a Camera entity and makes it the active one
 //   timeline.*         keyframes (Timeline/TimelineCommands.c): set_track, add_key,
 //                      remove_track, clear, get, seek, play, pause
+//   shot.*             frames to PNG (Shot/ShotCommands.c): preview, render, bounds
 //
 // The timeline is saved and loaded with the scene, next to its file
 // (scenes/<name>.timeline.json): the app calls studio_scene_file() from the
@@ -40,7 +43,8 @@
 typedef struct studio
 {
     world*             w;     // borrowed
-    scene_environment* env;   // borrowed; the app bakes env->hdri (ibl_cache_sync())
+    scene_environment* env;   // borrowed
+    ibl_cache*         ibl;   // borrowed, may be NULL: env->hdri baked (the app syncs it each frame; shots before rendering)
 
     // Render settings that aren't part of the environment.
     scene_antialiasing antialiasing;
@@ -51,14 +55,15 @@ typedef struct studio
     // undo and scene loads); "" = the app's own camera.
     char active_camera[ENTITY_NAME_MAX];
 
-    timeline timeline;
+    timeline      timeline;
+    shot_renderer shots;   // made on the first shot.* render; needs the GL context
 } studio;
 
-// `w` and `env` must outlive the studio. Starts with the default render
-// settings, no active camera and an empty timeline; leaves the world and
-// environment as they are.
-void studio_init(studio* s, world* w, scene_environment* env);
-void studio_destroy(studio* s);
+// `w`, `env` and `ibl` (may be NULL) must outlive the studio. Starts with
+// the default render settings, no active camera and an empty timeline;
+// leaves the world and environment as they are.
+void studio_init(studio* s, world* w, scene_environment* env, ibl_cache* ibl);
+void studio_destroy(studio* s);   // while the GL context is still alive
 
 // An empty stage: destroys every entity and track, and puts the environment
 // and the render settings back to their defaults, with no active camera.
@@ -72,9 +77,10 @@ void studio_update(studio* s, f32 dt);
 // saves the timeline next to it, or loads the one saved with it (none = empty).
 void studio_scene_file(studio* s, cmd_scene_file_op op, const char* name);
 
-// Writes the studio's render settings into `settings` -- call after
-// scene_render_settings_apply_environment().
-void studio_apply_render_settings(const studio* s, scene_render_settings* settings);
+// The settings a frame is rendered with: the defaults, then the environment
+// (with the baked HDRI, if any), then the studio's own render settings.
+// The window and shots both use it, so they show the same picture.
+void studio_render_settings(const studio* s, scene_render_settings* out);
 
 // The active Camera entity's view at `aspect`. False if there's none, or it
 // was destroyed or lost its Camera since.

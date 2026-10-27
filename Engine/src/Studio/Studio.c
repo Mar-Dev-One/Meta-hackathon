@@ -20,11 +20,12 @@ reset_render_settings(studio* s)
 }
 
 void
-studio_init(studio* s, world* w, scene_environment* env)
+studio_init(studio* s, world* w, scene_environment* env, ibl_cache* ibl)
 {
     memset(s, 0, sizeof(*s));
     s->w   = w;
     s->env = env;
+    s->ibl = ibl;
     reset_render_settings(s);
     timeline_init(&s->timeline);
 }
@@ -32,6 +33,7 @@ studio_init(studio* s, world* w, scene_environment* env)
 void
 studio_destroy(studio* s)
 {
+    shot_renderer_destroy(&s->shots);
     timeline_destroy(&s->timeline);
 }
 
@@ -86,11 +88,13 @@ studio_scene_file(studio* s, cmd_scene_file_op op, const char* name)
 }
 
 void
-studio_apply_render_settings(const studio* s, scene_render_settings* settings)
+studio_render_settings(const studio* s, scene_render_settings* out)
 {
-    settings->antialiasing = s->antialiasing;
-    settings->shadows      = s->shadows;
-    glm_vec3_copy((f32*)s->clear_color, settings->clear_color);
+    *out = scene_render_settings_default();
+    scene_render_settings_apply_environment(out, s->env, s->ibl ? ibl_cache_maps(s->ibl) : NULL);
+    out->antialiasing = s->antialiasing;
+    out->shadows      = s->shadows;
+    glm_vec3_copy((f32*)s->clear_color, out->clear_color);
 }
 
 b8

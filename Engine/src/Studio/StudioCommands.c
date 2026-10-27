@@ -4,59 +4,13 @@
 #include "Studio.h"
 
 #include "Common/Json.h"
+#include "Shot/ShotCommands.h"
 #include "Timeline/TimelineCommands.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// --- Arguments -------------------------------------------------------------------
-// Each reader returns 1 if `name` is in `args` and valid, 0 if it's absent,
-// and -1 (error filled) if it's invalid.
-
-static int
-read_number(const cJSON* args, const char* name, f32 min, f32 max, f32* out, char* error, size_t error_size)
-{
-    const cJSON* item = cJSON_GetObjectItemCaseSensitive(args, name);
-    if (!item)
-        return 0;
-    if (!cJSON_IsNumber(item) || item->valuedouble < min || item->valuedouble > max)
-    {
-        set_error(error, error_size, "\"%s\" must be a number from %g to %g", name, min, max);
-        return -1;
-    }
-    *out = (f32)item->valuedouble;
-    return 1;
-}
-
-static int
-read_vec3(const cJSON* args, const char* name, vec3 out, char* error, size_t error_size)
-{
-    const cJSON* item = cJSON_GetObjectItemCaseSensitive(args, name);
-    if (!item)
-        return 0;
-    if (!json_read_floats(item, out, 3))
-    {
-        set_error(error, error_size, "\"%s\" must be an array of three numbers, e.g. [0, 1.5, 3]", name);
-        return -1;
-    }
-    return 1;
-}
-
-static int
-read_bool(const cJSON* args, const char* name, b8* out, char* error, size_t error_size)
-{
-    const cJSON* item = cJSON_GetObjectItemCaseSensitive(args, name);
-    if (!item)
-        return 0;
-    if (!cJSON_IsBool(item))
-    {
-        set_error(error, error_size, "\"%s\" must be true or false", name);
-        return -1;
-    }
-    *out = cJSON_IsTrue(item);
-    return 1;
-}
 
 static void
 add_vec3(cJSON* object, const char* name, const vec3 v)
@@ -129,8 +83,8 @@ cmd_render_set(void* user, command_context* ctx, const cJSON* args, cJSON** out_
     b8   shadows = s->shadows;
     vec3 clear_color;
     glm_vec3_copy(s->clear_color, clear_color);
-    if (read_bool(args, "shadows", &shadows, error, error_size) < 0
-        || read_vec3(args, "clear_color", clear_color, error, error_size) < 0)
+    if (arg_bool(args, "shadows", &shadows, error, error_size) < 0
+        || arg_vec3(args, "clear_color", clear_color, error, error_size) < 0)
         return false;
     if (clear_color[0] < 0.0f || clear_color[1] < 0.0f || clear_color[2] < 0.0f)
         return set_error(error, error_size, "\"clear_color\" is linear RGB and can't be negative");
@@ -193,12 +147,12 @@ cmd_camera_set(void* user, command_context* ctx, const cJSON* args, cJSON** out_
     vec3 position = { 0.0f, 0.0f, 0.0f };
     vec3 target;
     f32  fov = STUDIO_DEFAULT_FOV, near_plane = STUDIO_DEFAULT_NEAR, far_plane = STUDIO_DEFAULT_FAR;
-    int  has_position = read_vec3(args, "position", position, error, error_size);
-    int  has_target   = read_vec3(args, "target", target, error, error_size);
+    int  has_position = arg_vec3(args, "position", position, error, error_size);
+    int  has_target   = arg_vec3(args, "target", target, error, error_size);
     // The ranges are the Camera component's own (World/Reflect.h), so camera.set and component.set agree.
-    int  has_fov      = read_number(args, "fov_degrees", 1.0f, 179.0f, &fov, error, error_size);
-    int  has_near     = read_number(args, "near_plane", 0.001f, 100.0f, &near_plane, error, error_size);
-    int  has_far      = read_number(args, "far_plane", 0.01f, 100000.0f, &far_plane, error, error_size);
+    int  has_fov      = arg_number(args, "fov_degrees", 1.0f, 179.0f, &fov, error, error_size);
+    int  has_near     = arg_number(args, "near_plane", 0.001f, 100.0f, &near_plane, error, error_size);
+    int  has_far      = arg_number(args, "far_plane", 0.01f, 100000.0f, &far_plane, error, error_size);
     if (has_position < 0 || has_target < 0 || has_fov < 0 || has_near < 0 || has_far < 0)
         return false;
 
@@ -302,14 +256,15 @@ studio_commands(uint32* out_count)
     static uint32            all_count;
     if (!all)
     {
-        uint32                  timeline_count;
-        const cmd_host_command* timeline     = timeline_commands(&timeline_count);
-        uint32                  studio_count = sizeof(STUDIO_COMMANDS) / sizeof(STUDIO_COMMANDS[0]);
+        uint32                  counts[3] = { sizeof(STUDIO_COMMANDS) / sizeof(STUDIO_COMMANDS[0]) };
+        const cmd_host_command* tables[3] = { STUDIO_COMMANDS, timeline_commands(&counts[1]), shot_commands(&counts[2]) };
 
-        all = malloc((studio_count + timeline_count) * sizeof(*all));
-        memcpy(all, STUDIO_COMMANDS, sizeof(STUDIO_COMMANDS));
-        memcpy(all + studio_count, timeline, timeline_count * sizeof(*all));
-        all_count = studio_count + timeline_count;
+        all = malloc((counts[0] + counts[1] + counts[2]) * sizeof(*all));
+        for (int i = 0; i < 3; ++i)
+        {
+            memcpy(all + all_count, tables[i], counts[i] * sizeof(*all));
+            all_count += counts[i];
+        }
     }
     *out_count = all_count;
     return all;

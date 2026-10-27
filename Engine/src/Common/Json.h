@@ -22,3 +22,11 @@ void json_add_floats(cJSON* object, const char* name, const f32* values, int cou
 // Reads an array of exactly `count` finite numbers. False (out partly
 // written) if `json` isn't one.
 b8 json_read_floats(const cJSON* json, f32* out, int count);
+
+// Optional command arguments. Each returns 1 if `name` is in `args` and
+// valid (written to *out), 0 if it's absent (*out untouched), and -1
+// (error filled) if it's invalid.
+int arg_number(const cJSON* args, const char* name, f32 min, f32 max, f32* out, char* error, size_t error_size);
+int arg_vec3(const cJSON* args, const char* name, f32 out[3], char* error, size_t error_size);
+int arg_bool(const cJSON* args, const char* name, b8* out, char* error, size_t error_size);
+int arg_string(const cJSON* args, const char* name, const char** out, char* error, size_t error_size);
