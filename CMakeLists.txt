@@ -63,4 +63,20 @@ add_custom_command(TARGET Testbed POST_BUILD
             $<TARGET_FILE_DIR:Testbed>/assets/hdri
 )
 
+# vcruntime140.dll goes next to the program too: Windows 10/11 ship the rest
+# of the C runtime (the UCRT), but not this, so a PC without the Visual C++
+# Redistributable couldn't start it. InstallRequiredSystemLibraries finds it
+# in the compiler's redist folder; the program needs no other DLL from there.
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
+include(InstallRequiredSystemLibraries)
+list(FILTER CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS INCLUDE REGEX "/vcruntime140\\.dll$")
+if(NOT CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+    message(FATAL_ERROR "vcruntime140.dll not found in the MSVC redist folder")
+endif()
+add_custom_command(TARGET Testbed POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
+            $<TARGET_FILE_DIR:Testbed>
+)
+
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT Testbed)
