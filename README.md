@@ -86,13 +86,14 @@ A render blocks the Studio until it's done, and the server doesn't answer WebSoc
 
 ```
 .venv\Scripts\python -m pip install -r pipeline\requirements.txt
-.venv\Scripts\python -m pipeline.demos.first_ad --preview   # a few frames as PNGs
-.venv\Scripts\python -m pipeline.demos.first_ad             # pipeline/demos/out/first_ad.mp4
+.venv\Scripts\python -m pipeline.demos.ads --list          # the hand-made ads
+.venv\Scripts\python -m pipeline.demos.ads --preview       # a few frames of each as PNGs
+.venv\Scripts\python -m pipeline.demos.ads fizzo kora      # pipeline/demos/out/<name>.mp4 (no names: all of them)
 ```
 
 - `pipeline/studio`: `Studio`, an async client that starts `Studio.exe --hidden`, connects through `server.json` and turns failed commands into `StudioError`s.
 - `pipeline/encode`: `finish()`, the last ffmpeg pass: titles faded over the picture, fades from and to black.
-- `pipeline/demos/first_ad.py`: a 13-second perfume spot written by hand from the Studio's commands, the fallback demo and the shot list the director agent will write for itself.
+- `pipeline/demos/ads.py`: five ads written by hand as specs (scene, product, label, lighting, shots, titles) for fictional brands: a perfume, a drinks can, a skincare jar, an olive oil, a serum. Test footage, fallback demos, and the shape of what the director agent will write. `first_ad.py` renders the perfume one.
 - `pipeline/meta/smoke`: one test call to each Meta model.
 
 ## Tests
@@ -121,4 +122,4 @@ The engine (`PBR_Engine`, [AI-Powered-PBR-Renderer](https://github.com/Mar-Dev-O
 
 - `Engine/`: the Studio library (`Meta_Engine`): studio commands, the timeline and its tests, shot rendering to PNG and video, camera moves, lighting presets, product and backdrop models
 - `src/main.c`: the Studio program
-- `pipeline/`: the Studio client, the ffmpeg finishing pass, the first hand-made ad, the Meta model smoke tests
+- `pipeline/`: the Studio client, the ffmpeg finishing pass, the hand-made ads, the Meta model smoke tests
