@@ -58,8 +58,7 @@ shot_render_frame(shot_renderer* r, studio* s, f32 t, uint16 width, uint16 heigh
     if (width < 16 || height < 16 || width > SHOT_MAX_SIZE || height > SHOT_MAX_SIZE)
         return set_error(error, error_size, "a frame is 16 to %d pixels a side (got %ux%u)", SHOT_MAX_SIZE, width, height);
 
-    timeline_evaluate(&s->timeline, s->w, t, NULL);
-    world_update(s->w);
+    studio_evaluate(s, t, NULL);
 
     camera cam;
     if (!studio_camera_view(s, (f32)width / (f32)height, &cam))

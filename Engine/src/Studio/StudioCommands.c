@@ -3,6 +3,7 @@
 
 #include "Studio.h"
 
+#include "CameraMoves.h"
 #include "Common/Json.h"
 #include "Shot/ShotCommands.h"
 #include "Timeline/TimelineCommands.h"
@@ -51,21 +52,11 @@ cmd_environment_set(void* user, command_context* ctx, const cJSON* args, cJSON**
 
 // --- render.get / render.set ---------------------------------------------------------
 
-static cJSON*
-describe_render(const studio* s)
-{
-    cJSON* result = cJSON_CreateObject();
-    cJSON_AddStringToObject(result, "antialiasing", scene_antialiasing_name(s->antialiasing));
-    cJSON_AddBoolToObject(result, "shadows", s->shadows);
-    add_vec3(result, "clear_color", s->clear_color);
-    return result;
-}
-
 static b8
 cmd_render_get(void* user, command_context* ctx, const cJSON* args, cJSON** out_result, char* error, size_t error_size)
 {
     (void)ctx; (void)args; (void)error; (void)error_size;
-    *out_result = describe_render((studio*)user);
+    *out_result = studio_render_to_json((studio*)user);
     return true;
 }
 
@@ -74,25 +65,9 @@ cmd_render_set(void* user, command_context* ctx, const cJSON* args, cJSON** out_
 {
     (void)ctx;
     studio* s = (studio*)user;
-
-    scene_antialiasing aa = s->antialiasing;
-    const cJSON* aa_arg = cJSON_GetObjectItemCaseSensitive(args, "antialiasing");
-    if (aa_arg && (!cJSON_IsString(aa_arg) || !scene_antialiasing_from_name(aa_arg->valuestring, &aa)))
-        return set_error(error, error_size, "\"antialiasing\" must be \"off\", \"fxaa\" or \"taa\"");
-
-    b8   shadows = s->shadows;
-    vec3 clear_color;
-    glm_vec3_copy(s->clear_color, clear_color);
-    if (arg_bool(args, "shadows", &shadows, error, error_size) < 0
-        || arg_vec3(args, "clear_color", clear_color, error, error_size) < 0)
+    if (!studio_render_from_json(s, args, error, error_size))
         return false;
-    if (clear_color[0] < 0.0f || clear_color[1] < 0.0f || clear_color[2] < 0.0f)
-        return set_error(error, error_size, "\"clear_color\" is linear RGB and can't be negative");
-
-    s->antialiasing = aa;
-    s->shadows      = shadows;
-    glm_vec3_copy(clear_color, s->clear_color);
-    *out_result = describe_render(s);
+    *out_result = studio_render_to_json(s);
     return true;
 }
 
@@ -117,6 +92,10 @@ describe_camera(const studio* s)
     cJSON_AddNumberToObject(result, "fov_degrees", json_round6(cam->fov_degrees));
     cJSON_AddNumberToObject(result, "near_plane", json_round6(cam->near_plane));
     cJSON_AddNumberToObject(result, "far_plane", json_round6(cam->far_plane));
+    if (s->look_at[0])
+        cJSON_AddStringToObject(result, "look_at", s->look_at);
+    else
+        cJSON_AddNullToObject(result, "look_at");
     return result;
 }
 
@@ -180,10 +159,8 @@ cmd_camera_set(void* user, command_context* ctx, const cJSON* args, cJSON** out_
     }
 
     // Valid: make the changes.
-    if (!e)
-        e = world_create(w, name);   // the name is free, so it's kept as given
-    if (!cam)
-        cam = world_add_camera(w, e, fov, near_plane, far_plane);
+    e   = studio_camera_entity(s, name);
+    cam = world_camera(w, e);
     if (has_fov)
         cam->fov_degrees = fov;
     cam->near_plane  = near_plane;
@@ -194,7 +171,9 @@ cmd_camera_set(void* user, command_context* ctx, const cJSON* args, cJSON** out_
     if (has_target)
         glm_vec3_copy(rotation, t->rotation_deg);
 
+    // Aimed once, here: no longer kept on a look-at entity.
     snprintf(s->active_camera, sizeof(s->active_camera), "%s", world_name(w, e));
+    s->look_at[0] = '\0';
     *out_result = describe_camera(s);
     return true;
 }
@@ -243,7 +222,7 @@ static const cmd_host_command STUDIO_COMMANDS[] = {
       RENDER_ARGS, sizeof(RENDER_ARGS) / sizeof(RENDER_ARGS[0]), false, cmd_render_set },
     { "camera.get", "The active camera (the one the frame is seen through), or {\"camera\": null}.",
       NULL, 0, false, cmd_camera_get },
-    { "camera.set", "Creates or moves a Camera entity, aims it at a target and makes it the active camera.",
+    { "camera.set", "Creates or moves a Camera entity, aims it at a target once (turning off camera.move's look-at) and makes it the active camera.",
       CAMERA_SET_ARGS, sizeof(CAMERA_SET_ARGS) / sizeof(CAMERA_SET_ARGS[0]), true, cmd_camera_set },
 };
 
@@ -256,11 +235,12 @@ studio_commands(uint32* out_count)
     static uint32            all_count;
     if (!all)
     {
-        uint32                  counts[3] = { sizeof(STUDIO_COMMANDS) / sizeof(STUDIO_COMMANDS[0]) };
-        const cmd_host_command* tables[3] = { STUDIO_COMMANDS, timeline_commands(&counts[1]), shot_commands(&counts[2]) };
+        uint32                  counts[4] = { sizeof(STUDIO_COMMANDS) / sizeof(STUDIO_COMMANDS[0]) };
+        const cmd_host_command* tables[4] = { STUDIO_COMMANDS, camera_move_commands(&counts[1]),
+                                              timeline_commands(&counts[2]), shot_commands(&counts[3]) };
 
-        all = malloc((counts[0] + counts[1] + counts[2]) * sizeof(*all));
-        for (int i = 0; i < 3; ++i)
+        all = malloc((counts[0] + counts[1] + counts[2] + counts[3]) * sizeof(*all));
+        for (int i = 0; i < 4; ++i)
         {
             memcpy(all + all_count, tables[i], counts[i] * sizeof(*all));
             all_count += counts[i];

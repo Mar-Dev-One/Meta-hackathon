@@ -47,7 +47,8 @@ The method is the command name and the params are its arguments:
   | `studio.reset` | Empties the stage: every entity destroyed, environment, render settings and active camera reset |
   | `environment.get` / `environment.set` | HDRI, image-based lighting, exposure, bloom, tone mapping, SSAO |
   | `render.get` / `render.set` | Antialiasing, shadows, background colour |
-  | `camera.get` / `camera.set` | Creates or moves a Camera entity, aims it at a target and makes it the one the frame is seen through |
+  | `camera.get` / `camera.set` | Creates or moves a Camera entity, aims it at a point once and makes it the one the frame is seen through |
+  | `camera.move` | A shot's camera move around a subject: `static`, `orbit`, `dolly`, `crane`, `truck`, `reveal` or `zoom`, framed so the subject fills a share of the frame. Written as timeline keys; moves placed end to end are cuts |
   | `timeline.set_track` / `timeline.add_key` | Keyframes any number, vec3 or colour field of any component (`Transform.position`, `Camera.fov_degrees`, `Light.intensity`, `MeshRenderer.material.roughness`, ...) with easing: linear, in, out, in_out, step or a cubic bezier |
   | `timeline.remove_track` / `timeline.clear` / `timeline.get` | Edit and read the tracks |
   | `timeline.seek` | Shows the scene at a time: every animated field set to its value then |
@@ -58,7 +59,14 @@ The method is the command name and the params are its arguments:
 
 A failed command changes nothing and says which argument is wrong and what it accepts. Every change is also pushed to all clients as a `scene.changed` notification.
 
-The timeline is saved and loaded with the scene (`scene.save` / `scene.load`), as `scenes/<name>.timeline.json` next to the scene file. A track names its entity, so it keeps working through undo and scene loads.
+The Studio's own state (the timeline, the active camera and what it looks at, the render settings) is saved and loaded with the scene (`scene.save` / `scene.load`), as `scenes/<name>.studio.json` next to the scene file. A track names its entity, so it keeps working through undo and scene loads.
+
+`camera.move` keeps the camera aimed at a target entity (`camera_target`) whose position is keyframed too, so every move is position, aim and lens keys over its own time range:
+
+```json
+-> {"jsonrpc": "2.0", "id": 3, "method": "camera.move", "params": {"move": "orbit", "subject": "product",
+    "start": 0, "duration": 4, "azimuth": -40, "to_azimuth": 40, "elevation": 8, "fill": 0.6}}
+```
 
 ```json
 -> {"jsonrpc": "2.0", "id": 2, "method": "timeline.set_track", "params": {"entity": "camera", "component": "Transform",

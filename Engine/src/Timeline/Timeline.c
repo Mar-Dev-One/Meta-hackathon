@@ -1,7 +1,6 @@
 #include "Timeline.h"
 
 #include "Common/Json.h"
-#include "Core/FileIO.h"
 #include "World/Reflect.h"
 
 #include <math.h>
@@ -357,6 +356,27 @@ timeline_remove_tracks(timeline* tl, const char* entity, const char* component, 
     return removed;
 }
 
+uint32
+timeline_remove_keys(timeline* tl, const char* entity, const char* component, const char* field, f32 from, f32 to)
+{
+    timeline_track* track = timeline_find_track(tl, entity, component, field);
+    if (!track)
+        return 0;
+
+    uint32 kept = 0;
+    for (uint32 i = 0; i < track->key_count; ++i)
+    {
+        f32 t = track->keys[i].time;
+        if (t < from - SAME_TIME || t >= to - SAME_TIME)
+            track->keys[kept++] = track->keys[i];
+    }
+    uint32 removed   = track->key_count - kept;
+    track->key_count = kept;
+    if (kept == 0)
+        timeline_remove_tracks(tl, entity, component, field);
+    return removed;
+}
+
 // --- Evaluation -----------------------------------------------------------------------
 
 void
@@ -598,38 +618,4 @@ timeline_from_json(timeline* tl, const cJSON* json, char* error, size_t error_si
     timeline_destroy(tl);
     *tl = loaded;
     return true;
-}
-
-b8
-timeline_save(const timeline* tl, const char* path)
-{
-    cJSON* json = timeline_to_json(tl);
-    char*  text = cJSON_Print(json);
-    b8     ok   = text && file_write_string(path, text);
-    cJSON_free(text);
-    cJSON_Delete(json);
-    if (!ok)
-        LOG_ERROR("timeline: couldn't write %s\n", path);
-    return ok;
-}
-
-b8
-timeline_load(timeline* tl, const char* path)
-{
-    if (!file_exists(path))
-    {
-        timeline_clear(tl);
-        return true;
-    }
-
-    char*  text = file_read_to_string(path);
-    cJSON* json = text ? cJSON_Parse(text) : NULL;
-    free(text);
-
-    char error[256] = "not JSON";
-    b8   ok         = json && timeline_from_json(tl, json, error, sizeof(error));
-    cJSON_Delete(json);
-    if (!ok)
-        LOG_ERROR("timeline: %s isn't a valid timeline: %s\n", path, error);
-    return ok;
 }

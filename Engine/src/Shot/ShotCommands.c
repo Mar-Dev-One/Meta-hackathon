@@ -34,12 +34,11 @@ now_seconds(void)
     return (f64)ts.tv_sec + (f64)ts.tv_nsec * 1e-9;
 }
 
-// Puts the timeline back at `t` (rendering moves it).
+// Puts the scene back at `t` (rendering moves it).
 static void
 restore_time(studio* s, f32 t)
 {
-    timeline_evaluate(&s->timeline, s->w, t, NULL);
-    world_update(s->w);
+    studio_evaluate(s, t, NULL);
 }
 
 // width, height and samples from args, with defaults. False (error filled) if invalid.

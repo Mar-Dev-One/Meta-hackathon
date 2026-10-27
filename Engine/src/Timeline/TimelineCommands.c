@@ -12,12 +12,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Writes the timeline into the world at its current time.
+// Shows the scene at the timeline's current time.
 static void
 refresh(studio* s)
 {
-    timeline_evaluate(&s->timeline, s->w, s->timeline.time, NULL);
-    world_update(s->w);
+    studio_evaluate(s, s->timeline.time, NULL);
 }
 
 static b8
@@ -148,8 +147,7 @@ cmd_seek(void* user, command_context* ctx, const cJSON* args, cJSON** out_result
 
     uint32 skipped = 0;
     s->timeline.playing = false;
-    uint32 written      = timeline_evaluate(&s->timeline, s->w, (f32)t->valuedouble, &skipped);
-    world_update(s->w);
+    uint32 written      = studio_evaluate(s, (f32)t->valuedouble, &skipped);
 
     *out_result = cJSON_CreateObject();
     cJSON_AddNumberToObject(*out_result, "time", t->valuedouble);

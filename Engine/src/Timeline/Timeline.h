@@ -105,6 +105,10 @@ b8 timeline_add_key(timeline* tl, const char* entity, const char* component, con
 // "all". Returns how many were removed.
 uint32 timeline_remove_tracks(timeline* tl, const char* entity, const char* component, const char* field);
 
+// Removes one track's keys at times in [from, to); a track left empty goes
+// too. Returns how many keys were removed.
+uint32 timeline_remove_keys(timeline* tl, const char* entity, const char* component, const char* field, f32 from, f32 to);
+
 // The track's value at time `t` (held before the first key and after the last).
 void timeline_sample(const timeline_track* track, f32 t, f32 out[TIMELINE_VALUE_MAX]);
 
@@ -133,10 +137,3 @@ b8 timeline_set_track_json(timeline* tl, const char* entity, const char* compone
 // Replaces every track with the ones in `json` (timeline_to_json()'s
 // shape). All-or-nothing: on false the timeline is unchanged.
 b8 timeline_from_json(timeline* tl, const cJSON* json, char* error, size_t error_size);
-
-// The timeline as a JSON file at `path`. False (logged) if it can't be written.
-b8 timeline_save(const timeline* tl, const char* path);
-
-// Replaces the timeline with the file at `path`; a missing file is an empty
-// timeline. False (logged), and no change, if the file isn't a valid timeline.
-b8 timeline_load(timeline* tl, const char* path);

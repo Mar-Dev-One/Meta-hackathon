@@ -23,14 +23,22 @@
 //   render.get         antialiasing, shadows, clear_color
 //   render.set         any of them
 //   camera.get         the active camera, or null
-//   camera.set         creates or moves a Camera entity and makes it the active one
+//   camera.set         creates or moves a Camera entity, aims it once, makes it the active one
+//   camera.move        a shot's camera move: keys for an orbit, dolly, crane, ...
+//                      around a subject (Studio/CameraMoves.c)
 //   timeline.*         keyframes (Timeline/TimelineCommands.c): set_track, add_key,
 //                      remove_track, clear, get, seek, play, pause
-//   shot.*             frames to PNG (Shot/ShotCommands.c): preview, render, bounds
+//   shot.*             frames to PNG or video (Shot/ShotCommands.c): preview, render, bounds
 //
-// The timeline is saved and loaded with the scene, next to its file
-// (scenes/<name>.timeline.json): the app calls studio_scene_file() from the
-// command layer's on_scene_file.
+// Look-at: the active camera can be kept aimed at an entity (`look_at`, set
+// by camera.move to "<camera>_target"). After the timeline is written,
+// studio_evaluate() turns the camera towards it, so keyframing the target's
+// position moves where the camera looks.
+//
+// The studio's state beyond the World -- the timeline, the active camera and
+// look-at, the render settings -- is saved and loaded with the scene, next to
+// its file (scenes/<name>.studio.json): the app calls studio_scene_file()
+// from the command layer's on_scene_file.
 
 #define STUDIO_DEFAULT_CAMERA "camera"
 
@@ -55,6 +63,10 @@ typedef struct studio
     // undo and scene loads); "" = the app's own camera.
     char active_camera[ENTITY_NAME_MAX];
 
+    // The entity the active camera is kept aimed at; "" = none (it keeps
+    // its own rotation).
+    char look_at[ENTITY_NAME_MAX];
+
     timeline      timeline;
     shot_renderer shots;   // made on the first shot.* render; needs the GL context
 } studio;
@@ -69,18 +81,40 @@ void studio_destroy(studio* s);   // while the GL context is still alive
 // and the render settings back to their defaults, with no active camera.
 void studio_reset(studio* s);
 
-// Once a frame, before world_update(): while the timeline plays, advances it
-// by `dt` seconds (looping or stopping at the end) and writes it into the world.
+// The scene at time `t`: writes the timeline into the world, aims the active
+// camera at its look-at entity, and updates the world's matrices. Every
+// part of the studio shows a time through this. Returns how many tracks
+// were written; *out_skipped (may be NULL) gets those whose entity is missing.
+uint32 studio_evaluate(studio* s, f32 t, uint32* out_skipped);
+
+// Once a frame: while the timeline plays, advances it by `dt` seconds
+// (looping or stopping at the end) and shows the scene then.
 void studio_update(studio* s, f32 dt);
 
 // A scene was saved or loaded under `name` (cmd_scene_file_fn's arguments):
-// saves the timeline next to it, or loads the one saved with it (none = empty).
+// saves the studio's state next to it, or loads the one saved with it (none =
+// an empty timeline and no camera; render settings as they are).
 void studio_scene_file(studio* s, cmd_scene_file_op op, const char* name);
+
+// The studio's state beyond the World as JSON: { "camera", "look_at",
+// "render": {...}, "timeline": {...} }. studio_from_json() reads it back,
+// all-or-nothing.
+cJSON* studio_to_json(const studio* s);
+b8     studio_from_json(studio* s, const cJSON* json, char* error, size_t error_size);
+
+// The render settings as JSON ({ "antialiasing", "shadows", "clear_color" }),
+// and back: only the keys present, all-or-nothing.
+cJSON* studio_render_to_json(const studio* s);
+b8     studio_render_from_json(studio* s, const cJSON* json, char* error, size_t error_size);
 
 // The settings a frame is rendered with: the defaults, then the environment
 // (with the baked HDRI, if any), then the studio's own render settings.
 // The window and shots both use it, so they show the same picture.
 void studio_render_settings(const studio* s, scene_render_settings* out);
+
+// The entity called `name` with a Camera, creating either if missing
+// (STUDIO_DEFAULT_FOV, _NEAR, _FAR); it isn't made the active camera.
+entity_id studio_camera_entity(studio* s, const char* name);
 
 // The active Camera entity's view at `aspect`. False if there's none, or it
 // was destroyed or lost its Camera since.
@@ -91,5 +125,6 @@ b8 studio_camera_view(const studio* s, f32 aspect, camera* out);
 // `direction`. False, and no change, if `direction` is (almost) zero.
 b8 studio_look_rotation(const vec3 direction, vec3 out_rotation_deg);
 
-// Every studio command (the timeline's included), for command_context.host_commands.
+// Every studio command (the timeline's, shots' and camera moves' included),
+// for command_context.host_commands.
 const cmd_host_command* studio_commands(uint32* out_count);
