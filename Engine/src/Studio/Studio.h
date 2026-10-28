@@ -6,6 +6,7 @@
 #include "Renderer/SceneRenderer.h"
 #include "Scene/Camera.h"
 #include "Shot/Shot.h"
+#include "Text/Text.h"
 #include "Timeline/Timeline.h"
 #include "World/Environment.h"
 #include "World/World.h"
@@ -32,6 +33,7 @@
 //   timeline.*         keyframes (Timeline/TimelineCommands.c): set_track, add_key,
 //                      remove_track, clear, get, seek, play, pause
 //   shot.*             frames to PNG or video (Shot/ShotCommands.c): preview, render, bounds
+//   text.*             titles drawn over the picture (Text/TextCommands.c): create, set, remove, get
 //
 // Look-at: the active camera can be kept aimed at an entity (`look_at`, set
 // by camera.move to "<camera>_target"). After the timeline is written,
@@ -39,7 +41,7 @@
 // position moves where the camera looks.
 //
 // The studio's state beyond the World -- the timeline, the active camera and
-// look-at, the render settings -- is saved and loaded with the scene, next to
+// look-at, the render settings, the titles -- is saved and loaded with the scene, next to
 // its file (scenes/<name>.studio.json): the app calls studio_scene_file()
 // from the command layer's on_scene_file.
 
@@ -72,6 +74,7 @@ typedef struct studio
 
     timeline      timeline;
     shot_renderer shots;   // made on the first shot.* render; needs the GL context
+    text_layer    texts;   // titles over the picture, in the window and every shot frame
 } studio;
 
 // `w`, `env` and `ibl` (may be NULL) must outlive the studio. Starts with
@@ -80,8 +83,9 @@ typedef struct studio
 void studio_init(studio* s, world* w, scene_environment* env, ibl_cache* ibl);
 void studio_destroy(studio* s);   // while the GL context is still alive
 
-// An empty stage: destroys every entity and track, and puts the environment
-// and the render settings back to their defaults, with no active camera.
+// An empty stage: destroys every entity, track and title, and puts the
+// environment and the render settings back to their defaults, with no
+// active camera.
 void studio_reset(studio* s);
 
 // The scene at time `t`: writes the timeline into the world, aims the active
@@ -100,8 +104,8 @@ void studio_update(studio* s, f32 dt);
 void studio_scene_file(studio* s, cmd_scene_file_op op, const char* name);
 
 // The studio's state beyond the World as JSON: { "camera", "look_at",
-// "render": {...}, "timeline": {...} }. studio_from_json() reads it back,
-// all-or-nothing.
+// "render": {...}, "timeline": {...}, "texts": [...] }. studio_from_json()
+// reads it back, all-or-nothing.
 cJSON* studio_to_json(const studio* s);
 b8     studio_from_json(studio* s, const cJSON* json, char* error, size_t error_size);
 

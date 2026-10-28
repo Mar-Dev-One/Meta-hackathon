@@ -29,11 +29,13 @@ studio_init(studio* s, world* w, scene_environment* env, ibl_cache* ibl)
     s->ibl = ibl;
     reset_render_settings(s);
     timeline_init(&s->timeline);
+    text_layer_init(&s->texts);
 }
 
 void
 studio_destroy(studio* s)
 {
+    text_layer_destroy(&s->texts);
     shot_renderer_destroy(&s->shots);
     timeline_destroy(&s->timeline);
 }
@@ -47,6 +49,7 @@ studio_reset(studio* s)
     s->active_camera[0] = '\0';
     s->look_at[0]       = '\0';
     timeline_clear(&s->timeline);
+    text_layer_clear(&s->texts);
 }
 
 // --- Evaluation -----------------------------------------------------------------------
@@ -145,6 +148,9 @@ studio_to_json(const studio* s)
     cJSON_AddStringToObject(json, "look_at", s->look_at);
     cJSON_AddItemToObject(json, "render", studio_render_to_json(s));
     cJSON_AddItemToObject(json, "timeline", timeline_to_json(&s->timeline));
+    cJSON* texts = cJSON_AddArrayToObject(json, "texts");
+    for (uint32 i = 0; i < s->texts.count; ++i)
+        cJSON_AddItemToArray(texts, text_item_to_json(&s->texts.items[i]));
     return json;
 }
 
@@ -166,6 +172,24 @@ studio_from_json(studio* s, const cJSON* json, char* error, size_t error_size)
     if (render_json && !studio_render_from_json(&render, render_json, error, error_size))
         return false;
 
+    // The titles, into a copy of the item list.
+    const cJSON* texts_json = cJSON_GetObjectItemCaseSensitive(json, "texts");
+    text_item    texts[TEXT_MAX_ITEMS];
+    uint32       text_count = 0;
+    if (texts_json && (!cJSON_IsArray(texts_json) || cJSON_GetArraySize(texts_json) > TEXT_MAX_ITEMS))
+        return set_error(error, error_size, "\"texts\" must be an array of at most %d titles", TEXT_MAX_ITEMS);
+    const cJSON* text_json;
+    cJSON_ArrayForEach(text_json, texts_json)
+    {
+        const char* name = NULL;
+        if (arg_string(text_json, "name", &name, error, error_size) <= 0 || strlen(name) >= ENTITY_NAME_MAX)
+            return set_error(error, error_size, "texts[%u] needs a \"name\"", text_count);
+        text_item_defaults(&texts[text_count], name);
+        if (!text_item_from_json(&s->texts, &texts[text_count], text_json, true, error, error_size))
+            return false;
+        ++text_count;
+    }
+
     timeline loaded;
     timeline_init(&loaded);
     const cJSON* timeline_json = cJSON_GetObjectItemCaseSensitive(json, "timeline");
@@ -182,6 +206,8 @@ studio_from_json(studio* s, const cJSON* json, char* error, size_t error_size)
     snprintf(s->look_at, sizeof(s->look_at), "%s", look_at);
     timeline_destroy(&s->timeline);
     s->timeline = loaded;
+    memcpy(s->texts.items, texts, text_count * sizeof(*texts));
+    s->texts.count = text_count;
     return true;
 }
 

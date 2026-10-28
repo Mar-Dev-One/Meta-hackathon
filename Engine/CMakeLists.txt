@@ -16,6 +16,8 @@ add_library(Meta_Engine STATIC
     src/Studio/Studio.c
     src/Studio/StudioCommands.c
     src/Text/Font.c
+    src/Text/Text.c
+    src/Text/TextCommands.c
     src/Timeline/Timeline.c
     src/Timeline/TimelineCommands.c
 )

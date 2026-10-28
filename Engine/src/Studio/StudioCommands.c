@@ -8,6 +8,7 @@
 #include "LightingCommands.h"
 #include "Products/ProductCommands.h"
 #include "Shot/ShotCommands.h"
+#include "Text/TextCommands.h"
 #include "Timeline/TimelineCommands.h"
 
 #include <stdio.h>
@@ -237,11 +238,12 @@ studio_commands(uint32* out_count)
     static uint32            all_count;
     if (!all)
     {
-        enum { TABLES = 6 };
+        enum { TABLES = 7 };
         uint32                  counts[TABLES] = { sizeof(STUDIO_COMMANDS) / sizeof(STUDIO_COMMANDS[0]) };
         const cmd_host_command* tables[TABLES] = { STUDIO_COMMANDS, camera_move_commands(&counts[1]),
                                                    lighting_commands(&counts[2]), product_commands(&counts[3]),
-                                                   timeline_commands(&counts[4]), shot_commands(&counts[5]) };
+                                                   text_commands(&counts[4]), timeline_commands(&counts[5]),
+                                                   shot_commands(&counts[6]) };
         uint32 total = 0;
         for (int i = 0; i < TABLES; ++i)
             total += counts[i];

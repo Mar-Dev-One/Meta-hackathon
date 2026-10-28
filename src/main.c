@@ -381,6 +381,11 @@ on_frame(App* app, f32 dt)
 
     scene_renderer_draw(&state->renderer, &state->world, view, &settings);
 
+    // The titles over the window's picture, as shots get them.
+    window_size size = window_get_size(get_renderer()->drawing_window);
+    if (size.width && size.height)
+        text_layer_draw(&state->stage.texts, size.width, size.height);
+
     if (state->check_path && ++state->check_frames >= CHECK_FRAMES)
     {
         state->check_passed = save_check_picture(state, view, &settings);

@@ -87,7 +87,9 @@ shot_render_frame(shot_renderer* r, studio* s, f32 t, uint16 width, uint16 heigh
         scene_renderer_draw_to(&r->renderer, s->w, &cam, &settings, r->target);
     }
 
+    // Titles over the finished picture, then the pixels.
     rhi_framebuffer_bind(r->target);
+    text_layer_draw(&s->texts, width, height);
     rhi_read_pixels(0, 0, width, height, out_pixels);
     rhi_framebuffer_bind_default();
     return true;

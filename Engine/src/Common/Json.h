@@ -23,6 +23,12 @@ void json_add_floats(cJSON* object, const char* name, const f32* values, int cou
 // written) if `json` isn't one.
 b8 json_read_floats(const cJSON* json, f32* out, int count);
 
+// "#RRGGBB" or "#RRGGBBAA" into out[0..3] (alpha 1 when absent), each 0..1;
+// with `to_linear`, the colour channels are converted from sRGB to linear
+// (for lighting and materials; text, drawn after tone mapping, stays sRGB).
+// False if `text` isn't one.
+b8 parse_hex_color(const char* text, f32 out[4], b8 to_linear);
+
 // Optional command arguments. Each returns 1 if `name` is in `args` and
 // valid (written to *out), 0 if it's absent (*out untouched), and -1
 // (error filled) if it's invalid.

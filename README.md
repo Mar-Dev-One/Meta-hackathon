@@ -56,6 +56,7 @@ The method is the command name and the params are its arguments:
   | `timeline.remove_track` / `timeline.clear` / `timeline.get` | Edit and read the tracks |
   | `timeline.seek` | Shows the scene at a time: every animated field set to its value then |
   | `timeline.play` / `timeline.pause` | Plays the timeline in real time in the window |
+  | `text.create` / `text.set` / `text.remove` / `text.get` | Titles drawn over the picture in the window and every shot frame: font (`serif`, `sans`, `sans_bold`, `condensed`, `script`), size as a share of the frame's height, anchor and offset, colour `"#RRGGBB(AA)"`, letter and line spacing; saved with the scene |
   | `shot.preview` | Renders the frames at given times as PNGs, through the active camera, and returns their paths |
   | `shot.render` | Renders a time range at an fps straight into an `.mp4` (`video`; needs ffmpeg on the PATH) or as PNG frames (`out_dir`) |
   | `shot.bounds` | Where an entity is in the frame at a time: its box, centre, how much of the frame it fills, which edges cut it |

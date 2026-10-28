@@ -82,30 +82,20 @@ static const product_template TEMPLATES[] = {
 
 // --- Reading arguments ------------------------------------------------------------------
 
-// "#RRGGBB" (sRGB, as palettes give colours) into linear RGB.
-static b8
-parse_hex(const char* text, f32 out[3])
-{
-    unsigned value;
-    if (!text || text[0] != '#' || strlen(text) != 7 || sscanf(text + 1, "%6x", &value) != 1)
-        return false;
-    for (int i = 0; i < 3; ++i)
-    {
-        f32 c = (f32)((value >> (16 - 8 * i)) & 0xFF) / 255.0f;
-        out[i] = c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
-    }
-    return true;
-}
-
-// A colour: "#RRGGBB" (sRGB) or [r, g, b] (linear). 1 read, 0 absent, -1 invalid.
+// A colour: "#RRGGBB" (sRGB, as palettes give colours; made linear) or
+// [r, g, b] (linear). Writes out[0..2]. 1 read, 0 absent, -1 invalid.
 static int
 arg_color(const cJSON* args, const char* name, f32 out[3], char* error, size_t error_size)
 {
     const cJSON* item = cJSON_GetObjectItemCaseSensitive(args, name);
     if (!item)
         return 0;
-    if (cJSON_IsString(item) ? parse_hex(item->valuestring, out) : json_read_floats(item, out, 3))
+    f32 rgba[4];
+    if (cJSON_IsString(item) ? parse_hex_color(item->valuestring, rgba, true) : json_read_floats(item, rgba, 3))
+    {
+        memcpy(out, rgba, 3 * sizeof(f32));
         return 1;
+    }
     return set_error(error, error_size, "\"%s\" must be \"#RRGGBB\" (sRGB) or [r, g, b] (linear 0..1)", name), -1;
 }
 
