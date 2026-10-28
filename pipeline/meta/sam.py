@@ -8,7 +8,8 @@ full-size mask.
 SAM answers in a text format (dev.meta.ai/docs/sam/reading-segmentation):
 per match a box in source pixels and a mask raster covering that box --
 for large boxes at a lower resolution (at most 1024 a side), so it's scaled
-up to the box here.
+up to the box here. Decoding a mask takes seconds (meta_sam_parser is pure
+Python), so the decoded masks are cached too, as PNGs of their boxes.
 """
 
 import io
@@ -36,7 +37,7 @@ class Mask:
 
 def _full_mask(record, size: tuple[int, int]) -> Image.Image:
     m, b = record.mask, record.bounds
-    raster = Image.frombytes("L", (m.width, m.height), bytes(v * 255 for v in decode_mask_to_raster(m)))
+    raster = Image.frombytes("L", (m.width, m.height), decode_mask_to_raster(m)).point(lambda v: v * 255)
     box_size = (b.right - b.left, b.bottom - b.top)
     if raster.size != box_size:
         raster = raster.resize(box_size, Image.Resampling.BILINEAR).point(lambda v: 255 if v >= 128 else 0)
@@ -82,11 +83,16 @@ def segment(image: ImageInput, prompt: str, cache_ok: bool = True) -> list[Mask]
                             seconds=round(time.perf_counter() - began, 3), units=1,
                             cost=0.0 if cached else config.SAM_IMAGE_PRICE))
 
+    size = Image.open(io.BytesIO(data)).size
+    decoded_key = cache.request_key("sam.decoded", key)
+    decoded = cache.get_json(decoded_key, cache_ok and cached)
+    if decoded is not None:
+        return [_load(decoded_key, i, d, size) for i, d in enumerate(decoded)]
+
     text = stored["text"]
     parser = image_segmentation_format().create_parser()
     parser.push(text if not text or text.endswith("\n") else text + "\n")
     records = parser.finish(CompletedOutcome()).result.records
-    size = Image.open(io.BytesIO(data)).size
     masks = []
     for r in records:
         if r.kind != "mask":
@@ -94,4 +100,16 @@ def segment(image: ImageInput, prompt: str, cache_ok: bool = True) -> list[Mask]
         b = r.bounds
         masks.append(Mask(object_id=r.object_id, box=(b.left, b.top, b.right, b.bottom),
                           mask=_full_mask(r, size), confidence=r.confidence))
+    for i, m in enumerate(masks):
+        png = io.BytesIO()
+        m.mask.crop(m.box).save(png, "PNG")
+        cache.put_bytes(decoded_key, f".{i}.png", png.getvalue())
+    cache.put_json(decoded_key, [{"object_id": m.object_id, "box": m.box, "confidence": m.confidence} for m in masks])
     return masks
+
+
+def _load(key: str, i: int, d: dict, size: tuple[int, int]) -> Mask:
+    """A decoded mask from the cache: its box's PNG, placed on the photo."""
+    mask = Image.new("L", size, 0)
+    mask.paste(Image.open(cache.path(key, f".{i}.png")).convert("L"), tuple(d["box"][:2]))
+    return Mask(object_id=d["object_id"], box=tuple(d["box"]), mask=mask, confidence=d["confidence"])
