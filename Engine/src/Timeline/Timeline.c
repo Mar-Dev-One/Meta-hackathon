@@ -141,9 +141,24 @@ has_range(const field_desc* f)
     return f->min < f->max;
 }
 
+// What a track animates: a World component's field, or the custom target's.
+typedef struct target_info
+{
+    uint32            width;
+    f32               min, max;   // min == max: unbounded
+    b8                nonzero;    // a direction: (0, 0, 0) isn't allowed
+    const field_desc* field;      // NULL for the custom target
+} target_info;
+
+static b8
+is_custom(const timeline* tl, const char* component)
+{
+    return tl->custom.component && component && strcmp(component, tl->custom.component) == 0;
+}
+
 // `component`.`field` if it can be animated; NULL (error filled) otherwise.
 static const field_desc*
-animatable_field(const char* component, const char* field, char* error, size_t error_size)
+animatable_field(const timeline* tl, const char* component, const char* field, char* error, size_t error_size)
 {
     const component_desc* desc = component ? reflect_component_by_name(component) : NULL;
     if (!desc)
@@ -156,6 +171,8 @@ animatable_field(const char* component, const char* field, char* error, size_t e
             if (d)
                 snprintf(names + used, sizeof(names) - used, "%s%s", used ? ", " : "", d->name);
         }
+        if (tl->custom.component)
+            snprintf(names + strlen(names), sizeof(names) - strlen(names), ", %s", tl->custom.component);
         set_error(error, error_size, "unknown component \"%s\"; components are: %s", component ? component : "", names);
         return NULL;
     }
@@ -180,11 +197,38 @@ animatable_field(const char* component, const char* field, char* error, size_t e
     return NULL;
 }
 
-uint32
-timeline_field_width(const char* component, const char* field, char* error, size_t error_size)
+// The target's width, range and rules; false (error filled) if it can't be animated.
+static b8
+describe_target(const timeline* tl, const char* component, const char* field, target_info* out,
+                char* error, size_t error_size)
 {
-    const field_desc* f = animatable_field(component, field, error, error_size);
-    return f ? field_width(f) : 0;
+    memset(out, 0, sizeof(*out));
+    if (is_custom(tl, component))
+    {
+        if (!tl->custom.describe(tl->custom.user, field, &out->width, &out->min, &out->max, error, error_size))
+            return false;
+        if (out->width < 1 || out->width > TIMELINE_VALUE_MAX)
+            return set_error(error, error_size, "%s.%s has %u floats; at most %d can be animated", component, field,
+                             out->width, TIMELINE_VALUE_MAX);
+        return true;
+    }
+
+    const field_desc* f = animatable_field(tl, component, field, error, error_size);
+    if (!f)
+        return false;
+    out->width   = field_width(f);
+    out->min     = has_range(f) ? f->min : 0.0f;
+    out->max     = has_range(f) ? f->max : 0.0f;
+    out->nonzero = f->nonzero;
+    out->field   = f;
+    return true;
+}
+
+uint32
+timeline_field_width(const timeline* tl, const char* component, const char* field, char* error, size_t error_size)
+{
+    target_info info;
+    return describe_target(tl, component, field, &info, error, error_size) ? info.width : 0;
 }
 
 timeline_track*
@@ -200,16 +244,17 @@ timeline_find_track(timeline* tl, const char* entity, const char* component, con
     return NULL;
 }
 
-// The field to animate, after checking the names fit and it can be animated;
-// NULL (error filled) otherwise.
-static const field_desc*
-check_target(const char* entity, const char* component, const char* field, char* error, size_t error_size)
+// What the track animates, after checking the names fit and it can be
+// animated; false (error filled) otherwise.
+static b8
+check_target(const timeline* tl, const char* entity, const char* component, const char* field, target_info* out,
+             char* error, size_t error_size)
 {
     if (!entity || !entity[0] || strlen(entity) >= ENTITY_NAME_MAX)
-        return set_error(error, error_size, "\"entity\" must be a name of 1 to %d characters", ENTITY_NAME_MAX - 1), NULL;
+        return set_error(error, error_size, "\"entity\" must be a name of 1 to %d characters", ENTITY_NAME_MAX - 1);
     if (!component || strlen(component) >= TIMELINE_COMPONENT_MAX || !field || strlen(field) >= TIMELINE_FIELD_MAX)
-        return set_error(error, error_size, "\"component\" and \"field\" must be given"), NULL;
-    return animatable_field(component, field, error, error_size);
+        return set_error(error, error_size, "\"component\" and \"field\" must be given");
+    return describe_target(tl, component, field, out, error, error_size);
 }
 
 static timeline_track*
@@ -253,7 +298,7 @@ compare_key_times(const void* a, const void* b)
 // same ones component.set applies: within the field's range, and not zero
 // for a direction.
 static b8
-check_key(const timeline_key* key, const field_desc* f, char* error, size_t error_size)
+check_key(const timeline_key* key, const target_info* target, const char* field, char* error, size_t error_size)
 {
     if (!isfinite(key->time) || key->time < 0.0f)
         return set_error(error, error_size, "a key's time must be 0 or more seconds (got %g)", key->time);
@@ -262,15 +307,14 @@ check_key(const timeline_key* key, const field_desc* f, char* error, size_t erro
     if (key->ease == EASE_BEZIER && (key->bezier[0] < 0.0f || key->bezier[0] > 1.0f || key->bezier[2] < 0.0f || key->bezier[2] > 1.0f))
         return set_error(error, error_size, "a bezier's x1 and x2 must be in [0, 1] (got %g and %g)", key->bezier[0], key->bezier[2]);
 
-    uint32 width = field_width(f);
-    for (uint32 i = 0; has_range(f) && i < width; ++i)
+    for (uint32 i = 0; target->min < target->max && i < target->width; ++i)
     {
-        if (key->value[i] < f->min || key->value[i] > f->max)
+        if (key->value[i] < target->min || key->value[i] > target->max)
             return set_error(error, error_size, "the key at %g s: %s must be from %g to %g (got %g)",
-                             key->time, f->name, f->min, f->max, key->value[i]);
+                             key->time, field, target->min, target->max, key->value[i]);
     }
-    if (f->nonzero && fabsf(key->value[0]) + fabsf(key->value[1]) + fabsf(key->value[2]) < 1e-6f)
-        return set_error(error, error_size, "the key at %g s: %s is a direction and can't be (0, 0, 0)", key->time, f->name);
+    if (target->nonzero && fabsf(key->value[0]) + fabsf(key->value[1]) + fabsf(key->value[2]) < 1e-6f)
+        return set_error(error, error_size, "the key at %g s: %s is a direction and can't be (0, 0, 0)", key->time, field);
     return true;
 }
 
@@ -278,8 +322,8 @@ b8
 timeline_set_track(timeline* tl, const char* entity, const char* component, const char* field,
                    const timeline_key* keys, uint32 key_count, char* error, size_t error_size)
 {
-    const field_desc* f = check_target(entity, component, field, error, error_size);
-    if (!f)
+    target_info target;
+    if (!check_target(tl, entity, component, field, &target, error, error_size))
         return false;
     if (key_count == 0)
         return set_error(error, error_size, "a track needs at least one key");
@@ -290,7 +334,7 @@ timeline_set_track(timeline* tl, const char* entity, const char* component, cons
 
     for (uint32 i = 0; i < key_count; ++i)
     {
-        b8 ok = check_key(&sorted[i], f, error, error_size);
+        b8 ok = check_key(&sorted[i], &target, field, error, error_size);
         if (ok && i > 0 && sorted[i].time - sorted[i - 1].time < SAME_TIME)
             ok = set_error(error, error_size, "two keys are at %g s: a track has one key per time", sorted[i].time);
         if (!ok)
@@ -300,7 +344,7 @@ timeline_set_track(timeline* tl, const char* entity, const char* component, cons
         }
     }
 
-    timeline_track* track = find_or_add_track(tl, entity, component, field, field_width(f));
+    timeline_track* track = find_or_add_track(tl, entity, component, field, target.width);
     free(track->keys);
     track->keys         = sorted;
     track->key_count    = key_count;
@@ -312,11 +356,12 @@ b8
 timeline_add_key(timeline* tl, const char* entity, const char* component, const char* field,
                  const timeline_key* key, char* error, size_t error_size)
 {
-    const field_desc* f = check_target(entity, component, field, error, error_size);
-    if (!f || !check_key(key, f, error, error_size))
+    target_info target;
+    if (!check_target(tl, entity, component, field, &target, error, error_size)
+        || !check_key(key, &target, field, error, error_size))
         return false;
 
-    timeline_track* track = find_or_add_track(tl, entity, component, field, field_width(f));
+    timeline_track* track = find_or_add_track(tl, entity, component, field, target.width);
 
     uint32 at = 0;
     while (at < track->key_count && track->keys[at].time < key->time - SAME_TIME)
@@ -417,10 +462,14 @@ timeline_sample(const timeline_track* track, f32 t, f32 out[TIMELINE_VALUE_MAX])
         out[i] = a->value[i] + (b->value[i] - a->value[i]) * e;
 }
 
-// Writes `value` into the entity's field. False if the entity or component is missing.
+// Writes `value` into the entity's field (or the custom target's item, which
+// keeps its own values in range). False if the entity or component is missing.
 static b8
-write_field(world* w, const timeline_track* track, const f32* value)
+write_field(const timeline* tl, world* w, const timeline_track* track, const f32* value)
 {
+    if (is_custom(tl, track->component))
+        return tl->custom.write(tl->custom.user, track->entity, track->field, value, track->width);
+
     entity_id e = world_find(w, track->entity);
     const component_desc* desc = reflect_component_by_name(track->component);
     const field_desc*     f    = desc ? reflect_field(desc, track->field) : NULL;
@@ -457,7 +506,7 @@ timeline_evaluate(timeline* tl, world* w, f32 t, uint32* out_skipped)
     {
         f32 value[TIMELINE_VALUE_MAX];
         timeline_sample(&tl->tracks[i], t, value);
-        if (write_field(w, &tl->tracks[i], value))
+        if (write_field(tl, w, &tl->tracks[i], value))
             ++written;
         else
             ++skipped;
@@ -555,8 +604,8 @@ b8
 timeline_set_track_json(timeline* tl, const char* entity, const char* component, const char* field,
                         const cJSON* keys, char* error, size_t error_size)
 {
-    const field_desc* f = check_target(entity, component, field, error, error_size);
-    if (!f)
+    target_info target;
+    if (!check_target(tl, entity, component, field, &target, error, error_size))
         return false;
     if (!cJSON_IsArray(keys) || cJSON_GetArraySize(keys) == 0)
         return set_error(error, error_size, "\"keys\" must be a non-empty array of {\"t\": seconds, \"value\": ..., \"ease\": ...}");
@@ -569,7 +618,7 @@ timeline_set_track_json(timeline* tl, const char* entity, const char* component,
     cJSON_ArrayForEach(key, keys)
     {
         char key_error[256];
-        if (!timeline_key_from_json(key, field_width(f), &parsed[i], key_error, sizeof(key_error)))
+        if (!timeline_key_from_json(key, target.width, &parsed[i], key_error, sizeof(key_error)))
         {
             ok = set_error(error, error_size, "keys[%u]: %s", i, key_error);
             break;
@@ -605,6 +654,7 @@ timeline_from_json(timeline* tl, const cJSON* json, char* error, size_t error_si
 
     timeline loaded;
     timeline_init(&loaded);
+    loaded.custom = tl->custom;   // its tracks are checked against the same targets
     const cJSON* track;
     cJSON_ArrayForEach(track, tracks)
     {

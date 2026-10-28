@@ -241,6 +241,65 @@ text_item_to_json(const text_item* item)
     return json;
 }
 
+// --- Animation --------------------------------------------------------------------------
+
+typedef struct text_track_field
+{
+    const char* name;
+    uint32      width;
+    f32         min, max;
+    size_t      offset;   // into text_item
+} text_track_field;
+
+static const text_track_field TRACK_FIELDS[] = {
+    { "opacity", 1, 0.0f, 1.0f, offsetof(text_item, opacity) },
+    { "scale", 1, 0.01f, 20.0f, offsetof(text_item, scale) },
+    { "tracking", 1, -0.5f, 2.0f, offsetof(text_item, tracking) },
+    { "size", 1, 0.005f, 1.0f, offsetof(text_item, size) },
+    { "offset", 2, -2.0f, 2.0f, offsetof(text_item, offset) },
+    { "color", 4, 0.0f, 1.0f, offsetof(text_item, color) },
+};
+
+static const text_track_field*
+track_field(const char* name)
+{
+    for (size_t i = 0; name && i < sizeof(TRACK_FIELDS) / sizeof(TRACK_FIELDS[0]); ++i)
+    {
+        if (strcmp(name, TRACK_FIELDS[i].name) == 0)
+            return &TRACK_FIELDS[i];
+    }
+    return NULL;
+}
+
+b8
+text_track_describe(void* user, const char* field, uint32* out_width, f32* out_min, f32* out_max,
+                    char* error, size_t error_size)
+{
+    (void)user;
+    const text_track_field* f = track_field(field);
+    if (!f)
+        return set_error(error, error_size, "Text has no field \"%s\"; its animatable fields are: opacity, scale, "
+                                            "tracking, size, offset ([x, y]), color ([r, g, b, a])", field ? field : "");
+    *out_width = f->width;
+    *out_min   = f->min;
+    *out_max   = f->max;
+    return true;
+}
+
+b8
+text_track_write(void* user, const char* entity, const char* field, const f32* value, uint32 width)
+{
+    text_item*              item = text_find((text_layer*)user, entity);
+    const text_track_field* f    = track_field(field);
+    if (!item || !f || width != f->width)
+        return false;
+    // Keys are in range, but a bezier ease can overshoot between them.
+    f32* out = (f32*)((uint8*)item + f->offset);
+    for (uint32 i = 0; i < width; ++i)
+        out[i] = glm_clamp(value[i], f->min, f->max);
+    return true;
+}
+
 // --- Layout ----------------------------------------------------------------------------
 
 static font*

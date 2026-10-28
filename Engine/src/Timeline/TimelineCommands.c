@@ -70,7 +70,7 @@ cmd_add_key(void* user, command_context* ctx, const cJSON* args, cJSON** out_res
     if (!read_target(args, &entity, &component, &field, true, error, error_size))
         return false;
 
-    uint32 width = timeline_field_width(component, field, error, error_size);
+    uint32 width = timeline_field_width(&s->timeline, component, field, error, error_size);
     if (!width)
         return false;
 
@@ -191,9 +191,10 @@ cmd_pause(void* user, command_context* ctx, const cJSON* args, cJSON** out_resul
 
 // The field a track animates: the first three arguments of set_track and add_key.
 #define TARGET_ARGS                                                                                           \
-    { "entity", "string", true, "the entity's name, e.g. \"camera\"" },                                       \
-    { "component", "string", true, "\"Transform\", \"Camera\", \"Light\", \"MeshRenderer\", ..." },           \
-    { "field", "string", true, "e.g. \"position\", \"rotation_deg\", \"fov_degrees\", \"intensity\", \"material.roughness\"" }
+    { "entity", "string", true, "the entity's name, e.g. \"camera\"; for component Text, the title's name" },  \
+    { "component", "string", true, "\"Transform\", \"Camera\", \"Light\", \"MeshRenderer\", ..., or \"Text\" (a title)" }, \
+    { "field", "string", true, "e.g. \"position\", \"rotation_deg\", \"fov_degrees\", \"intensity\", \"material.roughness\"; " \
+                               "Text: opacity, scale, tracking, size, offset ([x, y]), color ([r, g, b, a])" }
 
 static const cmd_arg SET_TRACK_ARGS[] = {
     TARGET_ARGS,

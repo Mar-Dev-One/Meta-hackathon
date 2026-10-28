@@ -30,6 +30,8 @@ studio_init(studio* s, world* w, scene_environment* env, ibl_cache* ibl)
     reset_render_settings(s);
     timeline_init(&s->timeline);
     text_layer_init(&s->texts);
+    // Titles animate on the timeline as component "Text".
+    s->timeline.custom = (timeline_custom_target){ "Text", &s->texts, text_track_describe, text_track_write };
 }
 
 void
@@ -192,6 +194,7 @@ studio_from_json(studio* s, const cJSON* json, char* error, size_t error_size)
 
     timeline loaded;
     timeline_init(&loaded);
+    loaded.custom = s->timeline.custom;   // "Text" tracks are checked against the titles' fields
     const cJSON* timeline_json = cJSON_GetObjectItemCaseSensitive(json, "timeline");
     if (timeline_json && !timeline_from_json(&loaded, timeline_json, error, error_size))
     {

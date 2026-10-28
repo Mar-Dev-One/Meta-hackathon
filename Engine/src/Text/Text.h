@@ -102,3 +102,11 @@ void text_layer_draw(text_layer* t, uint16 width, uint16 height);
 
 // anchor names: "top_left", "top", ..., "center", ..., "bottom_right".
 const char* text_anchor_name(text_anchor anchor);
+
+// The timeline's hooks for animating titles as component "Text" (user = the
+// text_layer; Timeline.h, timeline_custom_target). Fields: opacity, scale,
+// tracking, size (one number each), offset ([x, y]) and color ([r, g, b, a],
+// sRGB 0..1). Values are kept in each field's range.
+b8 text_track_describe(void* user, const char* field, uint32* out_width, f32* out_min, f32* out_max,
+                       char* error, size_t error_size);
+b8 text_track_write(void* user, const char* entity, const char* field, const f32* value, uint32 width);

@@ -97,9 +97,9 @@ test_tracks(void)
     CHECK(!timeline_add_key(&tl, "cam", "Camera", "fov_degrees", &negative, error, sizeof(error)));
     CHECK(track->key_count == 3);
 
-    CHECK(timeline_field_width("Transform", "position", NULL, 0) == 3);
-    CHECK(timeline_field_width("Light", "color", NULL, 0) == 3);
-    CHECK(timeline_field_width("MeshRenderer", "material.roughness", NULL, 0) == 1);
+    CHECK(timeline_field_width(&tl, "Transform", "position", NULL, 0) == 3);
+    CHECK(timeline_field_width(&tl, "Light", "color", NULL, 0) == 3);
+    CHECK(timeline_field_width(&tl, "MeshRenderer", "material.roughness", NULL, 0) == 1);
 
     CHECK(timeline_remove_tracks(&tl, "cam", NULL, NULL) == 1 && tl.track_count == 0);
     timeline_destroy(&tl);
@@ -189,12 +189,78 @@ test_evaluate(void)
     assets_shutdown(&assets);
 }
 
+// A custom target (as the studio's titles are): one item, "thing", with a
+// two-float field "pos" in [-1, 1].
+static f32 thing_pos[2];
+
+static b8
+thing_describe(void* user, const char* field, uint32* width, f32* min, f32* max, char* error, size_t error_size)
+{
+    (void)user;
+    if (strcmp(field, "pos") != 0)
+    {
+        snprintf(error, error_size, "Thing has only pos");
+        return false;
+    }
+    *width = 2;
+    *min   = -1.0f;
+    *max   = 1.0f;
+    return true;
+}
+
+static b8
+thing_write(void* user, const char* entity, const char* field, const f32* value, uint32 width)
+{
+    (void)user; (void)field;
+    if (strcmp(entity, "thing") != 0 || width != 2)
+        return false;
+    thing_pos[0] = value[0];
+    thing_pos[1] = value[1];
+    return true;
+}
+
+static void
+test_custom_target(void)
+{
+    timeline tl;
+    timeline_init(&tl);
+    tl.custom = (timeline_custom_target){ "Thing", NULL, thing_describe, thing_write };
+    char error[256];
+
+    CHECK(timeline_field_width(&tl, "Thing", "pos", error, sizeof(error)) == 2);
+    CHECK(timeline_field_width(&tl, "Thing", "size", error, sizeof(error)) == 0 && strstr(error, "only pos"));
+    CHECK(timeline_field_width(&tl, "Lens", "x", error, sizeof(error)) == 0 && strstr(error, "Thing"));   // listed
+
+    timeline_key keys[] = { { .time = 0.0f, .value = { -1.0f, 0.0f } }, { .time = 2.0f, .value = { 1.0f, 0.5f } } };
+    CHECK(timeline_set_track(&tl, "thing", "Thing", "pos", keys, 2, error, sizeof(error)));
+    CHECK(timeline_set_track(&tl, "ghost", "Thing", "pos", keys, 2, error, sizeof(error)));
+    timeline_key out_of_range = { .time = 3.0f, .value = { 2.0f, 0.0f } };
+    CHECK(!timeline_add_key(&tl, "thing", "Thing", "pos", &out_of_range, error, sizeof(error)));
+
+    uint32 skipped = 0;
+    CHECK(timeline_evaluate(&tl, NULL, 1.0f, &skipped) == 1 && skipped == 1);   // "ghost" doesn't exist
+    CHECK_NEAR(thing_pos[0], 0.0f);
+    CHECK_NEAR(thing_pos[1], 0.25f);
+
+    // A JSON round trip keeps the custom target's tracks (loading checks them against it).
+    cJSON* json = timeline_to_json(&tl);
+    timeline copy;
+    timeline_init(&copy);
+    copy.custom = tl.custom;
+    CHECK(timeline_from_json(&copy, json, error, sizeof(error)) && copy.track_count == 2);
+    CHECK(copy.custom.write == thing_write);
+    cJSON_Delete(json);
+    timeline_destroy(&copy);
+    timeline_destroy(&tl);
+}
+
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);   // a failure is printed even if a later check crashes
     test_easing();
     test_tracks();
     test_evaluate();
+    test_custom_target();
     if (failures)
     {
         printf("%d check(s) failed\n", failures);

@@ -54,12 +54,31 @@ typedef struct timeline_key
     f32           bezier[4];                   // for EASE_BEZIER
 } timeline_key;
 
+// Something the timeline can animate that isn't a World component -- the
+// studio's titles, as component "Text" -- by name: a track names one of its
+// items as its "entity". Zeroed = none.
+typedef struct timeline_custom_target
+{
+    const char* component;   // e.g. "Text"
+    void*       user;
+
+    // The field's floats per value (1 to TIMELINE_VALUE_MAX) and range
+    // (min == max: unbounded). False, with `error` naming the fields there
+    // are, if `field` isn't one.
+    b8 (*describe)(void* user, const char* field, uint32* out_width, f32* out_min, f32* out_max,
+                   char* error, size_t error_size);
+
+    // Writes a value into the item called `entity`; false if there's none
+    // (the track is skipped, as for a missing entity).
+    b8 (*write)(void* user, const char* entity, const char* field, const f32* value, uint32 width);
+} timeline_custom_target;
+
 typedef struct timeline_track
 {
     char entity[ENTITY_NAME_MAX];
     char component[TIMELINE_COMPONENT_MAX];
     char field[TIMELINE_FIELD_MAX];
-    uint32 width;                 // floats per value: 1 (a number) or 3 (vec3, colour)
+    uint32 width;                 // floats per value: 1 (a number), 2 (an offset), 3 (vec3, colour), 4 (RGBA)
 
     timeline_key* keys;           // sorted by time, no two at the same time
     uint32        key_count;
@@ -75,6 +94,8 @@ typedef struct timeline
     f32 time;      // where it was last evaluated
     b8  playing;   // advanced in real time by the app (a preview)
     b8  loop;      // while playing: back to 0 after the last key
+
+    timeline_custom_target custom;   // kept by timeline_clear(); copied into what timeline_from_json() loads
 } timeline;
 
 void timeline_init(timeline* tl);
@@ -85,9 +106,10 @@ void timeline_clear(timeline* tl);   // every track removed; time back to 0
 f32 timeline_duration(const timeline* tl);
 
 // How many floats `component`.`field` holds, after checking it can be
-// animated: a number, vec3 or colour that isn't set through a setter. 0
-// (with `error` filled) otherwise.
-uint32 timeline_field_width(const char* component, const char* field, char* error, size_t error_size);
+// animated: a World component's number, vec3 or colour that isn't set
+// through a setter, or a field of the custom target. 0 (with `error`
+// filled) otherwise.
+uint32 timeline_field_width(const timeline* tl, const char* component, const char* field, char* error, size_t error_size);
 
 timeline_track* timeline_find_track(timeline* tl, const char* entity, const char* component, const char* field);
 
