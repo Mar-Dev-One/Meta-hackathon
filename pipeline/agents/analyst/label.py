@@ -8,7 +8,10 @@ On a round body a point at angle a from the front shows at x = axis + r sin a,
 so the photo squeezes a label towards the sides. Unrolling samples the photo
 at those x for evenly spaced angles, row by row with that row's radius: the
 inverse of the Studio's wrap. Past MAX_ANGLE the side is too foreshortened
-to read, so a label that runs round the back is cut there. The light on the
+to read, so a label that runs round the back is cut there; one that
+reaches both sides of the silhouette goes all the way round, so the cut is
+centred on a full turn and its edges' colours, row by row, carry on round
+the back (a printed band, a paper wrap). The light on the
 photo (darker towards the sides) is divided out using the label's paper,
 its brightest pixels down each column, so the Studio's lights don't add
 theirs to it.
@@ -69,6 +72,18 @@ def _flatten(rgb: np.ndarray, alpha: np.ndarray) -> np.ndarray:
     return np.clip(rgb * gain[None, :, None], 0, 255)
 
 
+def _round_the_back(rgba: np.ndarray, arc: float) -> np.ndarray:
+    """The cut (covering `arc` degrees) centred on a full turn, the rest of
+    each row its edges' median colour."""
+    edge = max(2, rgba.shape[1] // 30)
+    fill = np.median(np.concatenate([rgba[:, :edge], rgba[:, -edge:]], axis=1), axis=1)
+    width = round(rgba.shape[1] * 360 / arc)
+    out = np.repeat(fill[:, None, :], width, axis=1)
+    left = (width - rgba.shape[1]) // 2
+    out[:, left:left + rgba.shape[1]] = rgba
+    return out
+
+
 def unroll(seg: Segmentation, traced: Traced, flatten: bool = True) -> CutLabel | None:
     """The label as printed (None if the photo has no label)."""
     region = seg.parts.get("label")
@@ -85,6 +100,7 @@ def unroll(seg: Segmentation, traced: Traced, flatten: bool = True) -> CutLabel 
         r = max(traced.radius_at(y), 1.0)
         lefts.append(np.arcsin(np.clip((xs[0] - traced.axis) / r, -1, 1)))
         rights.append(np.arcsin(np.clip((xs[-1] + 1 - traced.axis) / r, -1, 1)))
+    wraps = np.median(lefts) <= -MAX_ANGLE and np.median(rights) >= MAX_ANGLE
     start = max(float(np.median(lefts)), -MAX_ANGLE)
     end = min(float(np.median(rights)), MAX_ANGLE)
     if end - start < np.radians(5):
@@ -100,8 +116,12 @@ def unroll(seg: Segmentation, traced: Traced, flatten: bool = True) -> CutLabel 
     alpha = _sample(mask[..., None].astype(float), xs, ys)[..., 0]
     if flatten:
         rgb = _flatten(rgb, alpha)
-    rgba = np.dstack([rgb, alpha * 255]).round().astype(np.uint8)
+    rgba = np.dstack([rgb, alpha * 255])
+    arc = float(np.degrees(end - start))
+    if wraps:
+        rgba, arc = _round_the_back(rgba, arc), 360.0
+    rgba = rgba.round().astype(np.uint8)
 
     m = traced.meters_per_pixel
     return CutLabel(Image.fromarray(rgba, "RGBA"), from_=(traced.bottom - bottom) * m, to=(traced.bottom - top) * m,
-                    arc=float(np.degrees(end - start)))
+                    arc=arc)

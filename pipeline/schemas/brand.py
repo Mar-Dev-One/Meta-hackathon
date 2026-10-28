@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from .storyboard import HEX, Font, ProfilePart, Strict
+from .storyboard import HEX, Font, Label, PartLook, Product, ProfilePart, Strict
 
 
 class Swatch(Strict):
@@ -46,6 +46,15 @@ class BrandProfile(Strict):
     typography: Typography
     mood: list[str] = Field(min_length=1, max_length=6, description="a few words: luxurious, warm, minimal, ...")
     do_not: list[str] = Field(default_factory=list, description="things every shot must avoid, e.g. 'bright saturated colours'")
-    label_image: str | None = Field(None, description="path to the label cut from the photo and unrolled")
+    label: Label | None = Field(None, description="the label cut from the photo and unrolled, and where it wraps")
     logo_image: str | None = Field(None, description="path to the logo cut from the photo")
     photos: list[str] = Field(default_factory=list, description="the photos it was read from")
+
+    def product(self) -> Product:
+        """The storyboard's product: the traced shape (or the template, its
+        parts dressed in the materials), with the label."""
+        if self.profile_parts:
+            return Product(template=None, profile_parts=self.profile_parts, label=self.label)
+        looks = {m.name: PartLook(color=m.color, metallic=m.metallic, roughness=m.roughness,
+                                  opacity=m.opacity if m.opacity < 0.98 else None) for m in self.materials}
+        return Product(template=self.template, height=self.height, parts=looks, label=self.label)

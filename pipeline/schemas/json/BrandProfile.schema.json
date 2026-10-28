@@ -1,5 +1,60 @@
 {
   "$defs": {
+    "Label": {
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "description": "path to the label artwork (PNG with transparent corners, or JPG)",
+          "title": "Image",
+          "type": "string"
+        },
+        "part": {
+          "default": "body",
+          "description": "the part it wraps",
+          "title": "Part",
+          "type": "string"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "meters up the product where it starts (default: the template's)",
+          "title": "From"
+        },
+        "to": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "meters up where it ends",
+          "title": "To"
+        },
+        "arc": {
+          "default": 110,
+          "description": "degrees it wraps around the front; 360 all the way round",
+          "maximum": 360,
+          "minimum": 5,
+          "title": "Arc",
+          "type": "number"
+        }
+      },
+      "required": [
+        "image"
+      ],
+      "title": "Label",
+      "type": "object"
+    },
     "PartMaterial": {
       "additionalProperties": false,
       "properties": {
@@ -308,18 +363,17 @@
       "title": "Do Not",
       "type": "array"
     },
-    "label_image": {
+    "label": {
       "anyOf": [
         {
-          "type": "string"
+          "$ref": "#/$defs/Label"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "description": "path to the label cut from the photo and unrolled",
-      "title": "Label Image"
+      "description": "the label cut from the photo and unrolled, and where it wraps"
     },
     "logo_image": {
       "anyOf": [

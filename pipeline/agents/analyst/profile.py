@@ -12,8 +12,6 @@ and simplified to the fewest points within a pixel or two of the mask, so
 straight sides stay straight and shoulders stay sharp. The cap's lowest row
 splits the product into body and cap. Assumes a front view, upright, at
 about eye level: what's seen of the top and bottom faces adds a little height.
-
-    python -m pipeline.agents.analyst.profile Assets/photos/solana_oil.png --category "olive oil bottle"
 """
 
 from dataclasses import dataclass
@@ -169,97 +167,3 @@ def outline(seg: Segmentation, traced: Traced) -> Image.Image:
     draw.line([(traced.axis, traced.bottom), (traced.axis, traced.bottom - traced.height / traced.meters_per_pixel)],
               fill=(255, 255, 255), width=1)
     return out
-
-
-async def render(studio, traced: Traced, out_dir, label: dict | None = None, width: int = 640,
-                 height: int = 960) -> tuple[str, dict]:
-    """The traced product (with `label`, product.create's label argument)
-    alone on a light set, seen from the front at eye level as in a product
-    photo; the frame's path and the product's box in it."""
-    await studio.call("studio.reset")
-    await studio.call("environment.set", ambient_strength=0.6, bloom=0.03, tonemap="neutral")
-    await studio.call("render.set", antialiasing="taa", clear_color=[0.78, 0.78, 0.78])
-    await studio.call("backdrop.create", kind="cyclorama", color="#D6D6D6", roughness=0.9)
-    await studio.call("product.create", name="product", position=[0, 0, 0],
-                      parts=[p.model_dump(exclude_none=True) for p in traced.parts], **({"label": label} if label else {}))
-    await studio.call("lighting.preset", subject="product", name="high_key")
-    await studio.call("camera.move", move="static", subject="product", start=0, duration=1, fill=0.75,
-                      elevation=4, fov_degrees=20, aspect=width / height)
-    frame = await studio.call("shot.preview", times=[0.5], width=width, height=height, out_dir=str(out_dir))
-    bounds = await studio.call("shot.bounds", entity="product", t=0.5, width=width, height=height)
-    return frame["frames"][0]["path"], bounds
-
-
-def side_by_side(seg: Segmentation, frame: Image.Image, bounds: dict, height: int = 900) -> Image.Image:
-    """The photo and the render, each cut to its product (with a margin) and
-    scaled to the same height."""
-    def crop(image: Image.Image, box: tuple[float, float, float, float]) -> Image.Image:
-        x0, y0, x1, y1 = box
-        margin = 0.12 * (y1 - y0)
-        cx, half_w = (x0 + x1) / 2, max((x1 - x0) / 2, (y1 - y0) * 0.3) + margin
-        tile = image.crop((round(cx - half_w), round(y0 - margin), round(cx + half_w), round(y1 + margin)))
-        return tile.resize((round(tile.width * height / tile.height), height), Image.Resampling.LANCZOS)
-
-    w, h = frame.size
-    b = bounds["box"]
-    photo = crop(seg.image, seg.product.box)
-    render_ = crop(frame.convert("RGB"), (b[0] * w, b[1] * h, b[2] * w, b[3] * h))
-    out = Image.new("RGB", (photo.width + render_.width + 12, height), (255, 255, 255))
-    out.paste(photo, (0, 0))
-    out.paste(render_, (photo.width + 12, 0))
-    return out
-
-
-if __name__ == "__main__":
-    import argparse
-    import asyncio
-    from pathlib import Path
-
-    from pipeline.runs import Run
-    from pipeline.studio import Studio
-
-    from .label import unroll
-    from .materials import dress, read
-    from .palette import palette, strip
-    from .segment import segment
-
-    parser = argparse.ArgumentParser(description="Trace a product photo into a 3D product with its label, rendered "
-                                                 "next to the photo; its palette and materials.")
-    parser.add_argument("photos", nargs="+")
-    parser.add_argument("--category", action="append", help="per photo, in order (default: product)")
-    args = parser.parse_args()
-    categories = (args.category or []) + ["product"] * len(args.photos)
-
-    async def main() -> None:
-        async with Studio() as studio:
-            for photo, category in zip(args.photos, categories):
-                with Run.create(f"profile-{Path(photo).stem}") as run:
-                    run.watch(studio)
-                    run.add_file(photo, "inputs/" + Path(photo).name)
-                    seg = segment(photo, category)
-                    swatches = palette(seg)
-                    run.save_json("palette.json", [s.model_dump() for s in swatches])
-                    reading = read(seg, swatches, category)
-                    run.save_json("reading.json", reading)
-                    traced = trace(seg, reading.height)
-                    traced.parts = dress(traced.parts, reading)
-                    run.save_json("profile.json", {"height": traced.height, "parts": [
-                        p.model_dump(exclude_none=True) for p in traced.parts]})
-                    outline(seg, traced).save(run.path("outline.png"))
-                    cut = unroll(seg, traced)
-                    label = None
-                    if cut:
-                        cut.image.save(run.path("label.png"))
-                        label = cut.command(str(run.root / "label.png"))
-                        run.event("label", **label, size=cut.image.size)
-                    path, bounds = await render(studio, traced, run.folder("frames"), label)
-                    compare = side_by_side(seg, Image.open(path), bounds)
-                    colours = strip(swatches, compare.width)
-                    sheet = Image.new("RGB", (compare.width, compare.height + colours.height), (255, 255, 255))
-                    sheet.paste(compare, (0, 0))
-                    sheet.paste(colours, (0, compare.height))
-                    sheet.save(run.path("compare.png"))
-                    run.output("compare", run.root / "compare.png")
-                    print(run.root, [len(p.profile) for p in traced.parts], "points")
-
-    asyncio.run(main())
