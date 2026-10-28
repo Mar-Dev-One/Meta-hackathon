@@ -219,11 +219,12 @@ if __name__ == "__main__":
     from pipeline.studio import Studio
 
     from .label import unroll
+    from .materials import dress, read
     from .palette import palette, strip
     from .segment import segment
 
     parser = argparse.ArgumentParser(description="Trace a product photo into a 3D product with its label, rendered "
-                                                 "next to the photo; and its palette.")
+                                                 "next to the photo; its palette and materials.")
     parser.add_argument("photos", nargs="+")
     parser.add_argument("--category", action="append", help="per photo, in order (default: product)")
     args = parser.parse_args()
@@ -236,7 +237,12 @@ if __name__ == "__main__":
                     run.watch(studio)
                     run.add_file(photo, "inputs/" + Path(photo).name)
                     seg = segment(photo, category)
-                    traced = trace(seg, typical_height(category))
+                    swatches = palette(seg)
+                    run.save_json("palette.json", [s.model_dump() for s in swatches])
+                    reading = read(seg, swatches, category)
+                    run.save_json("reading.json", reading)
+                    traced = trace(seg, reading.height)
+                    traced.parts = dress(traced.parts, reading)
                     run.save_json("profile.json", {"height": traced.height, "parts": [
                         p.model_dump(exclude_none=True) for p in traced.parts]})
                     outline(seg, traced).save(run.path("outline.png"))
@@ -246,8 +252,6 @@ if __name__ == "__main__":
                         cut.image.save(run.path("label.png"))
                         label = cut.command(str(run.root / "label.png"))
                         run.event("label", **label, size=cut.image.size)
-                    swatches = palette(seg)
-                    run.save_json("palette.json", [s.model_dump() for s in swatches])
                     path, bounds = await render(studio, traced, run.folder("frames"), label)
                     compare = side_by_side(seg, Image.open(path), bounds)
                     colours = strip(swatches, compare.width)

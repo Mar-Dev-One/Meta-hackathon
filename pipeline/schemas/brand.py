@@ -18,10 +18,13 @@ class Swatch(Strict):
 
 class PartMaterial(Strict):
     name: str = Field(description="body, cap, lid, ...")
-    color: str = Field(pattern=HEX)
-    metallic: float = Field(ge=0, le=1)
-    roughness: float = Field(ge=0, le=1)
-    transparent: bool = Field(description="glass or clear plastic")
+    looks_like: str = Field(description="the material in a few words: 'clear glass holding amber liquid', 'brushed aluminium'")
+    color: str = Field(pattern=HEX, description="the colour to render it: for clear glass holding a liquid, the liquid's")
+    metallic: float = Field(ge=0, le=1, description="1 for metal, 0 for everything else")
+    roughness: float = Field(ge=0, le=1, description="0.05 polished or glass, 0.3 satin, 0.5 brushed metal, 0.8 matte")
+    opacity: float = Field(ge=0.02, le=1, description="1 for anything you can't see through, dark glass and dark "
+                                                      "liquids included; clear glass holding a light liquid 0.75-0.9; "
+                                                      "empty clear glass 0.2-0.4")
 
 
 class Typography(Strict):

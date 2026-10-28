@@ -8,35 +8,46 @@
           "title": "Name",
           "type": "string"
         },
+        "looks_like": {
+          "description": "the material in a few words: 'clear glass holding amber liquid', 'brushed aluminium'",
+          "title": "Looks Like",
+          "type": "string"
+        },
         "color": {
+          "description": "the colour to render it: for clear glass holding a liquid, the liquid's",
           "pattern": "^#[0-9A-Fa-f]{6}$",
           "title": "Color",
           "type": "string"
         },
         "metallic": {
+          "description": "1 for metal, 0 for everything else",
           "maximum": 1,
           "minimum": 0,
           "title": "Metallic",
           "type": "number"
         },
         "roughness": {
+          "description": "0.05 polished or glass, 0.3 satin, 0.5 brushed metal, 0.8 matte",
           "maximum": 1,
           "minimum": 0,
           "title": "Roughness",
           "type": "number"
         },
-        "transparent": {
-          "description": "glass or clear plastic",
-          "title": "Transparent",
-          "type": "boolean"
+        "opacity": {
+          "description": "1 for anything you can't see through, dark glass and dark liquids included; clear glass holding a light liquid 0.75-0.9; empty clear glass 0.2-0.4",
+          "maximum": 1,
+          "minimum": 0.02,
+          "title": "Opacity",
+          "type": "number"
         }
       },
       "required": [
         "name",
+        "looks_like",
         "color",
         "metallic",
         "roughness",
-        "transparent"
+        "opacity"
       ],
       "title": "PartMaterial",
       "type": "object"
