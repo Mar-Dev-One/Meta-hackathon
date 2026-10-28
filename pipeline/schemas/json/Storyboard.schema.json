@@ -1,0 +1,1002 @@
+{
+  "$defs": {
+    "Backdrop": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "default": "#0A0A0C",
+          "description": "the cyclorama's colour (sRGB)",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "roughness": {
+          "default": 0.6,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Roughness",
+          "type": "number"
+        },
+        "texture": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "an image to cover it with (a path), e.g. from Muse Image",
+          "title": "Texture"
+        }
+      },
+      "title": "Backdrop",
+      "type": "object"
+    },
+    "CameraMove": {
+      "additionalProperties": false,
+      "properties": {
+        "move": {
+          "description": "static: holds; orbit: circles it; dolly: pushes in/out; crane: rises or drops; truck: slides past; reveal: aim pans onto it; zoom: lens only",
+          "enum": [
+            "static",
+            "orbit",
+            "dolly",
+            "crane",
+            "truck",
+            "reveal",
+            "zoom"
+          ],
+          "title": "Move",
+          "type": "string"
+        },
+        "ease": {
+          "default": "in_out",
+          "enum": [
+            "linear",
+            "in",
+            "out",
+            "in_out"
+          ],
+          "title": "Ease",
+          "type": "string"
+        },
+        "fill": {
+          "default": 0.6,
+          "description": "share of the frame the product fills; 0.45 wide, 0.6 medium, 0.9 close",
+          "maximum": 5,
+          "minimum": 0.05,
+          "title": "Fill",
+          "type": "number"
+        },
+        "azimuth": {
+          "default": 0,
+          "description": "degrees around: 0 front, 90 its right, -90 its left",
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Azimuth",
+          "type": "number"
+        },
+        "elevation": {
+          "default": 8,
+          "description": "degrees above; low angles (2-8) feel heroic",
+          "maximum": 85,
+          "minimum": -85,
+          "title": "Elevation",
+          "type": "number"
+        },
+        "fov_degrees": {
+          "default": 30,
+          "description": "vertical lens angle; 30 is a product lens",
+          "maximum": 179,
+          "minimum": 1,
+          "title": "Fov Degrees",
+          "type": "number"
+        },
+        "to_azimuth": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "orbit: where it ends",
+          "title": "To Azimuth"
+        },
+        "from_fill": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 0.05,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "dolly: framing at the start",
+          "title": "From Fill"
+        },
+        "to_fill": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 0.05,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "dolly: framing at the end",
+          "title": "To Fill"
+        },
+        "from_elevation": {
+          "anyOf": [
+            {
+              "maximum": 85,
+              "minimum": -85,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "crane: start",
+          "title": "From Elevation"
+        },
+        "to_elevation": {
+          "anyOf": [
+            {
+              "maximum": 85,
+              "minimum": -85,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "crane: end",
+          "title": "To Elevation"
+        },
+        "travel": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "truck: meters moved right (negative left)",
+          "title": "Travel"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "enum": [
+                "above",
+                "below",
+                "left",
+                "right"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "reveal: where the aim starts",
+          "title": "From"
+        },
+        "from_fov": {
+          "anyOf": [
+            {
+              "maximum": 179,
+              "minimum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "zoom: start lens",
+          "title": "From Fov"
+        },
+        "to_fov": {
+          "anyOf": [
+            {
+              "maximum": 179,
+              "minimum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "zoom: end lens",
+          "title": "To Fov"
+        }
+      },
+      "required": [
+        "move"
+      ],
+      "title": "CameraMove",
+      "type": "object"
+    },
+    "Environment": {
+      "additionalProperties": false,
+      "properties": {
+        "hdri": {
+          "default": "hdri/citrus_orchard_road_puresky_4k.hdr",
+          "description": "HDRI under the Studio's assets, for reflections and ambient light",
+          "title": "Hdri",
+          "type": "string"
+        },
+        "use_ibl": {
+          "default": true,
+          "description": "light and reflect with the HDRI",
+          "title": "Use Ibl",
+          "type": "boolean"
+        },
+        "show_skybox": {
+          "default": false,
+          "description": "show the HDRI as the background (usually off: the backdrop is the background)",
+          "title": "Show Skybox",
+          "type": "boolean"
+        },
+        "ambient_strength": {
+          "default": 0.06,
+          "description": "0.05 dark and moody, 0.6 bright and airy",
+          "maximum": 4,
+          "minimum": 0,
+          "title": "Ambient Strength",
+          "type": "number"
+        },
+        "exposure": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "maximum": 16,
+          "title": "Exposure",
+          "type": "number"
+        },
+        "bloom": {
+          "default": 0.08,
+          "description": "glow around bright highlights; 0.03 clean, 0.14 dreamy or neon",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Bloom",
+          "type": "number"
+        },
+        "tonemap": {
+          "default": "agx",
+          "description": "agx: soft filmic; aces: contrasty; neutral: colours as authored (bright, clean looks)",
+          "enum": [
+            "agx",
+            "aces",
+            "neutral"
+          ],
+          "title": "Tonemap",
+          "type": "string"
+        },
+        "ssao": {
+          "default": true,
+          "title": "Ssao",
+          "type": "boolean"
+        }
+      },
+      "title": "Environment",
+      "type": "object"
+    },
+    "Key": {
+      "additionalProperties": false,
+      "properties": {
+        "t": {
+          "minimum": 0,
+          "title": "T",
+          "type": "number"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            }
+          ],
+          "title": "Value"
+        },
+        "ease": {
+          "default": "linear",
+          "enum": [
+            "linear",
+            "in",
+            "out",
+            "in_out",
+            "step"
+          ],
+          "title": "Ease",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t",
+        "value"
+      ],
+      "title": "Key",
+      "type": "object"
+    },
+    "Label": {
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "description": "path to the label artwork (PNG with transparent corners, or JPG)",
+          "title": "Image",
+          "type": "string"
+        },
+        "part": {
+          "default": "body",
+          "description": "the part it wraps",
+          "title": "Part",
+          "type": "string"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "meters up the product where it starts (default: the template's)",
+          "title": "From"
+        },
+        "to": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "meters up where it ends",
+          "title": "To"
+        },
+        "arc": {
+          "default": 110,
+          "description": "degrees it wraps around the front; 360 all the way round",
+          "maximum": 360,
+          "minimum": 5,
+          "title": "Arc",
+          "type": "number"
+        }
+      },
+      "required": [
+        "image"
+      ],
+      "title": "Label",
+      "type": "object"
+    },
+    "Lighting": {
+      "additionalProperties": false,
+      "properties": {
+        "preset": {
+          "description": "rim_dark: luxury, moody; high_key: clean, bright (light backdrop); top_soft: natural, skylight; split: dramatic; neon_dual: bold, energetic; three_point: neutral",
+          "enum": [
+            "three_point",
+            "rim_dark",
+            "high_key",
+            "top_soft",
+            "split",
+            "neon_dual"
+          ],
+          "title": "Preset",
+          "type": "string"
+        },
+        "intensity": {
+          "default": 1.0,
+          "description": "times the preset's brightness",
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Intensity",
+          "type": "number"
+        },
+        "turn": {
+          "default": 0.0,
+          "description": "degrees to turn the whole setup around the product",
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Turn",
+          "type": "number"
+        },
+        "warmth": {
+          "default": 0.0,
+          "description": "-1 cooler .. 1 warmer",
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Warmth",
+          "type": "number"
+        },
+        "fade_in": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 10,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "seconds over which every light rises from dark at the start (a reveal)",
+          "title": "Fade In"
+        }
+      },
+      "required": [
+        "preset"
+      ],
+      "title": "Lighting",
+      "type": "object"
+    },
+    "Look": {
+      "additionalProperties": false,
+      "properties": {
+        "environment": {
+          "$ref": "#/$defs/Environment"
+        },
+        "background": {
+          "default": [
+            0.004,
+            0.004,
+            0.006
+          ],
+          "description": "linear RGB where nothing is drawn (behind the backdrop's edges)",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "title": "Background",
+          "type": "array"
+        },
+        "backdrop": {
+          "$ref": "#/$defs/Backdrop"
+        },
+        "pedestal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pedestal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null: the product stands on the floor"
+        },
+        "lighting": {
+          "$ref": "#/$defs/Lighting"
+        }
+      },
+      "required": [
+        "lighting"
+      ],
+      "title": "Look",
+      "type": "object"
+    },
+    "PartLook": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "sRGB",
+          "title": "Color"
+        },
+        "opacity": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0.02,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "below 1: glass, see-through",
+          "title": "Opacity"
+        },
+        "metallic": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metallic"
+        },
+        "roughness": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "0 mirror .. 1 matte; glass ~0.05, gold ~0.2",
+          "title": "Roughness"
+        }
+      },
+      "title": "PartLook",
+      "type": "object"
+    },
+    "Pedestal": {
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "default": 0.32,
+          "description": "diameter, meters; a little wider than the product",
+          "exclusiveMinimum": 0.02,
+          "maximum": 3,
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "default": 0.2,
+          "description": "meters; the product stands on it",
+          "exclusiveMinimum": 0.01,
+          "maximum": 2,
+          "title": "Height",
+          "type": "number"
+        },
+        "color": {
+          "default": "#0E0E10",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "roughness": {
+          "default": 0.85,
+          "description": "keep high (0.8+) under rim lights, or its top glares",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Roughness",
+          "type": "number"
+        }
+      },
+      "title": "Pedestal",
+      "type": "object"
+    },
+    "Product": {
+      "additionalProperties": false,
+      "properties": {
+        "template": {
+          "anyOf": [
+            {
+              "enum": [
+                "perfume",
+                "bottle",
+                "jar",
+                "can",
+                "dropper"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "the shape; null with `profile_parts` for a shape traced from a photo",
+          "title": "Template"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.005,
+              "maximum": 5,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "meters (templates have a typical size)",
+          "title": "Height"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.005,
+              "maximum": 5,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "meters across at the widest",
+          "title": "Width"
+        },
+        "parts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PartLook"
+          },
+          "description": "template parts' looks by name: body, cap, lid, collar, bulb",
+          "title": "Parts",
+          "type": "object"
+        },
+        "profile_parts": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ProfilePart"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "the shape as profiles (from the brand analyst), instead of a template",
+          "title": "Profile Parts"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Label"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "template"
+      ],
+      "title": "Product",
+      "type": "object"
+    },
+    "ProfilePart": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "profile": {
+          "description": "[radius, height] in meters, bottom to top",
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "minItems": 2,
+          "title": "Profile",
+          "type": "array"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
+        "opacity": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0.02,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Opacity"
+        },
+        "metallic": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metallic"
+        },
+        "roughness": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Roughness"
+        }
+      },
+      "required": [
+        "name",
+        "profile"
+      ],
+      "title": "ProfilePart",
+      "type": "object"
+    },
+    "Shot": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "s1, s2, ...",
+          "title": "Id",
+          "type": "string"
+        },
+        "intent": {
+          "description": "what the shot is for, in a sentence: the critic judges it against this",
+          "title": "Intent",
+          "type": "string"
+        },
+        "duration": {
+          "description": "seconds; shots run back to back from 0",
+          "exclusiveMinimum": 0.2,
+          "maximum": 30,
+          "title": "Duration",
+          "type": "number"
+        },
+        "camera": {
+          "$ref": "#/$defs/CameraMove"
+        }
+      },
+      "required": [
+        "id",
+        "intent",
+        "duration",
+        "camera"
+      ],
+      "title": "Shot",
+      "type": "object"
+    },
+    "Title": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "font": {
+          "description": "serif: luxury; sans: clean; sans_bold: strong; condensed: bold, sporty; script: elegant, handwritten",
+          "enum": [
+            "serif",
+            "sans",
+            "sans_bold",
+            "condensed",
+            "script"
+          ],
+          "title": "Font",
+          "type": "string"
+        },
+        "size": {
+          "description": "letter height as a share of the frame's height: 0.07 a name, 0.03 a tagline",
+          "maximum": 0.3,
+          "minimum": 0.01,
+          "title": "Size",
+          "type": "number"
+        },
+        "y": {
+          "description": "vertical centre as a share of the frame's height (0 top); keep clear of the product",
+          "maximum": 0.95,
+          "minimum": 0.05,
+          "title": "Y",
+          "type": "number"
+        },
+        "color": {
+          "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$",
+          "title": "Color",
+          "type": "string"
+        },
+        "tracking": {
+          "default": 0.0,
+          "description": "extra letter spacing in ems; 0.2-0.3 for wide luxury capitals",
+          "maximum": 1.5,
+          "minimum": -0.2,
+          "title": "Tracking",
+          "type": "number"
+        },
+        "start": {
+          "description": "seconds: when it starts fading in",
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "fade": {
+          "default": 0.7,
+          "description": "seconds to fade in",
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Fade",
+          "type": "number"
+        }
+      },
+      "required": [
+        "text",
+        "font",
+        "size",
+        "y",
+        "color",
+        "start"
+      ],
+      "title": "Title",
+      "type": "object"
+    },
+    "Track": {
+      "additionalProperties": false,
+      "description": "Anything else animated: e.g. the product turning (Transform rotation_deg).",
+      "properties": {
+        "entity": {
+          "title": "Entity",
+          "type": "string"
+        },
+        "component": {
+          "title": "Component",
+          "type": "string"
+        },
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "keys": {
+          "items": {
+            "$ref": "#/$defs/Key"
+          },
+          "minItems": 1,
+          "title": "Keys",
+          "type": "array"
+        }
+      },
+      "required": [
+        "entity",
+        "component",
+        "field",
+        "keys"
+      ],
+      "title": "Track",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "description": "a working name for the ad",
+      "title": "Title",
+      "type": "string"
+    },
+    "brief": {
+      "description": "the brief it answers",
+      "title": "Brief",
+      "type": "string"
+    },
+    "style": {
+      "description": "the look in a few words: 'dark and moody luxury'",
+      "title": "Style",
+      "type": "string"
+    },
+    "fps": {
+      "default": 30,
+      "maximum": 60,
+      "minimum": 12,
+      "title": "Fps",
+      "type": "integer"
+    },
+    "aspect": {
+      "default": "16:9",
+      "enum": [
+        "16:9",
+        "9:16",
+        "1:1"
+      ],
+      "title": "Aspect",
+      "type": "string"
+    },
+    "look": {
+      "$ref": "#/$defs/Look"
+    },
+    "product": {
+      "$ref": "#/$defs/Product"
+    },
+    "shots": {
+      "items": {
+        "$ref": "#/$defs/Shot"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Shots",
+      "type": "array"
+    },
+    "titles": {
+      "items": {
+        "$ref": "#/$defs/Title"
+      },
+      "maxItems": 6,
+      "title": "Titles",
+      "type": "array"
+    },
+    "tracks": {
+      "items": {
+        "$ref": "#/$defs/Track"
+      },
+      "title": "Tracks",
+      "type": "array"
+    }
+  },
+  "required": [
+    "title",
+    "brief",
+    "style",
+    "look",
+    "product",
+    "shots"
+  ],
+  "title": "Storyboard",
+  "type": "object"
+}

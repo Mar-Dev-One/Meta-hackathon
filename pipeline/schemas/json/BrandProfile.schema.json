@@ -1,0 +1,347 @@
+{
+  "$defs": {
+    "PartMaterial": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "body, cap, lid, ...",
+          "title": "Name",
+          "type": "string"
+        },
+        "color": {
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "metallic": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Metallic",
+          "type": "number"
+        },
+        "roughness": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Roughness",
+          "type": "number"
+        },
+        "transparent": {
+          "description": "glass or clear plastic",
+          "title": "Transparent",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "color",
+        "metallic",
+        "roughness",
+        "transparent"
+      ],
+      "title": "PartMaterial",
+      "type": "object"
+    },
+    "ProfilePart": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "profile": {
+          "description": "[radius, height] in meters, bottom to top",
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "minItems": 2,
+          "title": "Profile",
+          "type": "array"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
+        "opacity": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0.02,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Opacity"
+        },
+        "metallic": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metallic"
+        },
+        "roughness": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Roughness"
+        }
+      },
+      "required": [
+        "name",
+        "profile"
+      ],
+      "title": "ProfilePart",
+      "type": "object"
+    },
+    "Swatch": {
+      "additionalProperties": false,
+      "properties": {
+        "hex": {
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "title": "Hex",
+          "type": "string"
+        },
+        "role": {
+          "description": "where the colour belongs: the product's main colour, a highlight, the label, its text, or the setting",
+          "enum": [
+            "product",
+            "accent",
+            "label",
+            "text",
+            "background"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "share": {
+          "description": "share of the product's pixels with this colour",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Share",
+          "type": "number"
+        }
+      },
+      "required": [
+        "hex",
+        "role",
+        "share"
+      ],
+      "title": "Swatch",
+      "type": "object"
+    },
+    "Typography": {
+      "additionalProperties": false,
+      "properties": {
+        "font": {
+          "description": "the closest of the Studio's fonts to the label's lettering",
+          "enum": [
+            "serif",
+            "sans",
+            "sans_bold",
+            "condensed",
+            "script"
+          ],
+          "title": "Font",
+          "type": "string"
+        },
+        "case": {
+          "enum": [
+            "upper",
+            "lower",
+            "mixed"
+          ],
+          "title": "Case",
+          "type": "string"
+        },
+        "tracking": {
+          "description": "letter spacing in ems, judged from the label",
+          "maximum": 1.5,
+          "minimum": -0.2,
+          "title": "Tracking",
+          "type": "number"
+        }
+      },
+      "required": [
+        "font",
+        "case",
+        "tracking"
+      ],
+      "title": "Typography",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "brand": {
+      "description": "the brand name as written on the product",
+      "title": "Brand",
+      "type": "string"
+    },
+    "product_name": {
+      "default": "",
+      "description": "the product's own name, if any",
+      "title": "Product Name",
+      "type": "string"
+    },
+    "category": {
+      "description": "perfume, beverage can, skincare jar, ...",
+      "title": "Category",
+      "type": "string"
+    },
+    "template": {
+      "anyOf": [
+        {
+          "enum": [
+            "perfume",
+            "bottle",
+            "jar",
+            "can",
+            "dropper"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "the Studio template closest to its shape; null when the traced profile is used",
+      "title": "Template"
+    },
+    "height": {
+      "description": "real height in meters (estimated from the category)",
+      "exclusiveMinimum": 0.005,
+      "maximum": 5,
+      "title": "Height",
+      "type": "number"
+    },
+    "profile_parts": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/ProfilePart"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "the shape traced from the photo's silhouette",
+      "title": "Profile Parts"
+    },
+    "materials": {
+      "items": {
+        "$ref": "#/$defs/PartMaterial"
+      },
+      "title": "Materials",
+      "type": "array"
+    },
+    "palette": {
+      "items": {
+        "$ref": "#/$defs/Swatch"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "title": "Palette",
+      "type": "array"
+    },
+    "typography": {
+      "$ref": "#/$defs/Typography"
+    },
+    "mood": {
+      "description": "a few words: luxurious, warm, minimal, ...",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 6,
+      "minItems": 1,
+      "title": "Mood",
+      "type": "array"
+    },
+    "do_not": {
+      "description": "things every shot must avoid, e.g. 'bright saturated colours'",
+      "items": {
+        "type": "string"
+      },
+      "title": "Do Not",
+      "type": "array"
+    },
+    "label_image": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "path to the label cut from the photo and unrolled",
+      "title": "Label Image"
+    },
+    "logo_image": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "path to the logo cut from the photo",
+      "title": "Logo Image"
+    },
+    "photos": {
+      "description": "the photos it was read from",
+      "items": {
+        "type": "string"
+      },
+      "title": "Photos",
+      "type": "array"
+    }
+  },
+  "required": [
+    "brand",
+    "category",
+    "template",
+    "height",
+    "materials",
+    "palette",
+    "typography",
+    "mood"
+  ],
+  "title": "BrandProfile",
+  "type": "object"
+}

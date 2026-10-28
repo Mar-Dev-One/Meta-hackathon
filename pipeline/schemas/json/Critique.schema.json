@@ -1,0 +1,171 @@
+{
+  "$defs": {
+    "Issue": {
+      "additionalProperties": false,
+      "properties": {
+        "severity": {
+          "enum": [
+            "minor",
+            "major"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "composition",
+            "lighting",
+            "product_visibility",
+            "brand",
+            "continuity",
+            "titles"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "time": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "seconds into the ad where it shows",
+          "title": "Time"
+        },
+        "problem": {
+          "description": "what's wrong, concretely: 'the cap is cut by the top edge'",
+          "title": "Problem",
+          "type": "string"
+        },
+        "fix": {
+          "description": "what to change, in Studio terms: 'fill 0.6 instead of 0.9', 'rim intensity x1.5'",
+          "title": "Fix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "severity",
+        "category",
+        "problem",
+        "fix"
+      ],
+      "title": "Issue",
+      "type": "object"
+    },
+    "Scores": {
+      "additionalProperties": false,
+      "properties": {
+        "composition": {
+          "description": "balance, negative space, product placement",
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Composition",
+          "type": "integer"
+        },
+        "lighting": {
+          "description": "shape revealed, separation from the background, mood",
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Lighting",
+          "type": "integer"
+        },
+        "product_visibility": {
+          "description": "whole, readable, the clear subject",
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Product Visibility",
+          "type": "integer"
+        },
+        "brand": {
+          "description": "colours, materials and type true to the brand profile",
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Brand",
+          "type": "integer"
+        },
+        "continuity": {
+          "description": "fits with the shots around it",
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Continuity",
+          "type": "integer"
+        },
+        "titles": {
+          "description": "readable, well placed, not over the product; 10 when there are none",
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Titles",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "composition",
+        "lighting",
+        "product_visibility",
+        "brand",
+        "continuity",
+        "titles"
+      ],
+      "title": "Scores",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "shot": {
+      "description": "the shot's id",
+      "title": "Shot",
+      "type": "string"
+    },
+    "iteration": {
+      "description": "0 for the first look, +1 per revision",
+      "minimum": 0,
+      "title": "Iteration",
+      "type": "integer"
+    },
+    "frames": {
+      "description": "the times it looked at",
+      "items": {
+        "type": "number"
+      },
+      "title": "Frames",
+      "type": "array"
+    },
+    "scores": {
+      "$ref": "#/$defs/Scores"
+    },
+    "passed": {
+      "description": "every score 7 or more and no major issue",
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "issues": {
+      "items": {
+        "$ref": "#/$defs/Issue"
+      },
+      "title": "Issues",
+      "type": "array"
+    },
+    "measured": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "description": "the renderer's numbers it used: fill, centre, cut edges, contrast ...",
+      "title": "Measured",
+      "type": "object"
+    }
+  },
+  "required": [
+    "shot",
+    "iteration",
+    "frames",
+    "scores",
+    "passed"
+  ],
+  "title": "Critique",
+  "type": "object"
+}

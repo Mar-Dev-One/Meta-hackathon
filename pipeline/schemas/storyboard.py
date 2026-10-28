@@ -1,0 +1,201 @@
+"""The storyboard: an ad as data -- its look, its product, its shots, its
+titles -- which pipeline.studio.build turns into Studio commands. The
+director writes one from a brief; the hand-made ads (pipeline/demos/ads.py)
+are written as one.
+
+Field names follow the Studio's command arguments (README.md), so building
+is mechanical, and the descriptions are what a model reads when it fills
+one in (their JSON Schema is the answer format: pipeline/schemas/export.py).
+"""
+
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+HEX = r"^#[0-9A-Fa-f]{6}$"
+HEX_ALPHA = r"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+
+Ease = Literal["linear", "in", "out", "in_out"]
+Font = Literal["serif", "sans", "sans_bold", "condensed", "script"]
+
+
+class Strict(BaseModel):
+    """Unknown fields are an error: a typo shouldn't be silently ignored."""
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+
+# --- The look --------------------------------------------------------------------------------
+
+class Environment(Strict):
+    hdri: str = Field("hdri/citrus_orchard_road_puresky_4k.hdr", description="HDRI under the Studio's assets, for reflections and ambient light")
+    use_ibl: bool = Field(True, description="light and reflect with the HDRI")
+    show_skybox: bool = Field(False, description="show the HDRI as the background (usually off: the backdrop is the background)")
+    ambient_strength: float = Field(0.06, ge=0, le=4, description="0.05 dark and moody, 0.6 bright and airy")
+    exposure: float = Field(1.0, gt=0, le=16)
+    bloom: float = Field(0.08, ge=0, le=1, description="glow around bright highlights; 0.03 clean, 0.14 dreamy or neon")
+    tonemap: Literal["agx", "aces", "neutral"] = Field("agx", description="agx: soft filmic; aces: contrasty; neutral: colours as authored (bright, clean looks)")
+    ssao: bool = True
+
+
+class Backdrop(Strict):
+    color: str = Field("#0A0A0C", pattern=HEX, description="the cyclorama's colour (sRGB)")
+    roughness: float = Field(0.6, ge=0, le=1)
+    texture: str | None = Field(None, description="an image to cover it with (a path), e.g. from Muse Image")
+
+
+class Pedestal(Strict):
+    width: float = Field(0.32, gt=0.02, le=3, description="diameter, meters; a little wider than the product")
+    height: float = Field(0.2, gt=0.01, le=2, description="meters; the product stands on it")
+    color: str = Field("#0E0E10", pattern=HEX)
+    roughness: float = Field(0.85, ge=0, le=1, description="keep high (0.8+) under rim lights, or its top glares")
+
+
+class Lighting(Strict):
+    preset: Literal["three_point", "rim_dark", "high_key", "top_soft", "split", "neon_dual"] = Field(
+        description="rim_dark: luxury, moody; high_key: clean, bright (light backdrop); top_soft: natural, skylight; "
+                    "split: dramatic; neon_dual: bold, energetic; three_point: neutral")
+    intensity: float = Field(1.0, ge=0, le=20, description="times the preset's brightness")
+    turn: float = Field(0.0, ge=-360, le=360, description="degrees to turn the whole setup around the product")
+    warmth: float = Field(0.0, ge=-1, le=1, description="-1 cooler .. 1 warmer")
+    fade_in: float | None = Field(None, gt=0, le=10, description="seconds over which every light rises from dark at the start (a reveal)")
+
+
+class Look(Strict):
+    environment: Environment = Field(default_factory=Environment)
+    background: list[float] = Field(default=[0.004, 0.004, 0.006], min_length=3, max_length=3,
+                                    description="linear RGB where nothing is drawn (behind the backdrop's edges)")
+    backdrop: Backdrop = Field(default_factory=Backdrop)
+    pedestal: Pedestal | None = Field(default_factory=Pedestal, description="null: the product stands on the floor")
+    lighting: Lighting
+
+
+# --- The product -------------------------------------------------------------------------------
+
+class PartLook(Strict):
+    color: str | None = Field(None, pattern=HEX, description="sRGB")
+    opacity: float | None = Field(None, ge=0.02, le=1, description="below 1: glass, see-through")
+    metallic: float | None = Field(None, ge=0, le=1)
+    roughness: float | None = Field(None, ge=0, le=1, description="0 mirror .. 1 matte; glass ~0.05, gold ~0.2")
+
+
+class Label(Strict):
+    image: str = Field(description="path to the label artwork (PNG with transparent corners, or JPG)")
+    part: str = Field("body", description="the part it wraps")
+    from_: float | None = Field(None, alias="from", description="meters up the product where it starts (default: the template's)")
+    to: float | None = Field(None, description="meters up where it ends")
+    arc: float = Field(110, ge=5, le=360, description="degrees it wraps around the front; 360 all the way round")
+
+
+class ProfilePart(Strict):
+    name: str
+    profile: list[list[float]] = Field(min_length=2, description="[radius, height] in meters, bottom to top")
+    color: str | None = Field(None, pattern=HEX)
+    opacity: float | None = Field(None, ge=0.02, le=1)
+    metallic: float | None = Field(None, ge=0, le=1)
+    roughness: float | None = Field(None, ge=0, le=1)
+
+
+class Product(Strict):
+    template: Literal["perfume", "bottle", "jar", "can", "dropper"] | None = Field(
+        description="the shape; null with `profile_parts` for a shape traced from a photo")
+    height: float | None = Field(None, gt=0.005, le=5, description="meters (templates have a typical size)")
+    width: float | None = Field(None, gt=0.005, le=5, description="meters across at the widest")
+    parts: dict[str, PartLook] = Field(default_factory=dict, description="template parts' looks by name: body, cap, lid, collar, bulb")
+    profile_parts: list[ProfilePart] | None = Field(None, description="the shape as profiles (from the brand analyst), instead of a template")
+    label: Label | None = None
+
+    @model_validator(mode="after")
+    def _shape(self):
+        if (self.template is None) == (self.profile_parts is None):
+            raise ValueError("give exactly one of `template` and `profile_parts`")
+        return self
+
+
+# --- Shots, titles, tracks ----------------------------------------------------------------------
+
+class CameraMove(Strict):
+    move: Literal["static", "orbit", "dolly", "crane", "truck", "reveal", "zoom"] = Field(
+        description="static: holds; orbit: circles it; dolly: pushes in/out; crane: rises or drops; "
+                    "truck: slides past; reveal: aim pans onto it; zoom: lens only")
+    ease: Ease = "in_out"
+    fill: float = Field(0.6, ge=0.05, le=5, description="share of the frame the product fills; 0.45 wide, 0.6 medium, 0.9 close")
+    azimuth: float = Field(0, ge=-360, le=360, description="degrees around: 0 front, 90 its right, -90 its left")
+    elevation: float = Field(8, ge=-85, le=85, description="degrees above; low angles (2-8) feel heroic")
+    fov_degrees: float = Field(30, ge=1, le=179, description="vertical lens angle; 30 is a product lens")
+    to_azimuth: float | None = Field(None, description="orbit: where it ends")
+    from_fill: float | None = Field(None, ge=0.05, le=5, description="dolly: framing at the start")
+    to_fill: float | None = Field(None, ge=0.05, le=5, description="dolly: framing at the end")
+    from_elevation: float | None = Field(None, ge=-85, le=85, description="crane: start")
+    to_elevation: float | None = Field(None, ge=-85, le=85, description="crane: end")
+    travel: float | None = Field(None, description="truck: meters moved right (negative left)")
+    from_: Literal["above", "below", "left", "right"] | None = Field(None, alias="from", description="reveal: where the aim starts")
+    from_fov: float | None = Field(None, ge=1, le=179, description="zoom: start lens")
+    to_fov: float | None = Field(None, ge=1, le=179, description="zoom: end lens")
+
+
+class Shot(Strict):
+    id: str = Field(description="s1, s2, ...")
+    intent: str = Field(description="what the shot is for, in a sentence: the critic judges it against this")
+    duration: float = Field(gt=0.2, le=30, description="seconds; shots run back to back from 0")
+    camera: CameraMove
+
+
+class Title(Strict):
+    text: str = Field(min_length=1, max_length=255)
+    font: Font = Field(description="serif: luxury; sans: clean; sans_bold: strong; condensed: bold, sporty; script: elegant, handwritten")
+    size: float = Field(ge=0.01, le=0.3, description="letter height as a share of the frame's height: 0.07 a name, 0.03 a tagline")
+    y: float = Field(ge=0.05, le=0.95, description="vertical centre as a share of the frame's height (0 top); keep clear of the product")
+    color: str = Field(pattern=HEX_ALPHA)
+    tracking: float = Field(0.0, ge=-0.2, le=1.5, description="extra letter spacing in ems; 0.2-0.3 for wide luxury capitals")
+    start: float = Field(ge=0, description="seconds: when it starts fading in")
+    fade: float = Field(0.7, gt=0, le=5, description="seconds to fade in")
+
+
+class Key(Strict):
+    t: float = Field(ge=0)
+    value: float | list[float]
+    ease: Literal["linear", "in", "out", "in_out", "step"] = "linear"
+
+
+class Track(Strict):
+    """Anything else animated: e.g. the product turning (Transform rotation_deg)."""
+    entity: str
+    component: str
+    field: str
+    keys: list[Key] = Field(min_length=1)
+
+
+# --- The storyboard -------------------------------------------------------------------------------
+
+class Storyboard(Strict):
+    title: str = Field(description="a working name for the ad")
+    brief: str = Field(description="the brief it answers")
+    style: str = Field(description="the look in a few words: 'dark and moody luxury'")
+    fps: int = Field(30, ge=12, le=60)
+    aspect: Literal["16:9", "9:16", "1:1"] = "16:9"
+    look: Look
+    product: Product
+    shots: list[Shot] = Field(min_length=1, max_length=12)
+    titles: list[Title] = Field(default_factory=list, max_length=6)
+    tracks: list[Track] = Field(default_factory=list)
+
+    @property
+    def duration(self) -> float:
+        return round(sum(s.duration for s in self.shots), 3)
+
+    def shot_starts(self) -> list[float]:
+        starts, t = [], 0.0
+        for s in self.shots:
+            starts.append(round(t, 3))
+            t += s.duration
+        return starts
+
+    @model_validator(mode="after")
+    def _consistent(self):
+        ids = [s.id for s in self.shots]
+        if len(set(ids)) != len(ids):
+            raise ValueError(f"shot ids must be unique: {ids}")
+        for t in self.titles:
+            if t.start >= self.duration:
+                raise ValueError(f"title {t.text!r} starts at {t.start} s, after the ad ends ({self.duration} s)")
+        return self
