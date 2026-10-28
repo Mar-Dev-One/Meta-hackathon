@@ -22,11 +22,10 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from pipeline.encode import finish
 from pipeline.runs import Run
 from pipeline.schemas import (Backdrop, CameraMove, Environment, Label, Lighting, Look, PartLook, Pedestal, Product,
                               Shot, Storyboard, Title, Track)
-from pipeline.studio import Studio, build
+from pipeline.studio import Studio, build, preview, render
 
 OUT = Path(__file__).resolve().parent / "out"
 FONTS = Path("C:/Windows/Fonts")   # system fonts for the label artwork (the titles use the Studio's OFL fonts)
@@ -232,17 +231,11 @@ def storyboard_for(name: str) -> Storyboard:
         update={"label": sb.product.label.model_copy(update={"image": str(image)})})})
 
 
-def preview_times(sb: Storyboard) -> list[float]:
-    """The middle of every shot, and just before the end."""
-    return [round(start + 0.5 * shot.duration, 2) for start, shot in zip(sb.shot_starts(), sb.shots)] + \
-           [round(sb.duration - 0.2, 2)]
-
-
-async def make(studio: Studio, name: str, preview: bool, width: int, height: int, samples: int) -> Path:
+async def make(studio: Studio, name: str, preview_only: bool, short: int, samples: int) -> Path:
     """One ad as a run (pipeline/runs.py): its inputs, storyboard, every
     Studio command, and its frames or video, in runs/<time>-<name>/. Returns
     the run's folder."""
-    with Run.create(f"{name}{'-preview' if preview else ''}") as run:
+    with Run.create(f"{name}{'-preview' if preview_only else ''}") as run:
         run.watch(studio)
         sb = storyboard_for(name)
         run.event("brief", text=sb.brief, style=sb.style)
@@ -252,32 +245,21 @@ async def make(studio: Studio, name: str, preview: bool, width: int, height: int
         run.output("storyboard", run.save_json("storyboard.json", sb))
 
         run.event("build", shots=len(sb.shots), duration=sb.duration)
-        length = await build(studio, sb)
-        if preview:
-            result = await studio.call("shot.preview", times=preview_times(sb), width=640, height=360,
-                                       out_dir=str(run.folder("frames")))
-            run.event("preview", frames=[f["path"] for f in result["frames"]])
-            run.output("frames", run.root / "frames")
+        await build(studio, sb)
+        if preview_only:
+            await preview(studio, run, sb)
             return run.root
-
-        raw = run.path("final", "raw.mp4")
-        run.event("render", frames=round(length * sb.fps), width=width, height=height, samples=samples)
-        result = await studio.call("shot.render", video=str(raw), end=length - 1e-3, fps=sb.fps,
-                                   width=width, height=height, samples=samples)
-        run.event("rendered", frames=result["frames"], seconds=result["seconds"])
-        final = finish(raw, run.path("final", f"{name}.mp4"), fade_in=0.4, fade_out=0.6)
-        raw.unlink(missing_ok=True)
-        run.output("video", final)
+        final = await render(studio, run, sb, name, short=short, samples=samples)
         shutil.copyfile(final, OUT / f"{name}.mp4")   # the latest of each, where it's easy to find
         return run.root
 
 
-async def run(names: list[str], preview: bool, width: int, height: int, samples: int) -> None:
+async def run(names: list[str], preview_only: bool, short: int, samples: int) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     async with Studio() as studio:
         for name in names:
             began = time.time()
-            folder = await make(studio, name, preview, width, height, samples)
+            folder = await make(studio, name, preview_only, short, samples)
             print(f"{name}: {time.time() - began:.0f}s -> {folder}")
 
 
@@ -297,8 +279,7 @@ if __name__ == "__main__":
     parser.add_argument("--preview", action="store_true", help="a few frames of each as PNGs instead of videos")
     parser.add_argument("--list", action="store_true", help="list the ads and stop")
     parser.add_argument("--export", action="store_true", help="write each storyboard as JSON and stop")
-    parser.add_argument("--width", type=int, default=1920)
-    parser.add_argument("--height", type=int, default=1080)
+    parser.add_argument("--size", type=int, default=1080, help="the frame's shorter side in pixels (default 1080)")
     parser.add_argument("--samples", type=int, default=16)
     args = parser.parse_args()
     unknown = [a for a in args.ads if a not in ADS]
@@ -312,4 +293,4 @@ if __name__ == "__main__":
     elif args.export:
         export(names)
     else:
-        asyncio.run(run(names, args.preview, args.width, args.height, args.samples))
+        asyncio.run(run(names, args.preview, args.size, args.samples))

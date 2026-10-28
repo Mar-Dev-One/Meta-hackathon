@@ -206,12 +206,13 @@ async def write(brief: str, profile: BrandProfile, *, studio=None, run=None, sec
 
 
 if __name__ == "__main__":
+    import argparse
     import asyncio
     import sys
     from pathlib import Path
 
     from pipeline.runs import RUNS, Run
-    from pipeline.studio import Studio
+    from pipeline.studio import Studio, build, preview, render
 
     # Briefs for the brand analyst's three test products (their newest profiles in runs/).
     BRIEFS = {
@@ -226,21 +227,33 @@ if __name__ == "__main__":
             sys.exit(f"no brand profile for {photo}: run python -m pipeline.agents.analyst first")
         return BrandProfile.model_validate_json(found[-1].read_text(encoding="utf-8"))
 
-    async def main(names: list[str]) -> None:
+    async def main(names: list[str], frames: bool, video: bool, short: int) -> None:
         async with Studio() as studio:
             for name in names:
                 profile = profile_of(name)
-                with Run.create(f"storyboard-{name}") as run:
+                with Run.create(f"director-{name}") as run:
                     run.watch(studio)
                     run.event("brief", text=BRIEFS[name], brand=profile.brand)
                     sb = await write(BRIEFS[name], profile, studio=studio, run=run)
+                    if frames or video:
+                        await build(studio, sb)
+                    if frames:
+                        await preview(studio, run, sb)
+                    if video:
+                        await render(studio, run, sb, name, short=short)
                 drafts = sum(1 for line in (run.root / "log.jsonl").read_text().splitlines() if '"draft"' in line)
                 print(f"\n{name}: {sb.title!r}, style {sb.style}, {sb.aspect}, {sb.duration:g} s, {drafts} draft(s)")
                 for start, shot in zip(sb.shot_starts(), sb.shots):
-                    c = shot.camera
-                    print(f"  {start:5.1f}s {shot.id} {c.move:7} {shot.duration:g}s  {shot.intent}")
+                    print(f"  {start:5.1f}s {shot.id} {shot.camera.move:7} {shot.duration:g}s  {shot.intent}")
                 for t in sb.titles:
                     print(f"  title {t.text!r} {t.font} {t.color} at {t.start:g}s, y {t.y:g}")
                 print(f"  {Path(run.root).name}")
 
-    asyncio.run(main(sys.argv[1:] or list(BRIEFS)))
+    parser = argparse.ArgumentParser(description="Storyboards for the test briefs, written by the director; "
+                                                 "optionally rendered.")
+    parser.add_argument("products", nargs="*", help=f"which (default all): {', '.join(BRIEFS)}")
+    parser.add_argument("--preview", action="store_true", help="also render a few frames")
+    parser.add_argument("--video", action="store_true", help="also render the video")
+    parser.add_argument("--size", type=int, default=1080, help="the video's shorter side in pixels")
+    args = parser.parse_args()
+    asyncio.run(main(args.products or list(BRIEFS), args.preview, args.video, args.size))
