@@ -1,9 +1,11 @@
-"""Muse Image, text to image: a product photo of a fictional brand, upright and
-front-on like a photo a user would upload. 04, 05 and 07 reuse it."""
+"""Muse Image: a product photo of a fictional brand, upright and front-on
+like a photo a user would upload. 04, 05 and 07 reuse it."""
 
-import base64
+from PIL import Image
 
-from _common import IMAGE, PRODUCT_PHOTO, meta_client, report, save_json, timed
+from _common import PRODUCT_PHOTO, report
+
+from pipeline.meta import image, usage
 
 PROMPT = (
     "Studio product photograph of a perfume bottle for a fictional brand: a rounded amber glass bottle "
@@ -14,24 +16,12 @@ PROMPT = (
 
 
 def run() -> dict:
-    client = meta_client()
-    with timed() as t:
-        result = client.images.generate(
-            model=IMAGE,
-            prompt=PROMPT,
-            size="1024x1536",
-            extra_body={"output_format": "png"},   # the default is webp
-        )
-    PRODUCT_PHOTO.write_bytes(base64.b64decode(result.data[0].b64_json))
-    meta = result.model_dump()
-    for item in meta.get("data", []):
-        item.pop("b64_json", None)
-    save_json("03_image_generate.json", meta)
-
-    from PIL import Image
-    with Image.open(PRODUCT_PHOTO) as image:
-        size = image.size
-    return {"latency_s": t.seconds, "saved": str(PRODUCT_PHOTO), "size": f"{size[0]}x{size[1]} (asked 1024x1536)"}
+    path = image.generate(PROMPT, size="1024x1536", out=PRODUCT_PHOTO)
+    with Image.open(path) as im:
+        size = im.size
+    last = usage.calls()[-1]
+    return {"cached": last.cached, "seconds": last.seconds, "saved": str(path),
+            "size": f"{size[0]}x{size[1]} (asked 1024x1536)"}
 
 
 if __name__ == "__main__":

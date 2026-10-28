@@ -95,7 +95,8 @@ A render blocks the Studio until it's done, and the server doesn't answer WebSoc
 - `pipeline/studio`: `Studio`, an async client that starts `Studio.exe --hidden`, connects through `server.json` and turns failed commands into `StudioError`s.
 - `pipeline/encode`: `finish()`, the last ffmpeg pass: the whole ad faded from and to black (titles are drawn by the Studio).
 - `pipeline/demos/ads.py`: five ads written by hand as specs (scene, product, label, lighting, shots, titles) for fictional brands: a perfume, a drinks can, a skincare jar, an olive oil, a serum. Test footage, fallback demos, and the shape of what the director agent will write. `first_ad.py` renders the perfume one.
-- `pipeline/meta/smoke`: one test call to each Meta model.
+- `pipeline/meta`: the Meta models as the agents call them: `spark.ask()` (text, images, answers checked against a JSON schema or pydantic model; `provider="baseten"` for Muse Spark Open), `spark.run_tools()` (tool calling), `sam.segment()` (full-size masks), `image.generate()`, `voice.transcribe()`. Every call is cached on disk by its request in `cache/meta` (git-ignored; rerunning costs nothing; `META_CACHE=off` to bypass), retried on rate limits and server errors, and recorded in `usage` with its tokens and cost. Failures raise `MetaError` with the server's message.
+- `pipeline/meta/smoke`: one test call to each model through those clients (`run_all.py`, `--fresh` to skip the cache).
 
 ## Tests
 

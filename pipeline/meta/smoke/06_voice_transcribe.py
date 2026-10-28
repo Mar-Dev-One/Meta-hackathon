@@ -1,56 +1,32 @@
-"""Muse Voice Transcribe on a spoken brief, through the file endpoint.
+"""Muse Voice Transcribe on a spoken brief. Give a recording as the first
+argument (any format ffmpeg reads), or it makes one with Windows' built-in
+speech synthesizer."""
 
-Records nothing: give a WAV as the first argument, or it makes one with
-Windows' built-in speech synthesizer. Either way ffmpeg converts it to what
-the API accepts (WAV, mono, 16-bit PCM, 16 kHz)."""
-
-import json
 import subprocess
 import sys
 from pathlib import Path
 
-import requests
+from _common import OUT, report
 
-from _common import META_BASE_URL, OUT, VOICE, key, report, save_json, timed
+from pipeline.meta import voice
 
 BRIEF = "Luxury perfume ad, dark and moody, fifteen seconds. End on the bottle with the brand name."
 
 
 def synthesize(path: Path) -> None:
-    script = (
-        "Add-Type -AssemblyName System.Speech; "
-        "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-        f"$s.SetOutputToWaveFile('{path}'); $s.Speak('{BRIEF}'); $s.Dispose()"
-    )
+    script = ("Add-Type -AssemblyName System.Speech; "
+              "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+              f"$s.SetOutputToWaveFile('{path}'); $s.Speak('{BRIEF}'); $s.Dispose()")
     subprocess.run(["powershell", "-NoProfile", "-Command", script], check=True)
 
 
 def run(source: Path | None = None) -> dict:
-    api_key = key("MODEL_API_KEY")
+    spoken = str(source) if source else BRIEF
     if source is None:
-        source = OUT / "06_brief_raw.wav"
-        synthesize(source)
-    wav = OUT / "06_brief_16k.wav"
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(source),
-                    "-ac", "1", "-ar", "16000", "-sample_fmt", "s16", str(wav)], check=True)
-
-    settings = {"mode": "DIARIZATION", "model": VOICE, "audioEncoding": "WAV"}
-    with timed() as t, wav.open("rb") as audio:
-        response = requests.post(
-            f"{META_BASE_URL}/asr/transcribe",
-            headers={"Authorization": f"Bearer {api_key}"},
-            files={
-                "request": (None, json.dumps(settings), "application/json"),
-                "audio": (wav.name, audio, "audio/wav"),
-            },
-            timeout=120,
-        )
-    if not response.ok:
-        raise RuntimeError(f"HTTP {response.status_code}: {response.text[:500]}")
-    body = response.json()
-    save_json("06_voice_transcribe.json", body)
-    return {"latency_s": t.seconds, "spoken": BRIEF if source.name == "06_brief_raw.wav" else str(source),
-            "transcript": body.get("transcript"), "audio_ms": body.get("audioDurationMs")}
+        source = OUT / "06_brief.wav"
+        if not source.exists():   # the same recording each run, so the cache can answer
+            synthesize(source)
+    return {"spoken": spoken, "transcript": voice.transcribe(source)}
 
 
 if __name__ == "__main__":

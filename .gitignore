@@ -227,3 +227,6 @@ pipeline/meta/smoke/out/
 
 # Pipeline outputs (renders, videos)
 pipeline/**/out/
+
+# Cached Meta model answers (pipeline/meta/cache.py)
+cache/

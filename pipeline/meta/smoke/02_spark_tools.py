@@ -1,11 +1,11 @@
-"""Muse Spark tool calling over the Responses API, with tools shaped like the
-Studio's commands: does it call them with sensible arguments, several in one
-turn, and continue after getting the results back? This decides how the
-director drives the Studio."""
+"""Muse Spark tool calling, with tools shaped like the Studio's commands:
+sensible arguments, several calls per turn, and carrying on after results."""
 
 import json
 
-from _common import SPARK, meta_client, report, save_json, timed
+from _common import report
+
+from pipeline.meta import spark
 
 TOOLS = [
     {
@@ -17,7 +17,7 @@ TOOLS = [
             "properties": {
                 "position": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3},
                 "target": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3},
-                "fov_degrees": {"type": "number", "description": "vertical field of view, 1 to 170"},
+                "fov_degrees": {"type": "number", "description": "vertical field of view, 1 to 179"},
             },
             "required": ["position", "target"],
         },
@@ -25,17 +25,16 @@ TOOLS = [
     {
         "type": "function",
         "name": "light_add",
-        "description": "Adds a light. Spot lights aim at the target.",
+        "description": "Adds a spot light aimed at the target. Intensity: 1 is a soft fill, 10 a strong key, 30 a hard rim.",
         "parameters": {
             "type": "object",
             "properties": {
-                "type": {"type": "string", "enum": ["point", "spot", "directional"]},
                 "position": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3},
                 "target": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3},
                 "color_temperature_k": {"type": "number"},
                 "intensity": {"type": "number"},
             },
-            "required": ["type", "position", "intensity"],
+            "required": ["position", "intensity"],
         },
     },
 ]
@@ -48,33 +47,12 @@ BRIEF = (
 
 
 def run() -> dict:
-    client = meta_client()
-    calls = []
-    turns = 0
-    with timed() as t:
-        response = client.responses.create(model=SPARK, input=BRIEF, tools=TOOLS)
-        while turns < 4:
-            turns += 1
-            pending = [item for item in response.output if item.type == "function_call"]
-            if not pending:
-                break
-            outputs = []
-            for item in pending:
-                args = json.loads(item.arguments)
-                calls.append({"turn": turns, "name": item.name, "arguments": args})
-                outputs.append({"type": "function_call_output", "call_id": item.call_id,
-                                "output": json.dumps({"ok": True})})
-            response = client.responses.create(model=SPARK, previous_response_id=response.id,
-                                               input=outputs, tools=TOOLS)
-    save_json("02_spark_tools.json", {"calls": calls, "final": response.model_dump()})
-    per_turn = [sum(1 for c in calls if c["turn"] == n) for n in range(1, turns + 1)]
-    return {
-        "latency_s": t.seconds,
-        "tool_calls": len(calls),
-        "calls_per_turn": per_turn,
-        "calls": "; ".join(f"{c['name']}({json.dumps(c['arguments'])})" for c in calls),
-        "final_text": response.output_text,
-    }
+    r = spark.run_tools(BRIEF, tools=TOOLS, handle=lambda name, args: {"ok": True})
+    turns = sorted({c["turn"] for c in r.calls})
+    return {"cached": r.cached, "tool_calls": len(r.calls),
+            "calls_per_turn": [sum(1 for c in r.calls if c["turn"] == t) for t in turns],
+            "calls": "; ".join(f"{c['name']}({json.dumps(c['arguments'])})" for c in r.calls),
+            "final_text": r.text}
 
 
 if __name__ == "__main__":

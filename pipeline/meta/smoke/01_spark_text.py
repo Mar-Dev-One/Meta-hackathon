@@ -1,22 +1,16 @@
-"""Muse Spark, plain text over the Responses API: does the key work, how fast, what usage looks like."""
+"""Muse Spark, plain text: does the key work, and what one answer costs."""
 
-from _common import SPARK, meta_client, report, save_json, timed
+from _common import report
+
+from pipeline.meta import spark, usage
 
 
 def run() -> dict:
-    client = meta_client()
-    with timed() as t:
-        response = client.responses.create(
-            model=SPARK,
-            input="In two sentences: what makes a luxury perfume advert feel luxurious on screen?",
-        )
-    save_json("01_spark_text.json", response.model_dump())
-    usage = response.usage
-    return {
-        "latency_s": t.seconds,
-        "tokens": f"in {usage.input_tokens}, out {usage.output_tokens}" if usage else "?",
-        "answer": response.output_text,
-    }
+    r = spark.ask("In two sentences: what makes a luxury perfume advert feel luxurious on screen?")
+    last = usage.calls()[-1]
+    return {"cached": r.cached, "seconds": last.seconds,
+            "tokens": f"in {last.input_tokens}, out {last.output_tokens}", "cost": f"${last.cost:.5f}",
+            "answer": r.text}
 
 
 if __name__ == "__main__":

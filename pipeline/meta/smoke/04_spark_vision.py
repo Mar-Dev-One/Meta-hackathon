@@ -1,41 +1,39 @@
-"""Muse Spark vision: can it read a product photo into the facts the brand
-analyst needs (parts, colours, materials, label text, mood) as JSON?"""
+"""Muse Spark vision with an answer schema: the product photo read into the
+facts the brand analyst needs, as JSON constrained by the schema and
+validated with pydantic."""
 
-import json
+from pydantic import BaseModel, Field
 
-from _common import SPARK, data_url, meta_client, product_photo, report, save_json, timed
+from _common import product_photo, report
 
-QUESTION = (
-    "This is a product photo. Reply with JSON only, no prose, in this shape: "
-    '{"category": str, "brand_text": str, "parts": [{"name": str, "color_hex": str, '
-    '"metallic": number 0-1, "roughness": number 0-1, "transparent": bool}], '
-    '"palette_hex": [str], "typography": str, "mood": [str]}'
-)
+from pipeline.meta import spark
+
+
+class Part(BaseModel):
+    name: str
+    color_hex: str = Field(description="#RRGGBB")
+    metallic: float = Field(ge=0, le=1)
+    roughness: float = Field(ge=0, le=1)
+    transparent: bool
+
+
+class ProductRead(BaseModel):
+    category: str
+    brand_text: str
+    parts: list[Part]
+    palette_hex: list[str]
+    typography: str
+    mood: list[str]
 
 
 def run() -> dict:
-    client = meta_client()
-    with timed() as t:
-        response = client.responses.create(
-            model=SPARK,
-            input=[{
-                "type": "message",
-                "role": "user",
-                "content": [
-                    {"type": "input_text", "text": QUESTION},
-                    {"type": "input_image", "image_url": data_url(product_photo())},
-                ],
-            }],
-        )
-    save_json("04_spark_vision.json", response.model_dump())
-
-    text = response.output_text.strip().removeprefix("```json").removesuffix("```").strip()
-    try:
-        parsed = json.loads(text)
-        valid = "yes"
-    except json.JSONDecodeError as e:
-        parsed, valid = text, f"no ({e})"
-    return {"latency_s": t.seconds, "valid_json": valid, "answer": json.dumps(parsed) if valid == "yes" else parsed}
+    r = spark.ask("This is a product photo. Describe the product for a 3D artist recreating it.",
+                  images=[product_photo()], schema=ProductRead)
+    read: ProductRead = r.data
+    return {"cached": r.cached, "category": read.category, "brand": read.brand_text,
+            "parts": ", ".join(f"{p.name} {p.color_hex} metal {p.metallic} rough {p.roughness}"
+                               f"{' clear' if p.transparent else ''}" for p in read.parts),
+            "palette": read.palette_hex, "typography": read.typography, "mood": read.mood}
 
 
 if __name__ == "__main__":
