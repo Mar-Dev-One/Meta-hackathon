@@ -99,6 +99,7 @@ A render blocks the Studio until it's done, and the server doesn't answer WebSoc
 - `pipeline/demos/ads.py`: five ads written by hand as `Storyboard`s for fictional brands: a perfume, a drinks can, a skincare jar, an olive oil, a serum. Test footage, fallback demos, and examples of what the director agent writes (`--export` writes them as JSON). `first_ad.py` renders the perfume one. Each ad is made inside a run folder.
 - `pipeline/runs.py`: run folders, `runs/<date>-<time>-<slug>/` (git-ignored): the inputs, `storyboard.json`, preview `frames/`, `final/<name>.mp4`, a `run.json` summary (status, time, model cost, outputs) and `log.jsonl`, every event with its time: each Studio command with its arguments, each model call with its cost, files saved, and the error if the run failed. `python -m pipeline.runs` lists runs, shows one, or replays it with its timing.
 - `pipeline/meta`: the Meta models as the agents call them: `spark.ask()` (text, images, answers checked against a JSON schema or pydantic model; `provider="baseten"` for Muse Spark Open), `spark.run_tools()` (tool calling), `sam.segment()` (full-size masks), `image.generate()`, `voice.transcribe()`. Every call is cached on disk by its request in `cache/meta` (git-ignored; rerunning costs nothing; `META_CACHE=off` to bypass), retried on rate limits and server errors, and recorded in `usage` with its tokens and cost. Failures raise `MetaError` with the server's message.
+- `pipeline/agents/analyst`: the brand analyst. `segment.py` finds the product in a photo with SAM 3.1 (the largest match of its category) and then its cap and label, keeping only matches on the product, cut to its mask; `overlay()` draws them over the photo. `python -m pipeline.agents.analyst.segment <photo> --category "perfume bottle"` writes the masks and the overlay into a run folder.
 - `pipeline/meta/smoke`: one test call to each model through those clients (`run_all.py`, `--fresh` to skip the cache).
 
 ## Tests
@@ -116,6 +117,7 @@ runs the timeline's tests (`Engine/tests/timeline_tests.c`: easing, sampling, ed
 - `pipeline/` is the Python side: the Studio client, finishing with ffmpeg, demos, the Meta model smoke tests
 - `Deps/` holds the engine headers (`Includes/PBR`) and prebuilt libraries (`Libs`)
 - `Assets/Shaders/shaders` holds the engine's shaders. They are copied to `<exe>/assets/shaders` at build time
+- `Assets/photos` holds product photos of fictional brands for testing the brand analyst, made with Muse Image by `scripts/sample_photos.py`
 - `Assets/models` and `Assets/hdri` hold the models and HDRI the demo scene loads. They are copied to `<exe>/assets` at build time
 - `docs/ROADMAP.md` is the plan
 
@@ -127,4 +129,5 @@ The engine (`PBR_Engine`, [AI-Powered-PBR-Renderer](https://github.com/Mar-Dev-O
 
 - `Engine/`: the Studio library (`Meta_Engine`): studio commands, the timeline and its tests, shot rendering to PNG and video, camera moves, lighting presets, product and backdrop models
 - `src/main.c`: the Studio program
-- `pipeline/`: the Studio client, the ffmpeg finishing pass, the hand-made ads, the Meta model smoke tests
+- `pipeline/`: the Studio client, the ffmpeg finishing pass, the hand-made ads, the Meta model clients and their smoke tests, the schemas, run folders, the brand analyst
+- `Assets/photos`: the test product photos (generated with Muse Image)
