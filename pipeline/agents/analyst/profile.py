@@ -131,7 +131,7 @@ def trace(seg: Segmentation, height: float) -> Traced:
     tolerance = max(1.0, TOLERANCE * height_px)
 
     cap = seg.parts.get("cap")
-    split = height_px if cap is None else min(max(cap.box[3] - top, 1), height_px - 1)
+    split = 0 if cap is None else min(max(cap.box[3] - top, 1), height_px - 1)
     pieces = [("body", split, height_px)] + ([("cap", 0, split)] if cap else [])
 
     product = np.asarray(seg.product.mask) > 127
