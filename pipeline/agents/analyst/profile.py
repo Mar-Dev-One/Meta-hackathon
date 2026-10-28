@@ -42,6 +42,12 @@ class Traced:
     bottom: int                                       # the photo row just below the product
     height: float                                     # meters
     meters_per_pixel: float
+    top: int = 0                                      # the photo row of the product's top
+    radii: np.ndarray | None = None                   # the smoothed half-width of each row from `top`, pixels
+
+    def radius_at(self, row: int) -> float:
+        """The product's half-width at a photo row, pixels."""
+        return float(self.radii[min(max(row - self.top, 0), len(self.radii) - 1)])
 
 
 def typical_height(category: str) -> float:
@@ -144,7 +150,7 @@ def trace(seg: Segmentation, height: float) -> Traced:
             under &= ~label
         parts.append(ProfilePart(name=name, profile=[[round(r * scale, 5), round(y * scale, 5)] for r, y in profile],
                                  color=_color(seg.image, under), roughness=0.3))
-    return Traced(parts, pixels, axis, bottom, height, scale)
+    return Traced(parts, pixels, axis, bottom, height, scale, top, half)
 
 
 def outline(seg: Segmentation, traced: Traced) -> Image.Image:
@@ -165,15 +171,17 @@ def outline(seg: Segmentation, traced: Traced) -> Image.Image:
     return out
 
 
-async def render(studio, traced: Traced, out_dir, width: int = 640, height: int = 960) -> tuple[str, dict]:
-    """The traced product alone on a light set, seen from the front at eye
-    level as in a product photo; the frame's path and the product's box in it."""
+async def render(studio, traced: Traced, out_dir, label: dict | None = None, width: int = 640,
+                 height: int = 960) -> tuple[str, dict]:
+    """The traced product (with `label`, product.create's label argument)
+    alone on a light set, seen from the front at eye level as in a product
+    photo; the frame's path and the product's box in it."""
     await studio.call("studio.reset")
     await studio.call("environment.set", ambient_strength=0.6, bloom=0.03, tonemap="neutral")
     await studio.call("render.set", antialiasing="taa", clear_color=[0.78, 0.78, 0.78])
     await studio.call("backdrop.create", kind="cyclorama", color="#D6D6D6", roughness=0.9)
     await studio.call("product.create", name="product", position=[0, 0, 0],
-                      parts=[p.model_dump(exclude_none=True) for p in traced.parts])
+                      parts=[p.model_dump(exclude_none=True) for p in traced.parts], **({"label": label} if label else {}))
     await studio.call("lighting.preset", subject="product", name="high_key")
     await studio.call("camera.move", move="static", subject="product", start=0, duration=1, fill=0.75,
                       elevation=4, fov_degrees=20, aspect=width / height)
@@ -210,9 +218,12 @@ if __name__ == "__main__":
     from pipeline.runs import Run
     from pipeline.studio import Studio
 
+    from .label import unroll
+    from .palette import palette, strip
     from .segment import segment
 
-    parser = argparse.ArgumentParser(description="Trace a product photo into a 3D product, rendered next to the photo.")
+    parser = argparse.ArgumentParser(description="Trace a product photo into a 3D product with its label, rendered "
+                                                 "next to the photo; and its palette.")
     parser.add_argument("photos", nargs="+")
     parser.add_argument("--category", action="append", help="per photo, in order (default: product)")
     args = parser.parse_args()
@@ -229,8 +240,21 @@ if __name__ == "__main__":
                     run.save_json("profile.json", {"height": traced.height, "parts": [
                         p.model_dump(exclude_none=True) for p in traced.parts]})
                     outline(seg, traced).save(run.path("outline.png"))
-                    path, bounds = await render(studio, traced, run.folder("frames"))
-                    side_by_side(seg, Image.open(path), bounds).save(run.path("compare.png"))
+                    cut = unroll(seg, traced)
+                    label = None
+                    if cut:
+                        cut.image.save(run.path("label.png"))
+                        label = cut.command(str(run.root / "label.png"))
+                        run.event("label", **label, size=cut.image.size)
+                    swatches = palette(seg)
+                    run.save_json("palette.json", [s.model_dump() for s in swatches])
+                    path, bounds = await render(studio, traced, run.folder("frames"), label)
+                    compare = side_by_side(seg, Image.open(path), bounds)
+                    colours = strip(swatches, compare.width)
+                    sheet = Image.new("RGB", (compare.width, compare.height + colours.height), (255, 255, 255))
+                    sheet.paste(compare, (0, 0))
+                    sheet.paste(colours, (0, compare.height))
+                    sheet.save(run.path("compare.png"))
                     run.output("compare", run.root / "compare.png")
                     print(run.root, [len(p.profile) for p in traced.parts], "points")
 
