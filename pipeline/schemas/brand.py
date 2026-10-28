@@ -38,7 +38,7 @@ class BrandProfile(Strict):
     product_name: str = Field("", description="the product's own name, if any")
     category: str = Field(description="perfume, beverage can, skincare jar, ...")
     template: Literal["perfume", "bottle", "jar", "can", "dropper"] | None = Field(
-        description="the Studio template closest to its shape; null when the traced profile is used")
+        None, description="the Studio template closest to its shape; null when the traced profile is used")
     height: float = Field(gt=0.005, le=5, description="real height in meters (estimated from the category)")
     profile_parts: list[ProfilePart] | None = Field(None, description="the shape traced from the photo's silhouette")
     materials: list[PartMaterial]

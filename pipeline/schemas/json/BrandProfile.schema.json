@@ -300,6 +300,7 @@
           "type": "null"
         }
       ],
+      "default": null,
       "description": "the Studio template closest to its shape; null when the traced profile is used",
       "title": "Template"
     },
@@ -400,7 +401,6 @@
   "required": [
     "brand",
     "category",
-    "template",
     "height",
     "materials",
     "palette",

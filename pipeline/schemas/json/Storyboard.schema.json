@@ -625,6 +625,7 @@
               "type": "null"
             }
           ],
+          "default": null,
           "description": "the shape; null with `profile_parts` for a shape traced from a photo",
           "title": "Template"
         },
@@ -694,9 +695,6 @@
           "default": null
         }
       },
-      "required": [
-        "template"
-      ],
       "title": "Product",
       "type": "object"
     },

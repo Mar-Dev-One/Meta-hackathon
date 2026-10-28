@@ -97,7 +97,7 @@ class ProfilePart(Strict):
 
 class Product(Strict):
     template: Literal["perfume", "bottle", "jar", "can", "dropper"] | None = Field(
-        description="the shape; null with `profile_parts` for a shape traced from a photo")
+        None, description="the shape; null with `profile_parts` for a shape traced from a photo")
     height: float | None = Field(None, gt=0.005, le=5, description="meters (templates have a typical size)")
     width: float | None = Field(None, gt=0.005, le=5, description="meters across at the widest")
     parts: dict[str, PartLook] = Field(default_factory=dict, description="template parts' looks by name: body, cap, lid, collar, bulb")
