@@ -29,7 +29,19 @@ class Call:
 
 
 _calls: list[Call] = []
+_listeners: list = []   # functions(Call), told of every call (an open run logs them)
 _lock = threading.Lock()
+
+
+def add_listener(fn) -> None:
+    with _lock:
+        _listeners.append(fn)
+
+
+def remove_listener(fn) -> None:
+    with _lock:
+        if fn in _listeners:
+            _listeners.remove(fn)
 
 
 def token_cost(model: str, input_tokens: int, cached_input_tokens: int, output_tokens: int) -> float:
@@ -44,6 +56,9 @@ def token_cost(model: str, input_tokens: int, cached_input_tokens: int, output_t
 def record(call: Call) -> Call:
     with _lock:
         _calls.append(call)
+        listeners = list(_listeners)
+    for fn in listeners:
+        fn(call)
     return call
 
 

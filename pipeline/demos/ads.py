@@ -3,7 +3,7 @@ data the director agent writes, built with the same builder
 (pipeline.studio.build). Test footage, fallback demos, and examples of a
 good storyboard.
 
-    python -m pipeline.demos.ads                      # every ad: pipeline/demos/out/<name>.mp4
+    python -m pipeline.demos.ads                      # every ad, each a run in runs/; the video also in pipeline/demos/out/<name>.mp4
     python -m pipeline.demos.ads fizzo kora           # some of them
     python -m pipeline.demos.ads --preview            # a few frames of each as PNGs, to check the look first
     python -m pipeline.demos.ads --list
@@ -16,12 +16,14 @@ the brand analyst will later cut them from product photos.
 import argparse
 import asyncio
 import json
+import shutil
 import time
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 from pipeline.encode import finish
+from pipeline.runs import Run
 from pipeline.schemas import (Backdrop, CameraMove, Environment, Label, Lighting, Look, PartLook, Pedestal, Product,
                               Shot, Storyboard, Title, Track)
 from pipeline.studio import Studio, build
@@ -236,25 +238,47 @@ def preview_times(sb: Storyboard) -> list[float]:
            [round(sb.duration - 0.2, 2)]
 
 
+async def make(studio: Studio, name: str, preview: bool, width: int, height: int, samples: int) -> Path:
+    """One ad as a run (pipeline/runs.py): its inputs, storyboard, every
+    Studio command, and its frames or video, in runs/<time>-<name>/. Returns
+    the run's folder."""
+    with Run.create(f"{name}{'-preview' if preview else ''}") as run:
+        run.watch(studio)
+        sb = storyboard_for(name)
+        run.event("brief", text=sb.brief, style=sb.style)
+        label = run.add_file(sb.product.label.image, "inputs/label.png")
+        sb = sb.model_copy(update={"product": sb.product.model_copy(
+            update={"label": sb.product.label.model_copy(update={"image": str(label)})})})
+        run.output("storyboard", run.save_json("storyboard.json", sb))
+
+        run.event("build", shots=len(sb.shots), duration=sb.duration)
+        length = await build(studio, sb)
+        if preview:
+            result = await studio.call("shot.preview", times=preview_times(sb), width=640, height=360,
+                                       out_dir=str(run.folder("frames")))
+            run.event("preview", frames=[f["path"] for f in result["frames"]])
+            run.output("frames", run.root / "frames")
+            return run.root
+
+        raw = run.path("final", "raw.mp4")
+        run.event("render", frames=round(length * sb.fps), width=width, height=height, samples=samples)
+        result = await studio.call("shot.render", video=str(raw), end=length - 1e-3, fps=sb.fps,
+                                   width=width, height=height, samples=samples)
+        run.event("rendered", frames=result["frames"], seconds=result["seconds"])
+        final = finish(raw, run.path("final", f"{name}.mp4"), fade_in=0.4, fade_out=0.6)
+        raw.unlink(missing_ok=True)
+        run.output("video", final)
+        shutil.copyfile(final, OUT / f"{name}.mp4")   # the latest of each, where it's easy to find
+        return run.root
+
+
 async def run(names: list[str], preview: bool, width: int, height: int, samples: int) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     async with Studio() as studio:
         for name in names:
-            sb = storyboard_for(name)
-            length = await build(studio, sb)
-            if preview:
-                result = await studio.call("shot.preview", times=preview_times(sb), width=640, height=360,
-                                           out_dir=str(OUT / "preview" / name))
-                print(f"{name}: {len(result['frames'])} frames in {OUT / 'preview' / name}")
-                continue
-
-            raw = OUT / f"{name}_raw.mp4"
             began = time.time()
-            result = await studio.call("shot.render", video=str(raw), end=length - 1e-3, fps=sb.fps,
-                                       width=width, height=height, samples=samples)
-            final = finish(raw, OUT / f"{name}.mp4", fade_in=0.4, fade_out=0.6)
-            raw.unlink(missing_ok=True)
-            print(f"{name}: {result['frames']} frames in {time.time() - began:.0f}s -> {final}")
+            folder = await make(studio, name, preview, width, height, samples)
+            print(f"{name}: {time.time() - began:.0f}s -> {folder}")
 
 
 def export(names: list[str]) -> None:

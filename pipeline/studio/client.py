@@ -37,6 +37,9 @@ class Studio:
         self.process: subprocess.Popen | None = None
         self.ws = None
         self._next_id = 0
+        # functions(method, params, seconds, error or None), told of every
+        # command once it's answered (a run logs them: pipeline.runs).
+        self.listeners: list = []
 
     @property
     def server_json(self) -> Path:
@@ -77,16 +80,21 @@ class Studio:
         """Runs one command; its result, or StudioError."""
         self._next_id += 1
         request_id = self._next_id
+        began = time.monotonic()
         await self.ws.send(json.dumps({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}))
         while True:
             reply = json.loads(await self.ws.recv())
-            if reply.get("id") != request_id:
-                continue   # a notification (scene.changed), not our reply
-            if "error" in reply:
-                error = reply["error"]
-                raise StudioError(method, (error.get("data") or {}).get("code", str(error.get("code"))),
-                                  error.get("message", ""))
-            return reply.get("result") or {}
+            if reply.get("id") == request_id:
+                break   # anything else is a notification (scene.changed), not our reply
+        error = None
+        if "error" in reply:
+            e = reply["error"]
+            error = StudioError(method, (e.get("data") or {}).get("code", str(e.get("code"))), e.get("message", ""))
+        for listener in self.listeners:
+            listener(method, params, round(time.monotonic() - began, 3), error)
+        if error:
+            raise error
+        return reply.get("result") or {}
 
     async def close(self) -> None:
         if self.ws:

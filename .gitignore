@@ -230,3 +230,6 @@ pipeline/**/out/
 
 # Cached Meta model answers (pipeline/meta/cache.py)
 cache/
+
+# Run folders (pipeline/runs.py)
+runs/
