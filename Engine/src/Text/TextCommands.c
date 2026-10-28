@@ -85,6 +85,43 @@ cmd_remove(void* user, command_context* ctx, const cJSON* args, cJSON** out_resu
     return text_remove(&s->texts, name) || set_error(error, error_size, "there's no text \"%s\"", name);
 }
 
+// Where a title would land in a width x height frame, without adding it:
+// an existing one (by name) with any fields changed, or a new one.
+static b8
+cmd_measure(void* user, command_context* ctx, const cJSON* args, cJSON** out_result, char* error, size_t error_size)
+{
+    (void)ctx;
+    studio*     s    = (studio*)user;
+    const char* name = NULL;
+    f32         width = 1920.0f, height = 1080.0f;
+    if (arg_string(args, "name", &name, error, error_size) < 0
+        || arg_number(args, "width", 16.0f, 8192.0f, &width, error, error_size) < 0
+        || arg_number(args, "height", 16.0f, 8192.0f, &height, error, error_size) < 0)
+        return false;
+
+    text_item  draft;
+    text_item* existing = name ? text_find(&s->texts, name) : NULL;
+    if (existing)
+        draft = *existing;
+    else
+        text_item_defaults(&draft, "measure");
+    if (!text_item_from_json(&s->texts, &draft, args, false, error, error_size))
+        return false;
+    if (!draft.text[0])
+        return set_error(error, error_size, "there's no \"text\" to measure");
+
+    f32 box[4];
+    if (!text_measure(&s->texts, &draft, width, height, box))
+        return set_error(error, error_size, "the %s font didn't load", draft.font);
+    f32 shares[4] = { box[0] / width, box[1] / height, box[2] / width, box[3] / height };
+    *out_result = cJSON_CreateObject();
+    json_add_floats(*out_result, "box_px", box, 4);
+    json_add_floats(*out_result, "box", shares, 4);
+    cJSON_AddBoolToObject(*out_result, "fits", box[0] >= 0.0f && box[1] >= 0.0f && box[0] + box[2] <= width
+                                                   && box[1] + box[3] <= height);
+    return true;
+}
+
 static b8
 cmd_get(void* user, command_context* ctx, const cJSON* args, cJSON** out_result, char* error, size_t error_size)
 {
@@ -127,6 +164,13 @@ static const cmd_arg REMOVE_ARGS[] = {
     { "name", "string", true, "the text to remove" },
 };
 
+static const cmd_arg MEASURE_ARGS[] = {
+    { "name", "string", false, "an existing text to start from (the other fields change it, for this measurement only)" },
+    { "width", "number", false, "the frame's width in pixels (default 1920)" },
+    { "height", "number", false, "the frame's height in pixels (default 1080)" },
+    TEXT_FIELD_ARGS,
+};
+
 #define COUNT_OF(a) (uint32)(sizeof(a) / sizeof((a)[0]))
 
 static const cmd_host_command TEXT_COMMANDS[] = {
@@ -137,6 +181,9 @@ static const cmd_host_command TEXT_COMMANDS[] = {
       SET_ARGS, COUNT_OF(SET_ARGS), false, cmd_set },
     { "text.remove", "Removes a title.", REMOVE_ARGS, COUNT_OF(REMOVE_ARGS), false, cmd_remove },
     { "text.get", "Every title, with its box in shares of the frame.", NULL, 0, false, cmd_get },
+    { "text.measure", "Where a title would land in a frame, without adding it: its box in pixels and in shares "
+                      "of the frame, and whether it fits inside.",
+      MEASURE_ARGS, COUNT_OF(MEASURE_ARGS), false, cmd_measure },
 };
 
 const cmd_host_command*

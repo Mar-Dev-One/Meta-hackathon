@@ -1,6 +1,8 @@
 """Ads written by hand: no AI, just Studio commands from a spec per ad. Test
 footage for the pipeline, a fallback demo, and the shape of what the
 director agent will write for itself (a scene, a shot list, titles).
+Titles are drawn by the Studio into the frames (so the critic sees them);
+ffmpeg only fades the whole ad in and out.
 
     python -m pipeline.demos.ads                      # every ad: pipeline/demos/out/<name>.mp4
     python -m pipeline.demos.ads fizzo kora           # some of them
@@ -18,11 +20,11 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from pipeline.encode import Title, finish
+from pipeline.encode import finish
 from pipeline.studio import Studio
 
 OUT = Path(__file__).resolve().parent / "out"
-FONTS = Path("C:/Windows/Fonts")   # system fonts for these tests; shipped demos use OFL fonts
+FONTS = Path("C:/Windows/Fonts")   # system fonts for the label artwork (the titles use the Studio's OFL fonts)
 
 # --- Labels ------------------------------------------------------------------------------
 
@@ -80,8 +82,8 @@ ADS = {
             dict(move="dolly", start=7, duration=3, azimuth=12, elevation=8, from_fill=0.55, to_fill=0.95),
             dict(move="static", start=10, duration=3, azimuth=0, elevation=2, fill=0.45),
         ],
-        titles=[Title("NOCTIS", 10.6, 13.0, size=0.075, y=0.83, tracking=3),
-                Title("NOIR ABSOLU", 11.0, 13.0, size=0.028, y=0.905, color="#c9a45c", tracking=2)],
+        titles=[dict(text="NOCTIS", start=10.6, font="serif", size=0.075, y=0.83, color="#ECE4D2", tracking=0.25),
+                dict(text="NOIR ABSOLU", start=11.0, font="sans", size=0.026, y=0.905, color="#C9A45C", tracking=0.3)],
     ),
 
     "fizzo": dict(
@@ -105,9 +107,9 @@ ADS = {
             dict(move="truck", start=4.5, duration=1.2, fill=0.8, elevation=5, ease="out"),
             dict(move="static", start=5.7, duration=2.3, elevation=6, fill=0.5),
         ],
-        titles=[Title("FIZZO", 6.0, 8.0, size=0.11, y=0.84, color="#ff5ab0", fade=0.25, font=FONTS / "arialbd.ttf"),
-                Title("ZERO SUGAR. ALL SPARK.", 6.3, 8.0, size=0.032, y=0.93, fade=0.25, tracking=1,
-                      font=FONTS / "bahnschrift.ttf")],
+        titles=[dict(text="FIZZO", start=6.0, font="condensed", size=0.13, y=0.82, color="#FF5AB0", tracking=0.04, fade=0.25),
+                dict(text="ZERO SUGAR. ALL SPARK.", start=6.3, font="sans_bold", size=0.03, y=0.93, color="#FFFFFF",
+                     tracking=0.12, fade=0.25)],
     ),
 
     "kora": dict(
@@ -129,8 +131,8 @@ ADS = {
             dict(move="orbit", start=6, duration=3, azimuth=-30, to_azimuth=20, elevation=28, fill=0.75),
             dict(move="static", start=9, duration=3, azimuth=0, elevation=10, fill=0.62),
         ],
-        titles=[Title("KORA", 9.4, 12.0, size=0.07, y=0.82, color="#3c342e", tracking=2),
-                Title("Skin, simply.", 9.8, 12.0, size=0.032, y=0.9, color="#8c7864")],
+        titles=[dict(text="KORA", start=9.4, font="serif", size=0.07, y=0.82, color="#3C342E", tracking=0.2),
+                dict(text="Skin, simply.", start=9.8, font="script", size=0.045, y=0.9, color="#8C7864")],
     ),
 
     "verde": dict(
@@ -150,8 +152,8 @@ ADS = {
             dict(move="orbit", start=3.5, duration=3.5, azimuth=40, to_azimuth=-20, elevation=5, fill=0.8),
             dict(move="static", start=7, duration=3, azimuth=-8, elevation=4, fill=0.66),
         ],
-        titles=[Title("VERDE", 7.3, 10.0, size=0.075, y=0.85, color="#e8dcb8", tracking=2),
-                Title("Pressed the day it's picked", 7.7, 10.0, size=0.03, y=0.92, color="#c9a45c")],
+        titles=[dict(text="VERDE", start=7.3, font="serif", size=0.075, y=0.83, color="#E8DCB8", tracking=0.2),
+                dict(text="Pressed the day it's picked", start=7.7, font="serif", size=0.032, y=0.915, color="#D9B86A")],
     ),
 
     "lumen": dict(
@@ -171,9 +173,8 @@ ADS = {
             dict(move="orbit", start=3, duration=4, azimuth=-70, to_azimuth=30, elevation=4, fill=0.65),
             dict(move="static", start=7, duration=3, azimuth=0, elevation=3, fill=0.48),
         ],
-        titles=[Title("LUMEN", 7.3, 10.0, size=0.075, y=0.84, color="#f2a24a", tracking=2,
-                      font=FONTS / "arialbd.ttf"),
-                Title("Glow, bottled.", 7.7, 10.0, size=0.032, y=0.92, color="#e8d8c0")],
+        titles=[dict(text="LUMEN", start=7.3, font="sans_bold", size=0.075, y=0.83, color="#F2A24A", tracking=0.18),
+                dict(text="Glow, bottled.", start=7.7, font="sans", size=0.03, y=0.915, color="#E8D8C0", tracking=0.05)],
     ),
 }
 
@@ -213,9 +214,27 @@ async def build(studio: Studio, name: str, ad: dict) -> float:
                               keys=[{"t": 0, "value": 0.0, "ease": "in"}, {"t": until, "value": intensity[light]}])
     for track in ad.get("tracks", []):
         await studio.call("timeline.set_track", **track)
+    await add_titles(studio, ad["titles"])
 
     last = ad["shots"][-1]
     return last["start"] + last["duration"]
+
+
+async def add_titles(studio: Studio, titles: list[dict]) -> None:
+    """The ad's titles, drawn by the Studio into the frames: each starts hidden
+    and at `start` fades in over `fade` seconds while rising 2% of the frame
+    and drawing its letters together. `y` is the title's vertical centre as a
+    share of the frame's height."""
+    for i, t in enumerate(titles):
+        name, fade, y = f"title_{i}", t.get("fade", 0.7), t["y"]
+        tracking = t.get("tracking", 0.0)
+        await studio.call("text.create", name=name, text=t["text"], font=t["font"], size=t["size"], anchor="center",
+                          offset=[0, y - 0.5], color=t["color"], tracking=tracking, opacity=0)
+        start, end = t["start"], t["start"] + fade
+        for field, a, b in (("opacity", 0, 1), ("offset", [0, y - 0.48], [0, y - 0.5]),
+                            ("tracking", tracking + 0.15, tracking)):
+            await studio.call("timeline.set_track", entity=name, component="Text", field=field,
+                              keys=[{"t": start, "value": a, "ease": "out"}, {"t": end + 0.3, "value": b}])
 
 
 def preview_times(ad: dict) -> list[float]:
@@ -241,7 +260,7 @@ async def run(names: list[str], preview: bool, width: int, height: int, samples:
             began = time.time()
             result = await studio.call("shot.render", video=str(raw), end=length - 1e-3, fps=30,
                                        width=width, height=height, samples=samples)
-            final = finish(raw, OUT / f"{name}.mp4", ad["titles"], fade_in=0.4, fade_out=0.6)
+            final = finish(raw, OUT / f"{name}.mp4", fade_in=0.4, fade_out=0.6)
             raw.unlink(missing_ok=True)
             print(f"{name}: {result['frames']} frames in {time.time() - began:.0f}s -> {final}")
 

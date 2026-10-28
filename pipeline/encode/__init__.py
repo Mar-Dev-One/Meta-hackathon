@@ -1,3 +1,3 @@
-from .finish import Title, finish, probe
+from .finish import finish, probe
 
-__all__ = ["Title", "finish", "probe"]
+__all__ = ["finish", "probe"]

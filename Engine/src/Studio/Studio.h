@@ -33,7 +33,7 @@
 //   timeline.*         keyframes (Timeline/TimelineCommands.c): set_track, add_key,
 //                      remove_track, clear, get, seek, play, pause
 //   shot.*             frames to PNG or video (Shot/ShotCommands.c): preview, render, bounds
-//   text.*             titles drawn over the picture (Text/TextCommands.c): create, set, remove, get
+//   text.*             titles drawn over the picture (Text/TextCommands.c): create, set, remove, get, measure
 //
 // Look-at: the active camera can be kept aimed at an entity (`look_at`, set
 // by camera.move to "<camera>_target"). After the timeline is written,

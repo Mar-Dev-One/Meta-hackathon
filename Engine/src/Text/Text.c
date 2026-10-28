@@ -27,8 +27,11 @@ typedef struct text_vertex
     f32 color[4];
 } text_vertex;
 
-// The distance field thresholded at the outline, softened over about one
-// screen pixel (fwidth), so text is crisp at every size.
+// The distance field thresholded at the outline. Each pixel takes 8 samples
+// spread over its footprint in the atlas and averages them: small text covers
+// many atlas texels per pixel, and one sample would skip thin strokes (they'd
+// break up) where 8 give them partial coverage. Each sample's edge is
+// softened by how much distance half a sample's footprint spans.
 static const char* VERTEX_SHADER =
     "#version 460 core\n"
     "layout(location = 0) in vec2 in_position;\n"
@@ -48,13 +51,23 @@ static const char* FRAGMENT_SHADER =
     "in vec2 v_uv;\n"
     "in vec4 v_color;\n"
     "uniform sampler2D u_atlas;\n"
+    "uniform float     u_atlas_size;          // texels across\n"
+    "uniform float     u_distance_per_texel;  // how far the stored distance moves per texel\n"
     "out vec4 frag_color;\n"
+    "const vec2 TAPS[8] = vec2[](vec2(-0.375, -0.125), vec2(0.125, -0.375), vec2(0.375, 0.125), vec2(-0.125, 0.375),\n"
+    "                            vec2(-0.25, 0.25), vec2(0.25, -0.25), vec2(0.0625, 0.0625), vec2(-0.0625, -0.4375));\n"
     "void main()\n"
     "{\n"
-    "    float d = texture(u_atlas, v_uv).r;\n"
-    "    float w = max(fwidth(d) * 0.75, 1e-4);\n"
-    "    float a = smoothstep(0.5 - w, 0.5 + w, d);\n"
-    "    frag_color = vec4(v_color.rgb, v_color.a * a);\n"
+    "    vec2  dx     = dFdx(v_uv), dy = dFdy(v_uv);\n"
+    "    float texels = max(length(dx), length(dy)) * u_atlas_size;   // atlas texels one pixel spans\n"
+    "    float w      = max(0.25 * texels * u_distance_per_texel, 0.004);\n"
+    "    float a      = 0.0;\n"
+    "    for (int i = 0; i < 8; ++i)\n"
+    "    {\n"
+    "        float d = texture(u_atlas, v_uv + TAPS[i].x * dx + TAPS[i].y * dy).r;\n"
+    "        a += smoothstep(0.5 - w, 0.5 + w, d);\n"
+    "    }\n"
+    "    frag_color = vec4(v_color.rgb, v_color.a * a / 8.0);\n"
     "}\n";
 
 // --- Items -----------------------------------------------------------------------------
@@ -509,6 +522,9 @@ text_layer_draw(text_layer* t, uint16 width, uint16 height)
     rhi_set_render_state((rhi_render_state){ .cull_back_faces = false, .blend_enabled = true, .depth_write = false });
     rhi_shader_bind(t->shader);
     rhi_shader_set_int(t->shader, "u_atlas", 0);
+    rhi_shader_set_float(t->shader, "u_atlas_size", (f32)FONT_ATLAS_SIZE);
+    // The stored byte covers FONT_SDF_PADDING texels each way over 0..255 (Font.h).
+    rhi_shader_set_float(t->shader, "u_distance_per_texel", 128.0f / FONT_SDF_PADDING / 255.0f);
 
     // One draw per font: its items' glyphs, then its atlas (uploaded after
     // layout, which may have added glyphs).
