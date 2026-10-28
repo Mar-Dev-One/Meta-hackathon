@@ -1,7 +1,10 @@
 #include "Font.h"
 
 #include "Common/Json.h"
+#include "Core/FileIO.h"
 #include "Core/Image.h"
+
+#include "cJSON.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +19,51 @@
 // The distance one step of the stored byte stands for: FONT_SDF_PADDING
 // pixels from the edge reaches 0 (outside) or 255 (inside).
 #define SDF_PIXEL_SCALE (128.0f / (f32)FONT_SDF_PADDING)
+
+static int
+compare_pairs(const void* a, const void* b)
+{
+    const font_kern_pair *x = a, *y = b;
+    if (x->left != y->left)
+        return x->left < y->left ? -1 : 1;
+    return (x->right > y->right) - (x->right < y->right);
+}
+
+// <font without its extension>.kern.json, if there is one: [[left, right, font units], ...].
+static void
+load_kerning(font* f, const char* font_path)
+{
+    char        path[1024];
+    const char* dot = strrchr(font_path, '.');
+    size_t      stem = dot ? (size_t)(dot - font_path) : strlen(font_path);
+    if (stem + sizeof(".kern.json") > sizeof(path))
+        return;
+    memcpy(path, font_path, stem);
+    memcpy(path + stem, ".kern.json", sizeof(".kern.json"));
+    if (!file_exists(path))
+        return;
+
+    char*  text  = file_read_to_string(path);
+    cJSON* json  = text ? cJSON_Parse(text) : NULL;
+    free(text);
+    const cJSON* pairs = cJSON_GetObjectItemCaseSensitive(json, "pairs");
+    int          count = cJSON_IsArray(pairs) ? cJSON_GetArraySize(pairs) : 0;
+    if (count > 0)
+    {
+        f->kerning = malloc((size_t)count * sizeof(*f->kerning));
+        const cJSON* pair;
+        cJSON_ArrayForEach(pair, pairs)
+        {
+            f32 v[3];
+            if (json_read_floats(pair, v, 3))
+                f->kerning[f->kerning_count++] = (font_kern_pair){ (uint32)v[0], (uint32)v[1], v[2] * f->scale };
+        }
+        qsort(f->kerning, f->kerning_count, sizeof(*f->kerning), compare_pairs);
+    }
+    if (!json || count == 0)
+        LOG_WARN("font: %s has no kerning pairs\n", path);
+    cJSON_Delete(json);
+}
 
 b8
 font_load(font* f, const char* name, const char* path, char* error, size_t error_size)
@@ -41,6 +89,7 @@ font_load(font* f, const char* name, const char* path, char* error, size_t error
     }
 
     f->scale = stbtt_ScaleForPixelHeight(f->info, FONT_SDF_PX);
+    load_kerning(f, path);
     int ascent, descent, line_gap;
     stbtt_GetFontVMetrics(f->info, &ascent, &descent, &line_gap);
     f->ascent   = (f32)ascent * f->scale;
@@ -58,6 +107,7 @@ font_load(font* f, const char* name, const char* path, char* error, size_t error
 void
 font_destroy(font* f)
 {
+    free(f->kerning);
     free(f->glyphs);
     free(f->atlas);
     free(f->info);
@@ -144,7 +194,11 @@ font_glyph_get(font* f, uint32 codepoint)
 f32
 font_kerning(const font* f, uint32 left, uint32 right)
 {
-    return (f32)stbtt_GetCodepointKernAdvance(f->info, (int)left, (int)right) * f->scale;
+    if (!f->kerning_count)
+        return (f32)stbtt_GetCodepointKernAdvance(f->info, (int)left, (int)right) * f->scale;
+    font_kern_pair        key   = { left, right, 0.0f };
+    const font_kern_pair* found = bsearch(&key, f->kerning, f->kerning_count, sizeof(key), compare_pairs);
+    return found ? found->adjust : 0.0f;
 }
 
 uint32

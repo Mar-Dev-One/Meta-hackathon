@@ -122,14 +122,15 @@ typedef struct font_case
 {
     const char* name;
     const char* file;
+    f32         av_units;   // the font's own "AV" kerning, in font units (fontTools)
 } font_case;
 
 static const font_case FONTS[] = {
-    { "serif", "PlayfairDisplay.ttf" },
-    { "sans", "Montserrat-Regular.ttf" },
-    { "sans_bold", "Montserrat-SemiBold.ttf" },
-    { "condensed", "Oswald.ttf" },
-    { "script", "GreatVibes-Regular.ttf" },
+    { "serif", "PlayfairDisplay.ttf", -50 },
+    { "sans", "Montserrat-Regular.ttf", -36 },
+    { "sans_bold", "Montserrat-SemiBold.ttf", -37 },
+    { "condensed", "Oswald.ttf", -39 },
+    { "script", "GreatVibes-Regular.ttf", 0 },
 };
 
 static void
@@ -152,9 +153,14 @@ test_font(const font_case* fc, b8* kerned)
     const font_glyph* space = font_glyph_get(&f, ' ');
     CHECK(space && space->w == 0 && space->advance > 0);
     CHECK(font_glyph_get(&f, 0x4E2D) == font_glyph_get(&f, '?'));   // a CJK character none of these fonts has
-    // stb_truetype reads only some kerning layouts; these fonts keep theirs in GPOS lookups it misses
-    // (see the 1.7 notes in docs/ROADMAP.md), so this is reported, not required.
-    if (font_kerning(&f, 'A', 'V') < 0)
+    // Kerning comes from <font>.kern.json (scripts/font_kerning.py): the values the font itself gives.
+    CHECK(f.kerning_count > 0);
+    f32 av = font_kerning(&f, 'A', 'V') / f.scale, to = font_kerning(&f, 'T', 'o') / f.scale;
+    CHECK(fabsf(av - fc->av_units) < 0.01f);
+    CHECK(to < 0.0f);
+    CHECK(font_kerning(&f, 'A', 'A') == 0.0f || f.kerning_count > 0);
+    printf("  %-10s kerning: %u pairs, AV %+.0f, To %+.0f (font units)\n", fc->name, f.kerning_count, av, to);
+    if (av < 0.0f)
         *kerned = true;
 
     // Everything printable in ASCII and Latin-1 fits, with room to spare.
@@ -195,7 +201,7 @@ int main(void)
     b8 kerned = false;
     for (size_t i = 0; i < sizeof(FONTS) / sizeof(FONTS[0]); ++i)
         test_font(&FONTS[i], &kerned);
-    printf("  kerning from stb_truetype: %s\n", kerned ? "found" : "none in these fonts");
+    CHECK(kerned);
     if (failures)
     {
         printf("%d check(s) failed\n", failures);

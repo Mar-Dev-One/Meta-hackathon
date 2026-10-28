@@ -22,6 +22,12 @@
 
 struct stbtt_fontinfo;
 
+typedef struct font_kern_pair
+{
+    uint32 left, right;   // codepoints
+    f32    adjust;        // pixels at FONT_SDF_PX
+} font_kern_pair;
+
 typedef struct font_glyph
 {
     uint32 codepoint;
@@ -49,10 +55,17 @@ typedef struct font
     font_glyph* glyphs;        // FONT_MAX_GLYPHS, allocated once: pointers to glyphs stay valid
     uint32      glyph_count;
     int32       ascii[128];   // index into glyphs for codepoints below 128; -1 = not made yet
+
+    // Kerning from the font's <name>.kern.json (scripts/font_kerning.py),
+    // sorted by (left, right); none = stb_truetype's own (which misses most
+    // modern fonts' GPOS kerning).
+    font_kern_pair* kerning;
+    uint32          kerning_count;
 } font;
 
-// Loads a TrueType / OpenType (glyf outlines) font file. False (error
-// filled) if it can't be read or isn't a font.
+// Loads a TrueType / OpenType (glyf outlines) font file, and its kerning
+// from <name>.kern.json beside it if there is one. False (error filled) if
+// the font can't be read or isn't a font.
 b8   font_load(font* f, const char* name, const char* path, char* error, size_t error_size);
 void font_destroy(font* f);
 
@@ -62,7 +75,7 @@ void font_destroy(font* f);
 const font_glyph* font_glyph_get(font* f, uint32 codepoint);
 
 // Extra space between two characters drawn side by side ("AV" closer
-// together than "AB"), usually negative.
+// together than "AB"), usually negative; pixels at FONT_SDF_PX.
 f32 font_kerning(const font* f, uint32 left, uint32 right);
 
 // The next character of a UTF-8 string, advancing *s past it. 0 at the end;

@@ -4,3 +4,4 @@ requests>=2.31
 pillow>=10.0
 meta-sam-parser>=0.1
 websockets>=12
+fonttools>=4.50
