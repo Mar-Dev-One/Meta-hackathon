@@ -55,7 +55,8 @@ target_link_libraries(Studio PRIVATE Meta_Engine)
 # Everything the program loads at runtime goes in assets/ next to it, so the
 # build folder runs on its own and can be copied elsewhere:
 #   assets/shaders          the engine's root (Core/Paths.h)
-#   assets/models, /hdri    the project root; main.c sets it
+#   assets/models, /hdri,   the project root; main.c sets it
+#   /fonts
 add_custom_command(TARGET Studio POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Shaders/shaders
@@ -66,6 +67,9 @@ add_custom_command(TARGET Studio POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/Assets/hdri
             $<TARGET_FILE_DIR:Studio>/assets/hdri
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/Assets/fonts
+            $<TARGET_FILE_DIR:Studio>/assets/fonts
 )
 
 # vcruntime140.dll goes next to the program too: Windows 10/11 ship the rest

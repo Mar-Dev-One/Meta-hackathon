@@ -15,10 +15,11 @@ add_library(Meta_Engine STATIC
     src/Studio/Lighting.c
     src/Studio/Studio.c
     src/Studio/StudioCommands.c
+    src/Text/Font.c
     src/Timeline/Timeline.c
     src/Timeline/TimelineCommands.c
 )
-target_include_directories(Meta_Engine PUBLIC src)
+target_include_directories(Meta_Engine PUBLIC src PRIVATE deps)   # deps: stb_truetype, private to Text/Font.c
 target_link_libraries(Meta_Engine PUBLIC PBR_Engine)
 
 # --- Tests: ctest --test-dir build -C Release ---------------------------------
@@ -26,3 +27,12 @@ target_link_libraries(Meta_Engine PUBLIC PBR_Engine)
 add_executable(Timeline_Tests tests/timeline_tests.c)
 target_link_libraries(Timeline_Tests PRIVATE Meta_Engine)
 add_test(NAME timeline COMMAND Timeline_Tests)
+
+# Loads the fonts from Assets/fonts; writes atlases and sample text to look at.
+add_executable(Text_Tests tests/text_tests.c)
+target_link_libraries(Text_Tests PRIVATE Meta_Engine)
+target_compile_definitions(Text_Tests PRIVATE
+    FONT_DIR="${PROJECT_SOURCE_DIR}/Assets/fonts"
+    OUT_DIR="${CMAKE_CURRENT_BINARY_DIR}/text_test_out")
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/text_test_out)
+add_test(NAME text COMMAND Text_Tests)
