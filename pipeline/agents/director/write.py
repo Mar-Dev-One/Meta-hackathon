@@ -33,6 +33,7 @@ TITLE_DELAY = 0.4         # the name appears at least this long after the hero s
 TITLE_SEEN = 0.8          # ... and at least this long before the end
 MAX_TITLES = 2            # titles stay on once in, so this many are on screen together
 TITLE_BANDS = ((0.0, 0.2), (0.72, 1.0))   # where a title's centre may be (above or below the product)
+TITLE_CLEAR = 0.02        # of the frame's height between a title's box and the product (centred, `fill` tall)
 PEDESTAL_WIDTH = (1.2, 7.0)   # a pedestal's width, in product widths: wider than it, not a dance floor
 PEDESTAL_HEIGHT = 1.5         # at most this many product heights tall, or it upstages the product
 
@@ -182,9 +183,19 @@ def problems(sb: Storyboard, profile: BrandProfile, seconds: float) -> list[str]
     return out
 
 
+def shot_at(sb: Storyboard, t: float) -> Shot:
+    """The shot on screen at `t` seconds."""
+    for start, shot in zip(sb.shot_starts(), sb.shots):
+        if t < start + shot.duration:
+            return shot
+    return sb.shots[-1]
+
+
 async def title_problems(studio, sb: Storyboard) -> list[str]:
-    """Titles that don't fit the frame or overlap, as the Studio measures
-    them at the ad's frame size (placed as build() places them)."""
+    """Titles that don't fit the frame, overlap each other or the product
+    (centred in the frame, `fill` of its height in the shot the title
+    appears in), as the Studio measures them at the ad's frame size (placed
+    as build() places them)."""
     width, height = FRAMES[sb.aspect]
     out, boxes = [], []
     for t in sb.titles:
@@ -198,6 +209,13 @@ async def title_problems(studio, sb: Storyboard) -> list[str]:
             if y < oy + oh and oy < y + h and x < ox + ow and ox < x + w:
                 out.append(f"titles {other!r} and {t.text!r} overlap: move them apart vertically")
         boxes.append((t.text, (x, y, w, h)))
+        shot = shot_at(sb, t.start)
+        fill = max(f for f in (shot.camera.fill, shot.camera.from_fill, shot.camera.to_fill) if f is not None)
+        top, bottom = 0.5 - 0.5 * fill - TITLE_CLEAR, 0.5 + 0.5 * fill + TITLE_CLEAR
+        if y < bottom and top < y + h:
+            out.append(f"title {t.text!r} (y {y:.2f} to {y + h:.2f} of the frame) is over the product, which "
+                       f"fills {top + TITLE_CLEAR:.2f} to {bottom - TITLE_CLEAR:.2f} in {shot.id} (fill {fill:g}): "
+                       f"lower that shot's fill or move the title clear of it")
     return out
 
 

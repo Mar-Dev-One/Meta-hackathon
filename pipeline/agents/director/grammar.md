@@ -21,7 +21,7 @@ Writes a shot's camera move as keys: the camera keeps the subject framed and aim
 The settings, as the Studio describes them:
 
 - `ease`: linear, in, out or in_out (default)
-- `fill`: how much of the frame's height the subject fills, 0.05 to 5 (default 0.6)
+- `fill`: how much of the frame's height the subject fills, as seen from the camera's elevation, 0.05 to 5 (default 0.6); up to 0.97 it's whole in the frame, over that it's cropped
 - `azimuth`: degrees around the subject: 0 = front (+Z), 90 = its right (+X) (default 0)
 - `elevation`: degrees above the subject, -85 to 85 (default 10)
 - `fov_degrees`: vertical field of view (default 30)
@@ -112,7 +112,7 @@ Keys on any number field of an entity, eased between. The useful one: the produc
 - Glass (a see-through product) shows what's behind it: on a dark set, give the light a `glow` (about 2), a warm
   pool on the wall behind, so the glass lights up in its liquid's colour. It's behind the product as seen from
   the front: keep glass shots within about 35 degrees of azimuth 0, or the glass turns dark.
-- The last shot is the hero: static, from the front (azimuth near 0), fill 0.45-0.6, with the brand
+- The last shot is the hero: static, from the front (azimuth near 0), fill 0.4-0.5 (room for the name), with the brand
   name as a title over it. It lasts at least 2.5 s and the name appears at least 0.4 s into it.
 - Titles: the brand name in the brand's font from the brand profile (size 0.06-0.13), an optional tagline
   (0.025-0.035) under it; placed under the product (y 0.8-0.93) so they don't cover it; at most 2 on screen.

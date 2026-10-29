@@ -147,7 +147,7 @@ class CameraMove(Strict):
         description="static: holds; orbit: circles it; dolly: pushes in/out; crane: rises or drops; "
                     "truck: slides past; reveal: aim pans onto it; zoom: lens only")
     ease: Ease = "in_out"
-    fill: float = Field(0.6, ge=0.05, le=5, description="share of the frame the product fills; 0.45 wide, 0.6 medium, 0.9 close")
+    fill: float = Field(0.6, ge=0.05, le=5, description="share of the frame's height the product fills; 0.45 wide, 0.6 medium, 0.9 close, over 0.97 crops it (a close-up)")
     azimuth: float = Field(0, ge=-360, le=360, description="degrees around: 0 front, 90 its right, -90 its left")
     elevation: float = Field(8, ge=-85, le=85, description="degrees above; low angles (2-8) feel heroic")
     fov_degrees: float = Field(30, ge=1, le=179, description="vertical lens angle; 30 is a product lens")

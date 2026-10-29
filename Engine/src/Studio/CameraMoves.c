@@ -9,13 +9,15 @@
 // move that starts where another ends is a cut: the last key sits just
 // before the end (MOVE_END_GAP), the next move's first key at its start.
 //
-// Framing: the subject's bounding sphere fills `fill` of the frame's height
-// (0.6 by default), and its width -- products are round, spun from a
-// profile, so that's its widest diameter from any side -- at most `fill` of
-// the frame's width; seen from `azimuth` degrees around it (0 = from the
-// front, +Z; 90 = from its right, +X) and `elevation` degrees above it. In a
-// landscape or square frame the height decides; in a vertical one a squat
-// product fills the narrow width instead of shrinking to fit its sphere.
+// Framing: the subject fills `fill` of the frame's height (0.6 by default)
+// as seen from `elevation` degrees above it -- its height, plus the top and
+// bottom faces that tilt into view from above -- and its width -- products
+// are round, spun from a profile, so that's its widest diameter from any
+// side -- at most `fill` of the frame's width; seen from `azimuth` degrees
+// around it (0 = from the front, +Z; 90 = from its right, +X). In a landscape
+// or square frame the height usually decides; in a vertical one a squat
+// product fills the narrow width. Up to 0.97 nothing of it is cut; over
+// that, it's cropped (a close-up on the label or cap).
 //
 // Focus: two more tracks on the camera, its aperture (the move's `aperture`,
 // 0 = all sharp) and its focus distance, keyed with every pose at the depth
@@ -73,6 +75,7 @@ typedef struct move
     vec3 center;   // the subject's bounding sphere
     f32  radius;
     f32  half_width;  // half its widest horizontal size
+    f32  half_height; // half its height
     f32  near_side;   // how far its near surface is in front of its centre (half its horizontal size)
     f32  aperture;    // f-number; 0 = no depth of field
 
@@ -81,14 +84,65 @@ typedef struct move
     int reveal_from;   // REVEAL_NAMES' index
 } move;
 
-// How far from the subject's centre its bounding sphere fills `fill` of the
-// frame's height and its width no more than `fill` of the frame's width.
+#define FRAMING_RIM_POINTS 24   // per rim circle
+#define FRAMING_STEPS      40   // bisection steps for the distance
+#define FRAMING_INSIDE     0.97f   // up to this fill, no edge of it leaves the frame
+
+// Whether the subject, as a cylinder (its top and bottom rims), seen from
+// `distance` away and `elevation` degrees above, aimed at its centre, spans
+// no more than `fill` of the frame's height and of its width. Azimuth
+// doesn't matter: it's round.
+static b8
+framing_fits(const move* m, f32 distance, f32 el, f32 fill, f32 tan_v, f32 tan_h)
+{
+    // The camera at (0, d sin el, d cos el) from the centre, looking at it.
+    f32 cy = distance * sinf(el), cz = distance * cosf(el);
+    f32 fy = -sinf(el), fz = -cosf(el);   // forward
+    f32 uy = cosf(el), uz = -sinf(el);    // up (right is +X)
+    f32 v0 = INFINITY, v1 = -INFINITY, h0 = INFINITY, h1 = -INFINITY;
+    for (int rim = 0; rim < 2; ++rim)
+    {
+        f32 y = rim ? m->half_height : -m->half_height;
+        for (int i = 0; i < FRAMING_RIM_POINTS; ++i)
+        {
+            f32 a = 2.0f * GLM_PIf * (f32)i / FRAMING_RIM_POINTS;
+            f32 x = m->half_width * cosf(a), z = m->half_width * sinf(a);
+            f32 dy = y - cy, dz = z - cz;
+            f32 depth = dy * fy + dz * fz;
+            if (depth <= 1e-4f)
+                return false;   // the camera is inside it
+            f32 v = (dy * uy + dz * uz) / depth, h = x / depth;
+            v0 = fminf(v0, v); v1 = fmaxf(v1, v);
+            h0 = fminf(h0, h); h1 = fmaxf(h1, h);
+        }
+    }
+    // Aimed at its centre, the outline isn't centred from above: each edge
+    // also stays inside the frame, unless `fill` asks for a crop.
+    f32 edge = fmaxf(fill, FRAMING_INSIDE);
+    return v1 - v0 <= 2.0f * fill * tan_v && h1 - h0 <= 2.0f * fill * tan_h
+        && fmaxf(-v0, v1) <= edge * tan_v && fmaxf(-h0, h1) <= edge * tan_h;
+}
+
+// How far from the subject's centre, seen from `elevation` degrees above,
+// its outline fills `fill` of the frame's height (or `fill` of its width, if
+// that's reached first): seen from above, its top and bottom faces tilt into
+// view, and its near side looks bigger than its far side.
 static f32
-framing_distance(const move* m, f32 fill, f32 fov)
+framing_distance(const move* m, f32 fill, f32 fov, f32 elevation)
 {
     f32 tan_v = tanf(0.5f * fov * DEG_TO_RAD);
     f32 tan_h = tan_v * m->aspect;
-    return fmaxf(m->radius / (fill * tan_v), m->half_width / (fill * tan_h));
+    f32 el    = fabsf(elevation) * DEG_TO_RAD;
+    f32 near  = 0.0f, far = 1.0f + 4.0f * m->radius / (fill * tan_v);   // far always fits
+    for (int i = 0; i < FRAMING_STEPS; ++i)
+    {
+        f32 mid = 0.5f * (near + far);
+        if (framing_fits(m, mid, el, fill, tan_v, tan_h))
+            far = mid;
+        else
+            near = mid;
+    }
+    return far;
 }
 
 // A point `distance` from `center`, `azimuth` degrees around and `elevation` degrees up.
@@ -118,7 +172,7 @@ pose(const move* m, f32 u, vec3 position, vec3 target, f32* fov)
         default: break;
     }
     // A zoom keeps the camera where the end lens frames the subject.
-    around(m->center, framing_distance(m, fill, m->kind == MOVE_ZOOM ? m->to_fov : *fov), az, el, position);
+    around(m->center, framing_distance(m, fill, m->kind == MOVE_ZOOM ? m->to_fov : *fov, el), az, el, position);
 
     if (m->kind == MOVE_TRUCK)
     {
@@ -328,6 +382,7 @@ cmd_camera_move(void* user, command_context* ctx, const cJSON* args, cJSON** out
     m.radius    = fmaxf(0.5f * glm_vec3_distance(lo, hi), 1e-3f);
     m.near_side  = 0.25f * ((hi[0] - lo[0]) + (hi[2] - lo[2]));
     m.half_width = 0.5f * fmaxf(hi[0] - lo[0], hi[2] - lo[2]);
+    m.half_height = 0.5f * (hi[1] - lo[1]);
     if (!cJSON_GetObjectItemCaseSensitive(args, "travel"))
         m.travel = 2.0f * m.radius;
 
@@ -355,7 +410,8 @@ cmd_camera_move(void* user, command_context* ctx, const cJSON* args, cJSON** out
     cJSON_AddNumberToObject(*out_result, "keys", tracks.keys);
     cJSON_AddNumberToObject(*out_result, "subject_radius", json_round6(m.radius));
     cJSON_AddNumberToObject(*out_result, "distance", json_round6(framing_distance(&m, m.kind == MOVE_DOLLY ? m.from_fill : m.fill,
-                                                                                   m.kind == MOVE_ZOOM ? m.to_fov : m.fov)));
+                                                                                   m.kind == MOVE_ZOOM ? m.to_fov : m.fov,
+                                                                                   m.kind == MOVE_CRANE ? m.from_elevation : m.elevation)));
     return true;
 }
 
@@ -368,7 +424,8 @@ static const cmd_arg MOVE_ARGS[] = {
     { "start", "number", false, "seconds (default 0); keys already in [start, start + duration) are replaced" },
     { "ease", "string", false, "linear, in, out or in_out (default)" },
     { "camera", "string", false, "the Camera entity (default the active one, or \"camera\"); created if missing" },
-    { "fill", "number", false, "how much of the frame's height the subject fills, 0.05 to 5 (default 0.6)" },
+    { "fill", "number", false, "how much of the frame's height the subject fills, as seen from the camera's elevation, "
+                               "0.05 to 5 (default 0.6); up to 0.97 it's whole in the frame, over that it's cropped" },
     { "azimuth", "number", false, "degrees around the subject: 0 = front (+Z), 90 = its right (+X) (default 0)" },
     { "elevation", "number", false, "degrees above the subject, -85 to 85 (default 10)" },
     { "fov_degrees", "number", false, "vertical field of view (default 30)" },

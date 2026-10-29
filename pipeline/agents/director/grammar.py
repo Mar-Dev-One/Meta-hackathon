@@ -55,7 +55,7 @@ CRAFT = """\
 - Glass (a see-through product) shows what's behind it: on a dark set, give the light a `glow` (about 2), a warm
   pool on the wall behind, so the glass lights up in its liquid's colour. It's behind the product as seen from
   the front: keep glass shots within about 35 degrees of azimuth 0, or the glass turns dark.
-- The last shot is the hero: static, from the front (azimuth near 0), fill 0.45-0.6, with the brand
+- The last shot is the hero: static, from the front (azimuth near 0), fill 0.4-0.5 (room for the name), with the brand
   name as a title over it. It lasts at least 2.5 s and the name appears at least 0.4 s into it.
 - Titles: the brand name in the brand's font from the brand profile (size 0.06-0.13), an optional tagline
   (0.025-0.035) under it; placed under the product (y 0.8-0.93) so they don't cover it; at most 2 on screen.
