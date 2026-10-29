@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio</title>
+<style>
+  :root {
+    --bg: #0f1012; --panel: #17181b; --panel-2: #1e2024; --line: #2a2c31; --text: #e8e6e3; --dim: #9a9790;
+    --accent: #e0b96a; --pass: #4fb37a; --warn: #d9a03f; --fail: #d45b5b; --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  a { color: var(--accent); }
+  button, input, textarea, select { font: inherit; color: var(--text); }
+  .layout { display: grid; grid-template-columns: 330px 1fr; min-height: 100vh; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 18px; display: flex; flex-direction: column; gap: 18px; }
+  main { padding: 22px 28px 60px; display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  h1 { font-size: 18px; margin: 0; letter-spacing: .02em; }
+  h1 span { color: var(--accent); }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--dim); margin: 0 0 12px; font-weight: 600; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+  .hidden { display: none !important; }
+  label.field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--dim); }
+  input[type=text], textarea, select { background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; }
+  textarea { resize: vertical; min-height: 70px; }
+  .drop { border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 14px; text-align: center; color: var(--dim); cursor: pointer; }
+  .drop.over { border-color: var(--accent); color: var(--text); }
+  .drop img { max-width: 100%; max-height: 140px; border-radius: 6px; display: block; margin: 0 auto 6px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .toggle { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+  .btn { background: var(--accent); color: #18140b; border: 0; border-radius: 7px; padding: 9px 14px; font-weight: 600; cursor: pointer; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); font-weight: 500; }
+  .runs { display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 120px; }
+  .run { padding: 8px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid transparent; cursor: pointer; }
+  .run:hover, .run.on { border-color: var(--accent); }
+  .run .id { font-size: 11px; color: var(--dim); font-family: ui-monospace, monospace; }
+  .run .brief { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); color: var(--dim); }
+  .pill.done, .pill.pass { color: var(--pass); border-color: #2f5e43; }
+  .pill.running, .pill.queued { color: var(--accent); border-color: #6b5631; }
+  .pill.failed, .pill.stopped, .pill.fail { color: var(--fail); border-color: #6a3434; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .head .brief { font-size: 20px; max-width: 70ch; }
+  .meta { color: var(--dim); font-size: 12px; }
+  .empty { color: var(--dim); text-align: center; padding: 70px 0; }
+  .profile { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 18px; }
+  .shots-img { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+  .shots-img figure { margin: 0; }
+  .shots-img img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; border-radius: 6px; }
+  figcaption { font-size: 11px; color: var(--dim); text-align: center; margin-top: 3px; }
+  .swatches { display: flex; border-radius: 7px; overflow: hidden; height: 34px; margin: 6px 0 10px; }
+  .swatch { flex-basis: 0; display: flex; align-items: flex-end; padding: 3px 5px; font-size: 10px; font-family: ui-monospace, monospace; }
+  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; font-size: 13px; }
+  .kv dt { color: var(--dim); }
+  .kv dd { margin: 0; }
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); }
+  .tag.no { color: #e9a3a3; border-color: #4d2a2a; }
+  .strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+  .shot { flex: 0 0 190px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; }
+  .shot .top { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); }
+  .shot .move { color: var(--accent); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: .08em; margin: 4px 0; }
+  .shot .intent { font-size: 13px; }
+  .timebar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin: 12px 0 2px; gap: 2px; }
+  .timebar div { background: var(--line); }
+  table.scores { border-collapse: separate; border-spacing: 4px; font-size: 13px; }
+  table.scores th { color: var(--dim); font-weight: 500; font-size: 12px; padding: 2px 6px; text-align: center; }
+  table.scores th.r { text-align: left; }
+  table.scores td.cell { width: 52px; height: 36px; text-align: center; border-radius: 7px; cursor: pointer; font-weight: 700; font-variant-numeric: tabular-nums; }
+  td.cell.pass { background: #1f3a2a; color: #8fe0ad; }
+  td.cell.warn { background: #3d3220; color: #f1c77d; }
+  td.cell.fail { background: #3f2222; color: #f19a9a; }
+  td.cell.wait { background: var(--panel-2); color: var(--dim); font-weight: 400; }
+  td.cell.sel { outline: 2px solid var(--accent); }
+  td.verdict { padding-left: 8px; }
+  .changes { margin: 4px 0 0 4px; padding-left: 16px; color: var(--dim); font-size: 12px; font-family: ui-monospace, monospace; }
+  .issues { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .issue { margin: 0 0 10px; }
+  .issue .sev { font-size: 11px; text-transform: uppercase; font-weight: 700; margin-right: 6px; }
+  .issue .sev.major { color: var(--fail); }
+  .issue .sev.minor { color: var(--warn); }
+  .issue code { display: block; color: var(--accent); font-size: 12px; margin-top: 2px; }
+  .sheets { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 12px; }
+  .sheets img, .frames img { width: 100%; border-radius: 6px; border: 1px solid var(--line); cursor: zoom-in; }
+  .frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+  .videos { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+  .videos figure { margin: 0; }
+  .videos video { max-height: 420px; max-width: 100%; border-radius: 8px; background: #000; display: block; }
+  .log { font-family: ui-monospace, monospace; font-size: 12px; max-height: 280px; overflow: auto; color: var(--dim); }
+  .log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log b { color: var(--text); font-weight: 600; }
+  .zoom { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; z-index: 9; cursor: zoom-out; }
+  .zoom img { max-width: 94vw; max-height: 94vh; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } aside { border-right: 0; } .profile { grid-template-columns: 1fr; } main { padding: 16px; } }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <h1>Studio <span>·</span> ad from a photo</h1>
+    <form id="form" class="card" style="display:flex;flex-direction:column;gap:12px">
+      <div id="drop" class="drop">Drop a product photo, or click<input id="photo" type="file" accept="image/png,image/jpeg,image/webp" hidden></div>
+      <label class="field">Brief<textarea id="brief" placeholder="Luxury perfume ad, dark and moody, 15 seconds." required></textarea></label>
+      <label class="field">What it is<input id="category" type="text" placeholder="perfume bottle"></label>
+      <div class="row">
+        <label class="toggle"><input id="critic" type="checkbox" checked> critic loop</label>
+        <label class="toggle"><input id="video" type="checkbox" checked> video</label>
+      </div>
+      <button class="btn" id="go" type="submit">Make the ad</button>
+      <div id="formMsg" class="meta"></div>
+    </form>
+    <div>
+      <div class="head"><h2>Runs</h2>
+        <label class="meta">open <select id="speed">
+          <option value="0">all at once</option><option value="1">replay 1×</option>
+          <option value="2">replay 2×</option><option value="4">replay 4×</option></select></label>
+      </div>
+      <div id="runs" class="runs"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div id="empty" class="empty">Start an ad, or open a run.</div>
+
+    <section id="top" class="hidden">
+      <div class="head">
+        <div class="brief" id="briefText"></div>
+        <div class="row"><span id="status" class="pill"></span><span id="cost" class="meta"></span></div>
+      </div>
+      <div class="meta" id="runId"></div>
+    </section>
+
+    <section id="profileCard" class="card hidden">
+      <h2>Brand profile</h2>
+      <div class="profile">
+        <div class="shots-img" id="profileImgs"></div>
+        <div>
+          <div style="font-size:22px;font-weight:600" id="brandName"></div>
+          <div class="meta" id="brandSub"></div>
+          <div class="swatches" id="swatches"></div>
+          <dl class="kv" id="brandKv"></dl>
+        </div>
+      </div>
+    </section>
+
+    <section id="storyCard" class="card hidden">
+      <div class="head"><h2>Storyboard</h2><span class="meta" id="storyMeta"></span></div>
+      <div class="timebar" id="timebar"></div>
+      <div class="strip" id="strip"></div>
+      <div class="meta" id="titles" style="margin-top:10px"></div>
+    </section>
+
+    <section id="criticCard" class="card hidden">
+      <div class="head"><h2>Critic</h2><span class="meta" id="criticMeta"></span></div>
+      <div style="overflow-x:auto"><table class="scores" id="scores"></table></div>
+      <div id="issues" class="issues hidden"></div>
+      <div class="sheets" id="sheets"></div>
+    </section>
+
+    <section id="previewCard" class="card hidden">
+      <h2>Preview</h2>
+      <div class="frames" id="frames"></div>
+    </section>
+
+    <section id="finalCard" class="card hidden">
+      <h2>The ad</h2>
+      <div class="videos" id="videos"></div>
+    </section>
+
+    <section id="logCard" class="card hidden">
+      <div class="head"><h2>Log</h2><span class="meta" id="logMeta"></span></div>
+      <div class="log" id="log"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k);
+  return e;
+};
+const PASS = 7;
+let run = null, source = null, state = null;
+
+// --- Files -------------------------------------------------------------------
+const file = (path) => `/runs/${run}/files/${String(path).replaceAll("\\", "/")}`;
+const json = async (path) => { const r = await fetch(file(path)); if (!r.ok) throw new Error(path); return r.json(); };
+const img = (path, caption) => {
+  const i = el("img", { src: file(path) + "?" + Date.now(), loading: "lazy", alt: caption || path, onclick: () => zoom(i.src) });
+  i.onerror = () => i.closest("figure")?.remove();
+  return caption ? el("figure", {}, i, el("figcaption", { text: caption })) : i;
+};
+const zoom = (src) => { const z = el("div", { class: "zoom", onclick: () => z.remove() }, el("img", { src })); document.body.append(z); };
+const show = (id, on = true) => $(id).classList.toggle("hidden", !on);
+const scoreClass = (low, passed) => passed ? "pass" : low >= PASS - 1 ? "warn" : "fail";
+const low = (scores) => Math.min(...Object.values(scores));
+
+// --- Runs list -----------------------------------------------------------------
+async function loadRuns() {
+  const runs = await (await fetch("/runs?limit=60")).json();
+  $("runs").replaceChildren(...runs.map((r) => el("div", { class: "run" + (r.id === run ? " on" : ""), onclick: () => open(r.id) },
+    el("div", { class: "row", style: "justify-content:space-between" }, el("span", { class: "id", text: r.id }), el("span", { class: "pill " + r.status, text: r.status })),
+    el("div", { class: "brief", text: r.brief || "(no brief)" }))));
+}
+
+// --- Opening a run -------------------------------------------------------------
+function reset() {
+  state = { rounds: {}, shots: [], ad: {}, cost: 0, studio: 0, events: 0, selected: null, videos: new Set() };
+  for (const id of ["profileImgs", "swatches", "brandKv", "strip", "timebar", "scores", "sheets", "frames", "videos", "log", "issues"]) $(id).replaceChildren();
+  for (const id of ["profileCard", "storyCard", "criticCard", "previewCard", "finalCard", "issues"]) show(id, false);
+  $("titles").textContent = ""; $("cost").textContent = ""; $("criticMeta").textContent = "";
+}
+
+function open(id, speed = Number($("speed").value)) {
+  if (source) source.close();
+  run = id; reset();
+  show("empty", false); show("top"); show("logCard");
+  $("runId").textContent = id; $("briefText").textContent = ""; setStatus("running");
+  history.replaceState(null, "", "#" + id);
+  loadRuns();
+  source = new EventSource(`/runs/${id}/events?speed=${speed}`);
+  source.onmessage = () => {};
+  source.addEventListener("end", () => { source.close(); loadRuns(); });
+  const kinds = ["started", "queued", "brief", "analyse", "segmented", "read", "output", "saved", "model", "draft", "studio",
+    "preview", "critique", "ad_critique", "second_opinion", "round", "revision", "revised", "revision_failed", "refined",
+    "render", "rendered", "music", "finished", "failed", "resumed", "critique_draft", "ad_critique_draft", "resumed_rounds"];
+  for (const k of kinds) source.addEventListener(k, (m) => handle(JSON.parse(m.data)));
+  source.onerror = () => { if (source.readyState === EventSource.CLOSED) loadRuns(); };
+}
+
+function setStatus(s) { const p = $("status"); p.className = "pill " + s; p.textContent = s; }
+
+// --- Events --------------------------------------------------------------------
+function handle(e) {
+  state.events++;
+  if (e.kind === "studio") { state.studio++; $("logMeta").textContent = `${state.studio} Studio commands`; return; }
+  if (e.kind === "model") { state.cost += e.cost || 0; $("cost").textContent = `$${state.cost.toFixed(3)} on Meta models`; }
+  if (!["critique_draft", "ad_critique_draft", "saved"].includes(e.kind)) logLine(e);
+  const on = HANDLERS[e.kind];
+  if (on) on(e);
+}
+
+const HANDLERS = {
+  queued: (e) => setStatus("queued"),
+  started: () => setStatus("running"),
+  brief: (e) => { $("briefText").textContent = e.text || ""; setStatus("running"); },
+  analyse: (e) => { profileImage(`inputs/${e.photo}`, "photo"); },
+  read: () => { profileImage("masks.png", "masks"); profileImage("outline.png", "outline"); profileImage("label.png", "label"); },
+  output: (e) => {
+    if (e.label === "brand_profile") brandProfile(e.file);
+    else if (e.label === "storyboard") storyboard(e.file);
+    else if (e.label.startsWith("video")) video(e.label, e.file);
+  },
+  preview: (e) => { show("previewCard"); $("frames").replaceChildren(...e.frames.map((f) => img(f))); },
+  critique: (e) => { cell(e.iteration, e.shot, e.passed, low(e.scores)); },
+  ad_critique: (e) => { cell(e.iteration, "ad", e.passed, low(e.scores)); },
+  round: (e) => {
+    for (const [shot, s] of Object.entries(e.shots)) cell(e.index, shot, s.passed, low(s.scores));
+    if (e.ad) cell(e.index, "ad", e.ad.passed, low(e.ad.scores));
+    roundDone(e);
+    storyboard(`rounds/${e.index}/storyboard.json`, e.index);
+  },
+  revision: (e) => { $("criticMeta").textContent = `the director is revising for round ${e.round}: ${e.summary || ""}`; },
+  refined: (e) => {
+    $("criticMeta").textContent = `round ${e.best} kept${e.passed ? ", every shot and the ad passing" : " (the best; not every shot passed)"}`;
+    document.querySelectorAll(`tr[data-round="${e.best}"] th`).forEach((th) => th.style.color = "var(--accent)");
+  },
+  finished: (e) => { setStatus(e.status); if (e.cost != null) $("cost").textContent = `$${e.cost.toFixed(3)} on Meta models · ${Math.round(e.seconds)} s`; },
+  failed: (e) => setStatus("failed"),
+};
+
+function logLine(e) {
+  const detail = { brief: e.text, analyse: e.photo, read: e.brand, draft: `attempt ${e.attempt}${e.problems?.length ? `, ${e.problems.length} problems` : ""}`,
+    output: `${e.label} → ${e.file}`, model: `${e.model}${e.cached ? " (cached)" : ""}`, critique: `${e.shot} r${e.iteration} ${e.passed ? "pass" : "fail"} ${e.scores ? low(e.scores) : ""}`,
+    ad_critique: `whole ad r${e.iteration} ${e.passed ? "pass" : "fail"}`, round: `round ${e.index}: ${e.passed ? "passed" : "not yet"}`,
+    revision: e.summary, render: `${e.frames} frames ${e.width}×${e.height}`, rendered: `${e.seconds} s`, music: e.mood,
+    finished: `${e.status}, ${Math.round(e.seconds)} s`, failed: e.error, second_opinion: `${e.shot}: ${e.first?.low} then ${e.second?.low}, kept ${e.kept}` }[e.kind];
+  const line = el("div", {}, el("span", { text: `${String(Math.round(e.t)).padStart(4)}s ` }), el("b", { text: e.kind }), document.createTextNode(detail ? `  ${detail}` : ""));
+  const box = $("log"); const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 4;
+  box.append(line); if (atEnd) box.scrollTop = box.scrollHeight;
+}
+
+// --- Brand profile -------------------------------------------------------------
+function profileImage(path, caption) {
+  show("profileCard");
+  if (![...$("profileImgs").children].some((f) => f.dataset.path === path)) {
+    const f = img(path, caption); f.dataset.path = path; $("profileImgs").append(f);
+  }
+}
+
+async function brandProfile(path) {
+  const p = await json(path);
+  show("profileCard");
+  $("brandName").textContent = p.brand || "(no brand legible)";
+  $("brandSub").textContent = [p.product_name, p.category, `${(p.height * 100).toFixed(1)} cm`].filter(Boolean).join(" · ");
+  $("swatches").replaceChildren(...p.palette.map((s) => el("div", { class: "swatch", style: `flex-grow:${Math.max(s.share, .06)};background:${s.hex};color:${lum(s.hex) > .55 ? "#000" : "#fff"}`, title: `${s.hex} ${s.role}`, text: s.role })));
+  const dl = $("brandKv"); dl.replaceChildren();
+  const add = (k, v) => dl.append(el("dt", { text: k }), el("dd", {}, v));
+  add("materials", el("div", {}, ...p.materials.map((m) => el("div", { text: `${m.name}: ${m.looks_like}` }))));
+  add("type", document.createTextNode(`${p.typography.font}, ${p.typography.case}, tracking ${p.typography.tracking}`));
+  add("mood", el("div", { class: "tags" }, ...p.mood.map((m) => el("span", { class: "tag", text: m }))));
+  if (p.do_not?.length) add("never", el("div", { class: "tags" }, ...p.do_not.map((m) => el("span", { class: "tag no", text: m }))));
+}
+function lum(hex) { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; }
+
+// --- Storyboard ----------------------------------------------------------------
+async function storyboard(path, round) {
+  let sb; try { sb = await json(path); } catch { return; }
+  show("storyCard");
+  state.shots = sb.shots.map((s) => s.id);
+  const total = sb.shots.reduce((a, s) => a + s.duration, 0);
+  $("storyMeta").textContent = `${sb.title} · ${sb.style} · ${sb.aspect} · ${total.toFixed(1)} s` + (round != null ? ` · round ${round}` : "");
+  $("timebar").replaceChildren(...sb.shots.map((s, i) => el("div", { style: `flex:${s.duration};background:hsl(${38 + i * 14} 45% ${30 + (i % 2) * 8}%)`, title: s.id })));
+  let t = 0;
+  $("strip").replaceChildren(...sb.shots.map((s) => {
+    const c = s.camera, start = t; t += s.duration;
+    const how = { orbit: `${c.azimuth}° → ${c.to_azimuth ?? c.azimuth + 60}°`, dolly: `fill ${c.from_fill ?? "…"} → ${c.to_fill ?? c.fill}`,
+      crane: `${c.from_elevation ?? "…"}° → ${c.to_elevation ?? "…"}°`, reveal: `from ${c.from ?? "above"}` }[c.move] || `fill ${c.fill ?? 0.6}`;
+    return el("div", { class: "shot" }, el("div", { class: "top" }, el("span", { text: s.id }), el("span", { text: `${start.toFixed(1)}–${t.toFixed(1)} s` })),
+      el("div", { class: "move", text: `${c.move} · ${how}` }), el("div", { class: "intent", text: s.intent }));
+  }));
+  $("titles").textContent = sb.titles?.length ? "Titles: " + sb.titles.map((x) => `“${x.text}” at ${x.start} s`).join(" · ") : "";
+  ensureColumns();
+}
+
+// --- Critic table ----------------------------------------------------------------
+function ensureColumns() {
+  const table = $("scores");
+  const cols = [...state.shots, "ad"];
+  if (table.dataset.cols === cols.join()) return;
+  table.dataset.cols = cols.join();
+  const head = el("tr", {}, el("th", { class: "r", text: "round" }), ...cols.map((c) => el("th", { text: c === "ad" ? "whole ad" : c })), el("th"));
+  const rows = [...table.querySelectorAll("tr[data-round]")].map((r) => Number(r.dataset.round));
+  table.replaceChildren(head);
+  for (const r of rows) row(r);
+}
+
+function row(r) {
+  let tr = $("scores").querySelector(`tr[data-round="${r}"]`);
+  if (tr) return tr;
+  ensureColumns();
+  const cols = $("scores").dataset.cols.split(",");
+  tr = el("tr", { "data-round": r }, el("th", { class: "r", text: `round ${r}` }),
+    ...cols.map((c) => el("td", { class: "cell wait", "data-shot": c, text: "·", onclick: () => issues(r, c) })), el("td", { class: "verdict" }));
+  $("scores").append(tr);
+  for (const [k, v] of Object.entries(state.rounds[r] || {})) paint(tr, k, v);
+  return tr;
+}
+
+function cell(r, shot, passed, lowest) {
+  show("criticCard");
+  (state.rounds[r] ||= {})[shot] = { passed, low: lowest };
+  if (shot !== "ad" && !state.shots.includes(shot)) { state.shots.push(shot); ensureColumns(); }
+  paint(row(r), shot, { passed, low: lowest });
+}
+
+function paint(tr, shot, { passed, low: lowest }) {
+  const td = tr.querySelector(`td[data-shot="${shot}"]`);
+  if (!td) return;
+  td.className = "cell " + scoreClass(lowest, passed) + (state.selected === `${tr.dataset.round}/${shot}` ? " sel" : "");
+  td.textContent = lowest; td.title = `${passed ? "pass" : "fail"}: lowest score ${lowest}`;
+}
+
+function roundDone(e) {
+  const tr = row(e.index);
+  tr.querySelector(".verdict").replaceChildren(el("span", { class: "pill " + (e.passed ? "pass" : "fail"), text: e.passed ? "passed" : "fail" }));
+  if (e.changes?.length) {
+    const next = el("tr", { "data-changes": e.index }, el("td"), el("td", { colspan: 99 }, el("ul", { class: "changes" }, ...e.changes.slice(0, 12).map((c) => el("li", { text: c })), e.changes.length > 12 ? el("li", { text: `… ${e.changes.length - 12} more` }) : null)));
+    tr.before(next);
+  }
+  $("sheets").append(img(`rounds/${e.index}/sheet.png`, `round ${e.index}: every shot`), img(`rounds/${e.index}/filmstrip.png`, `round ${e.index}: the whole ad`));
+}
+
+async function issues(r, shot) {
+  state.selected = `${r}/${shot}`;
+  document.querySelectorAll("td.cell.sel").forEach((td) => td.classList.remove("sel"));
+  $("scores").querySelector(`tr[data-round="${r}"] td[data-shot="${shot}"]`)?.classList.add("sel");
+  let c; try { c = await json(`critiques/${shot}.${r}.json`); } catch { return; }
+  const box = $("issues"); show("issues");
+  box.replaceChildren(
+    el("div", { class: "row", style: "margin-bottom:8px" }, el("b", { text: `${shot === "ad" ? "The whole ad" : shot}, round ${r}` }), el("span", { class: "pill " + (c.passed ? "pass" : "fail"), text: c.passed ? "pass" : "fail" }),
+      el("span", { class: "meta", text: Object.entries(c.scores).map(([k, v]) => `${k.replace("_", " ")} ${v}`).join(" · ") })),
+    ...(c.issues.length ? c.issues.map((i) => el("div", { class: "issue" }, el("span", { class: "sev " + i.severity, text: i.severity }),
+      el("span", { class: "meta", text: `${i.category}${i.where ? " · " + i.where : ""}${i.time != null ? ` · ${i.time} s` : ""}` }),
+      el("div", { text: i.problem }), el("code", { text: "fix: " + i.fix }))) : [el("div", { class: "meta", text: "No issues." })]));
+}
+
+// --- Videos --------------------------------------------------------------------
+function video(label, path) {
+  if (state.videos.has(path)) return;
+  state.videos.add(path);
+  show("finalCard");
+  const name = label === "video" ? "" : label.replace("video_", "").replace("x", ":");
+  $("videos").append(el("figure", {}, el("video", { src: file(path), controls: "", playsinline: "", preload: "metadata" }),
+    el("figcaption", {}, document.createTextNode(name + " · "), el("a", { href: file(path), download: "", text: "download" }))));
+}
+
+// --- Starting an ad --------------------------------------------------------------
+const drop = $("drop"), input = $("photo");
+drop.onclick = () => input.click();
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files[0]) { input.files = e.dataTransfer.files; picked(); } };
+input.onchange = picked;
+function picked() {
+  const f = input.files[0]; if (!f) return;
+  drop.replaceChildren(el("img", { src: URL.createObjectURL(f) }), document.createTextNode(f.name), input);
+}
+
+$("form").onsubmit = async (e) => {
+  e.preventDefault();
+  if (!input.files[0]) { $("formMsg").textContent = "Add a product photo first."; return; }
+  const data = new FormData();
+  data.append("photo", input.files[0]);
+  data.append("brief", $("brief").value);
+  data.append("category", $("category").value || "product");
+  data.append("critic", $("critic").checked);
+  data.append("video", $("video").checked);
+  $("go").disabled = true; $("formMsg").textContent = "Starting…";
+  try {
+    const r = await fetch("/runs", { method: "POST", body: data });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.detail || r.statusText);
+    $("formMsg").textContent = body.position > 1 ? `Queued, ${body.position - 1} ahead.` : "Started.";
+    open(body.id, 0);
+  } catch (err) { $("formMsg").textContent = "Couldn't start: " + err.message; }
+  finally { $("go").disabled = false; }
+};
+
+loadRuns();
+setInterval(loadRuns, 15000);
+if (location.hash.length > 1) open(location.hash.slice(1));
+</script>
+</body>
+</html>

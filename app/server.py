@@ -1,11 +1,12 @@
 """The app's backend: start an ad from a photo and a brief, follow it as it
 happens, open any run that's already done.
 
-    python -m app                      # http://127.0.0.1:8000
+    python -m app                      # http://127.0.0.1:8000: the page (app/static/index.html)
     curl -F photo=@Assets/photos/mira_jar.png -F "brief=Face cream, calm and bright, 10 seconds." \\
          -F category=jar http://127.0.0.1:8000/runs
     curl -N http://127.0.0.1:8000/runs/<id>/events
 
+    GET  /                           the page: start an ad, watch it, open any run
     POST /runs                       a photo (file) and a brief: queues an ad (pipeline.agents.producer)
     GET  /runs                       every run, newest first: status, brief, outputs
     GET  /runs/{id}                  one run: its summary (run.json) and outputs
@@ -36,6 +37,7 @@ from pipeline.agents.producer import make_ad
 from pipeline.runs import RUNS, Run, all_runs, events
 from pipeline.studio import Studio
 
+PAGE = Path(__file__).with_name("static") / "index.html"
 POLL = 0.25          # seconds between looks at a live run's log
 HEARTBEAT = 15.0     # seconds between keep-alive comments on a quiet stream
 PHOTO_TYPES = (".png", ".jpg", ".jpeg", ".webp")
@@ -120,6 +122,11 @@ def _card(root: Path) -> dict:
     return {"id": root.name, "status": _status(root), "brief": first.get("text"), "photo": first.get("photo"),
             "outputs": info.get("outputs", {}), "seconds": info.get("seconds"), "cost": info.get("cost"),
             "events": f"/runs/{root.name}/events"}
+
+
+@app.get("/", include_in_schema=False)
+def page() -> FileResponse:
+    return FileResponse(PAGE, headers={"Cache-Control": "no-cache"})
 
 
 @app.post("/runs", status_code=202)
