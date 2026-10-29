@@ -50,6 +50,8 @@ CRAFT = """\
   between consecutive shots, unless the cut is meant to surprise.
 - Low camera (elevation 2-8) feels heroic and premium; high (20-40) feels calm and overseeing.
 - fill 0.45 wide, 0.6 medium, 0.9 close; a close-up (0.9+) is for the label or the cap.
+- Depth of field (`aperture`) keeps the product sharp and softens what's behind it: use the style's on most
+  shots, wider (2-2.8) on close-ups and the hero to set the product apart, 0 on a wide shot whose set should read.
 - The last shot is the hero: static, from the front (azimuth near 0), fill 0.45-0.6, with the brand
   name as a title over it. It lasts at least 2.5 s and the name appears at least 0.4 s into it.
 - Titles: the brand name in the brand's font from the brand profile (size 0.06-0.13), an optional tagline
@@ -171,7 +173,7 @@ def write(commands: dict) -> str:
         t = s.title
         out.append(f"- `{s.name}`: for {s.use_for}. {s.notes[0].upper() + s.notes[1:]}. Lighting `{s.look.lighting.preset}`; "
                    f"titles `{t.font}` {t.color}, tagline `{t.tagline_font}`; shots {s.shot_seconds[0]:g}-"
-                   f"{s.shot_seconds[1]:g} s; moves {', '.join(s.moves)}.")
+                   f"{s.shot_seconds[1]:g} s; moves {', '.join(s.moves)}; aperture f/{s.aperture:g}.")
     return "\n".join(out) + "\n"
 
 

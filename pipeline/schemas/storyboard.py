@@ -87,8 +87,10 @@ class Surface(Strict):
     attenuation_color: str | None = Field(None, pattern=HEX, description="glass: the colour light takes on through "
                                                                          "it, i.e. the liquid's (amber perfume, green oil)")
     attenuation_distance: float | None = Field(None, gt=0, le=100, description="glass: meters of it after which light "
-                                                                               "has fully taken on attenuation_color; "
-                                                                               "smaller is deeper; needed with it")
+                                                                               "has fully taken on attenuation_color: "
+                                                                               "0.05 deep, 0.08 rich, 0.15 pale (under "
+                                                                               "0.04 a bottle turns nearly black); "
+                                                                               "needed with it")
     clearcoat: float | None = Field(None, ge=0, le=1, description="a glossy lacquer over it (lacquered caps, coated "
                                                                   "labels), 0..1")
     clearcoat_roughness: float | None = Field(None, ge=0, le=1)

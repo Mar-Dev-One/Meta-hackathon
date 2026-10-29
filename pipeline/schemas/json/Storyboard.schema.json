@@ -651,7 +651,7 @@
             }
           ],
           "default": null,
-          "description": "glass: meters of it after which light has fully taken on attenuation_color; smaller is deeper; needed with it",
+          "description": "glass: meters of it after which light has fully taken on attenuation_color: 0.05 deep, 0.08 rich, 0.15 pale (under 0.04 a bottle turns nearly black); needed with it",
           "title": "Attenuation Distance"
         },
         "clearcoat": {
@@ -977,7 +977,7 @@
             }
           ],
           "default": null,
-          "description": "glass: meters of it after which light has fully taken on attenuation_color; smaller is deeper; needed with it",
+          "description": "glass: meters of it after which light has fully taken on attenuation_color: 0.05 deep, 0.08 rich, 0.15 pale (under 0.04 a bottle turns nearly black); needed with it",
           "title": "Attenuation Distance"
         },
         "clearcoat": {

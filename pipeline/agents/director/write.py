@@ -101,7 +101,7 @@ def _profile_text(p: BrandProfile) -> str:
 def _styles_text() -> str:
     return "\n".join(json.dumps({"name": s.name, "use_for": s.use_for, "look": s.look.model_dump(exclude_none=True),
                                  "title": s.title.model_dump(), "shot_seconds": s.shot_seconds, "moves": s.moves,
-                                 "ease": s.ease}, separators=(",", ":")) for s in STYLES.values())
+                                 "ease": s.ease, "aperture": s.aperture}, separators=(",", ":")) for s in STYLES.values())
 
 
 def assemble(plan: Plan, profile: BrandProfile, brief: str, aspect: str) -> Storyboard:

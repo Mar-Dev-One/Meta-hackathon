@@ -19,12 +19,34 @@ class Swatch(Strict):
 class PartMaterial(Strict):
     name: str = Field(description="body, cap, lid, ...")
     looks_like: str = Field(description="the material in a few words: 'clear glass holding amber liquid', 'brushed aluminium'")
-    color: str = Field(pattern=HEX, description="the colour to render it: for clear glass holding a liquid, the liquid's")
+    color: str = Field(pattern=HEX, description="its surface colour; for glass, the glass's own tint (near white "
+                                                "for clear glass, green for green glass), not the liquid's")
     metallic: float = Field(ge=0, le=1, description="1 for metal, 0 for everything else")
     roughness: float = Field(ge=0, le=1, description="0.05 polished or glass, 0.3 satin, 0.5 brushed metal, 0.8 matte")
-    opacity: float = Field(ge=0.02, le=1, description="1 for anything you can't see through, dark glass and dark "
-                                                      "liquids included; clear glass holding a light liquid 0.75-0.9; "
-                                                      "empty clear glass 0.2-0.4")
+    transmission: float = Field(ge=0, le=1, description="glass and clear plastic you can see into: 1 for clear "
+                                                        "glass, 0.9 for tinted glass; 0 for anything opaque (metal, "
+                                                        "ceramic, opaque plastic, paper)")
+    attenuation_color: str | None = Field(None, pattern=HEX, description="see-through parts: the colour of what "
+                                                                         "they hold (amber perfume, green oil), "
+                                                                         "seen through them; null for the rest")
+    attenuation_distance: float | None = Field(None, gt=0, le=1, description="see-through parts: meters of it after "
+                                                                             "which light has fully taken on "
+                                                                             "attenuation_color: 0.05 deep, 0.08 rich, "
+                                                                             "0.15 pale (a bottle is 5-10 cm across: "
+                                                                             "under 0.04 it turns nearly black)")
+    clearcoat: float = Field(0, ge=0, le=1, description="a glossy lacquer over it (lacquered caps, coated "
+                                                        "packaging): 0..1")
+
+    def surface(self) -> dict:
+        """Its finish as Studio part settings (Surface fields)."""
+        out = dict(color=self.color, metallic=self.metallic, roughness=self.roughness)
+        if self.transmission > 0:
+            out.update(transmission=self.transmission)
+            if self.attenuation_color and self.attenuation_distance:
+                out.update(attenuation_color=self.attenuation_color, attenuation_distance=self.attenuation_distance)
+        if self.clearcoat > 0:
+            out.update(clearcoat=self.clearcoat, clearcoat_roughness=0.05)
+        return out
 
 
 class Typography(Strict):
@@ -55,6 +77,5 @@ class BrandProfile(Strict):
         parts dressed in the materials), with the label."""
         if self.profile_parts:
             return Product(template=None, profile_parts=self.profile_parts, label=self.label)
-        looks = {m.name: PartLook(color=m.color, metallic=m.metallic, roughness=m.roughness,
-                                  opacity=m.opacity if m.opacity < 0.98 else None) for m in self.materials}
+        looks = {m.name: PartLook(**m.surface()) for m in self.materials}
         return Product(template=self.template, height=self.height, parts=looks, label=self.label)

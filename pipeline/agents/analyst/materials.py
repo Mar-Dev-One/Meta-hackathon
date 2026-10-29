@@ -44,6 +44,9 @@ The colours measured from its pixels (hex, role, share of the product):
 Describe it for a renderer that rebuilds it in 3D:
 - materials: one entry for each of these parts, by name: {names}. Its colour comes from the measured palette
   when one fits (shading makes the photo darker or lighter than the material: pick what it is, not its shadows).
+  Glass or clear plastic you can see into is see-through (transmission): its colour is the glass's own tint, and
+  what it holds (perfume, oil, water) is its attenuation_color, from the palette, with a distance for how deep
+  that colour is. Glass so dark you can't see into it still is glass: give it its liquid's colour, deep.
 - typography: the closest of the renderer's fonts to the label's main lettering: serif (luxury), sans (clean),
   sans_bold (strong), condensed (bold, sporty), script (handwritten); its case and letter spacing.
 - mood and do_not: for the art director, grounded in what you see (colours, materials, lettering), not in clichés."""
@@ -97,7 +100,8 @@ def dress(parts: list[ProfilePart], reading: Reading) -> list[ProfilePart]:
         if m is None:
             dressed.append(part)
             continue
-        color = metal_color(m.color) if m.metallic >= 0.5 else m.color
-        dressed.append(part.model_copy(update=dict(color=color, metallic=m.metallic, roughness=m.roughness,
-                                                   opacity=m.opacity if m.opacity < 0.98 else None)))
+        surface = m.surface()
+        if m.metallic >= 0.5:
+            surface["color"] = metal_color(m.color)
+        dressed.append(part.model_copy(update=dict(surface, opacity=None)))
     return dressed

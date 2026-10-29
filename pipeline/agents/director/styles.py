@@ -1,8 +1,8 @@
 """The style library: looks the director starts from and adapts to the
 brand (its palette, its mood, its do-nots). Each is a whole `Look` (set,
 light, environment) that renders well, the titles' type, the pacing and
-the camera moves that suit it. The first five are the hand-made ads'
-(pipeline/demos/ads.py).
+the camera moves and the depth of field that suit it. The first five are
+the hand-made ads' (pipeline/demos/ads.py).
 
     style = STYLES["luxury_dark"]
     Storyboard(look=style.look, ...)
@@ -31,6 +31,8 @@ class Style(Strict):
     shot_seconds: tuple[float, float] = Field(description="a shot's length, shortest to longest")
     moves: list[str] = Field(description="the camera moves that suit it, most typical first")
     ease: Ease = "in_out"
+    aperture: float = Field(description="its usual f-number for depth of field (0 = all sharp): wider (2-2.8) "
+                                        "on close-ups and the hero, the set softening behind the product")
     notes: str = Field(description="what makes it work")
 
 
@@ -42,7 +44,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                   lighting=Lighting(preset="rim_dark", fade_in=2.5)),
         title=TitleStyle(font="serif", color="#ECE4D2", size=0.075, tracking=0.25,
                          tagline_font="sans", tagline_color="#C9A45C"),
-        shot_seconds=(3, 4), moves=["reveal", "orbit", "dolly", "static"],
+        shot_seconds=(3, 4), moves=["reveal", "orbit", "dolly", "static"], aperture=2.8,
         notes="near-black set, rim lights tracing the glass, lights rising from dark; slow, low camera; wide-spaced serif"),
     Style(
         name="clean_minimal", use_for="skincare, wellness, home, tech accessories: clean, calm, bright, minimal",
@@ -52,7 +54,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                   lighting=Lighting(preset="high_key")),
         title=TitleStyle(font="serif", color="#3C342E", size=0.07, tracking=0.2,
                          tagline_font="script", tagline_color="#8C7864"),
-        shot_seconds=(3, 3.5), moves=["static", "dolly", "orbit"],
+        shot_seconds=(3, 3.5), moves=["static", "dolly", "orbit"], aperture=5.6,
         notes="light set in the product's paler colours, soft even light, unhurried; dark type on light"),
     Style(
         name="bold_energetic", use_for="drinks, snacks, sport, gaming: bold, loud, energetic, young",
@@ -62,7 +64,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                   lighting=Lighting(preset="neon_dual", intensity=1.2)),
         title=TitleStyle(font="condensed", color="#FF5AB0", size=0.13, tracking=0.04,
                          tagline_font="sans_bold", tagline_color="#FFFFFF"),
-        shot_seconds=(1.2, 1.8), moves=["orbit", "dolly", "crane", "truck", "static"], ease="out",
+        shot_seconds=(1.2, 1.8), moves=["orbit", "dolly", "crane", "truck", "static"], ease="out", aperture=4,
         notes="dark set, two coloured lights, glow; fast cuts that each snap to a stop (ease out); the product "
               "spins (a rotation track); big condensed type"),
     Style(
@@ -73,7 +75,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                   lighting=Lighting(preset="top_soft", warmth=0.6)),
         title=TitleStyle(font="serif", color="#E8DCB8", size=0.075, tracking=0.2,
                          tagline_font="serif", tagline_color="#D9B86A"),
-        shot_seconds=(3, 3.5), moves=["crane", "orbit", "static"],
+        shot_seconds=(3, 3.5), moves=["crane", "orbit", "static"], aperture=4,
         notes="wood-brown set, warm light from above like a window; gentle crane and orbit; warm cream serif"),
     Style(
         name="warm_glow", use_for="serums, oils, candles, amber glass: warm, glowing, radiant, premium",
@@ -83,7 +85,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                   lighting=Lighting(preset="rim_dark", warmth=0.5, intensity=1.2, fade_in=2.0)),
         title=TitleStyle(font="sans_bold", color="#F2A24A", size=0.075, tracking=0.18,
                          tagline_font="sans", tagline_color="#E8D8C0"),
-        shot_seconds=(3, 4), moves=["zoom", "orbit", "static"],
+        shot_seconds=(3, 4), moves=["zoom", "orbit", "static"], aperture=2.8,
         notes="dark warm set, warm rims and glow through the glass; light rising; amber type"),
     Style(
         name="tech_sleek", use_for="electronics, devices, tools, cars, men's grooming: sleek, precise, modern, cool",
@@ -93,7 +95,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                   lighting=Lighting(preset="split", warmth=-0.5, intensity=1.4)),
         title=TitleStyle(font="sans", color="#E6EEF5", size=0.065, tracking=0.35,
                          tagline_font="sans", tagline_color="#7FA8C9"),
-        shot_seconds=(2, 2.5), moves=["truck", "dolly", "orbit", "static"],
+        shot_seconds=(2, 2.5), moves=["truck", "dolly", "orbit", "static"], aperture=5.6,
         notes="blue-black glossy set, hard cool side light, crisp contrast; precise sideways and push moves; "
               "thin wide-spaced sans"),
     Style(
@@ -104,7 +106,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                   lighting=Lighting(preset="three_point", intensity=1.1)),
         title=TitleStyle(font="sans_bold", color="#2B1B4A", size=0.11, tracking=0.02,
                          tagline_font="sans_bold", tagline_color="#FFFFFF"),
-        shot_seconds=(1.5, 2.2), moves=["crane", "orbit", "dolly", "static"], ease="out",
+        shot_seconds=(1.5, 2.2), moves=["crane", "orbit", "dolly", "static"], ease="out", aperture=8,
         notes="a saturated set from the brand's brightest colour, a contrasting pedestal, bright even light; "
               "bouncy moves, a spin; chunky type"),
     Style(
@@ -115,7 +117,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                   lighting=Lighting(preset="top_soft", warmth=0.25)),
         title=TitleStyle(font="script", color="#7A4E55", size=0.08, tracking=0.0,
                          tagline_font="sans", tagline_color="#9C7A7E"),
-        shot_seconds=(3, 4), moves=["orbit", "dolly", "static"],
+        shot_seconds=(3, 4), moves=["orbit", "dolly", "static"], aperture=2.8,
         notes="blush set, soft light from above with a little glow; slow drifting orbit; script name"),
 ]}
 
@@ -128,7 +130,7 @@ def sample(style: Style, product: Product | None = None, name: str = "AURELLE", 
         title=f"{style.name} sample", brief=f"a sample of the {style.name} style", style=style.name, look=style.look,
         product=product or Product(template="perfume"),
         shots=[Shot(id="s1", intent="the hero, the name below", duration=seconds,
-                    camera=CameraMove(move="static", elevation=4, fill=0.5))],
+                    camera=CameraMove(move="static", elevation=4, fill=0.5, aperture=style.aperture))],
         titles=[Title(text=name.title() if t.font == "script" else name, font=t.font, size=t.size, y=0.82, color=t.color, tracking=t.tracking, start=0.3),
                 Title(text=tagline, font=t.tagline_font, size=0.03, y=0.91, color=t.tagline_color,
                       tracking=0.1, start=0.5)])

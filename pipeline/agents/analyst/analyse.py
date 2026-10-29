@@ -162,7 +162,9 @@ def contact_sheet(a: Analysis, frames: list[Image.Image], tile: int = 520) -> Im
     p = a.profile
     lines = [f"{p.brand}{' ' + p.product_name if p.product_name else ''}: {p.category}, {p.height * 100:.0f} cm",
              *(f"{m.name}: {m.looks_like} ({m.color}, metal {m.metallic:g}, rough {m.roughness:g}"
-               f"{f', opacity {m.opacity:g}' if m.opacity < 1 else ''})" for m in p.materials),
+               f"{f', glass {m.transmission:g}' if m.transmission > 0 else ''}"
+               f"{f', holding {m.attenuation_color}' if m.attenuation_color else ''}"
+               f"{f', clearcoat {m.clearcoat:g}' if m.clearcoat > 0 else ''})" for m in p.materials),
              f"type: {p.typography.font}, {p.typography.case} case, tracking {p.typography.tracking:g}",
              f"mood: {', '.join(p.mood)}",
              *textwrap.wrap(f"do not: {'; '.join(p.do_not)}", 70)]
