@@ -121,16 +121,16 @@ runs the timeline's tests (`Engine/tests/timeline_tests.c`: easing, sampling, ed
 - `Engine/` is `Meta_Engine`, the library written for this project on top of the engine: `src/Studio` (studio commands), `src/Timeline` (keyframe animation), `src/Shot` (frames, video), `src/Products` (product and backdrop models as glTF), `src/Common` (JSON helpers), `tests/`; text to come
 - `pipeline/` is the Python side: the Studio client, finishing with ffmpeg, demos, the Meta model smoke tests
 - `Deps/` holds the engine headers (`Includes/PBR`) and prebuilt libraries (`Libs`)
-- `Assets/Shaders/shaders` holds the engine's shaders. They are copied to `<exe>/assets/shaders` at build time
+- `Assets/Shaders/shaders` holds the engine's shaders. They are copied to `<exe>/engine/shaders` at build time
 - `Assets/photos` holds product photos of fictional brands for testing the brand analyst, made with Muse Image by `scripts/sample_photos.py`
 - `Assets/models` and `Assets/hdri` hold the models and HDRI the demo scene loads. They are copied to `<exe>/assets` at build time
 - `docs/ROADMAP.md` is the plan
 
-At runtime the program loads everything from the `assets/` folder next to it. `PBR_Engine.lib` was built with no absolute paths, so nothing outside the build folder is used. You can copy `build/Release` to another machine and run it there. The build also copies `vcruntime140.dll` next to the exe, so a Windows 10/11 PC without Visual Studio or the Visual C++ Redistributable can run it. It only needs an OpenGL 4.x graphics driver.
+At runtime the program loads the engine's shaders from the `engine/` folder next to it and everything else from the `assets/` folder next to it, so nothing outside the build folder is used (the engine looks in `<exe>/engine` before its own source tree). You can copy `build/Release` to another machine and run it there. The build also copies `vcruntime140.dll` next to the exe, so a Windows 10/11 PC without Visual Studio or the Visual C++ Redistributable can run it. It only needs an OpenGL 4.x graphics driver.
 
 ## Built during the hackathon
 
-The engine (`PBR_Engine`, [AI-Powered-PBR-Renderer](https://github.com/Mar-Dev-One/AI-Powered-PBR-Renderer)) existed before the hackathon and is used unchanged, as a prebuilt library. Everything in this repository was written during the hackathon (from 2026-10-27):
+The engine (`PBR_Engine`, [AI-Powered-PBR-Renderer](https://github.com/Mar-Dev-One/AI-Powered-PBR-Renderer)) existed before the hackathon and is used as a prebuilt library. During the hackathon four rendering features were added to it, on its `features/glass-and-focus` branch: glass (transmission, index of refraction, thickness, absorption), depth of field (the camera's focus distance and aperture), clearcoat and specular. Everything else the engine does (PBR, image-based lighting, shadows, bloom, TAA, SSAO, the world and its commands) predates the hackathon. Everything in this repository was written during the hackathon (from 2026-10-27):
 
 - `Engine/`: the Studio library (`Meta_Engine`): studio commands, the timeline and its tests, shot rendering to PNG and video, camera moves, lighting presets, product and backdrop models
 - `src/main.c`: the Studio program

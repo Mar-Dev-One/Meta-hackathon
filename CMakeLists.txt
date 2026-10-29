@@ -52,15 +52,18 @@ add_subdirectory(Engine)
 add_executable(Studio src/main.c)
 target_link_libraries(Studio PRIVATE Meta_Engine)
 
-# Everything the program loads at runtime goes in assets/ next to it, so the
-# build folder runs on its own and can be copied elsewhere:
-#   assets/shaders          the engine's root (Core/Paths.h)
+# Everything the program loads at runtime goes next to it, so the build
+# folder runs on its own and can be copied elsewhere:
+#   engine/shaders          the engine's root (Core/Paths.h looks in
+#                           <exe>/engine first; without it, it would fall back
+#                           to the engine's source tree on the machine that
+#                           built the library)
 #   assets/models, /hdri,   the project root; main.c sets it
 #   /fonts
 add_custom_command(TARGET Studio POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Shaders/shaders
-            $<TARGET_FILE_DIR:Studio>/assets/shaders
+            $<TARGET_FILE_DIR:Studio>/engine/shaders
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/Assets/models
             $<TARGET_FILE_DIR:Studio>/assets/models
