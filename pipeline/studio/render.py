@@ -49,10 +49,10 @@ async def preview(studio, run, sb: Storyboard, short: int = 360, samples: int = 
 
 
 async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samples: int = 16,
-                 fade_in: float = 0.4, fade_out: float = 0.6, music: bool = True) -> Path:
+                 fade_in: float = 0.4, fade_out: float = 0.6, music: bool = True, label: str = "video") -> Path:
     """The built storyboard as final/<name>.mp4 in the run, faded from and to
     black, with music in the style's mood (pipeline.encode.music) unless
-    `music` is off."""
+    `music` is off; marked as the run's output `label`."""
     width, height = frame_size(sb.aspect, short)
     raw = run.path("final", "raw.mp4")
     frames = round(sb.duration * sb.fps)
@@ -67,7 +67,7 @@ async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samp
         run.event("music", mood=mood_of(sb), file=str(sound.relative_to(run.root)))
     video = finish(raw, run.path("final", f"{name}.mp4"), fade_in=fade_in, fade_out=fade_out, audio=sound)
     raw.unlink(missing_ok=True)
-    run.output("video", video)
+    run.output(label, video)
     return video
 
 
@@ -75,7 +75,8 @@ async def final_cut(studio, run, sb: Storyboard, name: str, aspects: tuple[str, 
                     short: int = 1080, samples: int = 16) -> dict[str, Path]:
     """The ad in every aspect, from the same storyboard (reframed: titles
     fitted to each frame), as final/<name>_<w>x<h>.mp4 with the same music;
-    each aspect's storyboard saved as storyboard_<w>x<h>.json. Leaves the
+    each aspect's storyboard saved as storyboard_<w>x<h>.json, each video
+    marked as the run's output video_<w>x<h>. Leaves the
     Studio built with the last aspect."""
     from .reframe import reframe      # here: reframe imports frame_size from this module
 
@@ -85,6 +86,6 @@ async def final_cut(studio, run, sb: Storyboard, name: str, aspects: tuple[str, 
         framed = await reframe(studio, sb, aspect)
         run.save_json(f"storyboard_{tag}.json", framed)
         await build(studio, framed)
-        videos[aspect] = await render(studio, run, framed, f"{name}_{tag}", short=short, samples=samples)
-        run.output(f"video_{tag}", videos[aspect])
+        videos[aspect] = await render(studio, run, framed, f"{name}_{tag}", short=short, samples=samples,
+                                      label=f"video_{tag}")
     return videos

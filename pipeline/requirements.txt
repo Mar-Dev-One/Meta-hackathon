@@ -7,3 +7,6 @@ websockets>=12
 fonttools>=4.50
 numpy>=1.26
 pydantic>=2.6
+fastapi>=0.115
+uvicorn>=0.30
+python-multipart>=0.0.9
