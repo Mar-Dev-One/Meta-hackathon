@@ -37,7 +37,9 @@ from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Critique, Issue, Scores, Storyboard
 from pipeline.schemas.storyboard import Strict
 
-from .measure import CROP, REVEALING, ShotMeasure, storyboard_colours
+from pipeline.studio.build import ASPECTS
+
+from .measure import CROP, REVEALING, SIDE_CROP, ShotMeasure, storyboard_colours
 
 PASS = 7          # every score at least this
 BOUND = 6         # a category with a major measured flag scores at most this
@@ -158,6 +160,9 @@ def intended(sb: Storyboard, index: int) -> list[str]:
                    f"dark product is the reveal, not a lighting fault. Judge the light after that.")
     if shot.camera.max_fill() > CROP:
         out.append("The shot asks for fill over 0.97: a close-up that crops the product on purpose.")
+    elif shot.camera.max_fill() > SIDE_CROP and ASPECTS[sb.aspect] < 1:
+        out.append(f"The frame is narrow ({sb.aspect}) and the shot asks for fill {shot.camera.max_fill():g}: a "
+                   f"product wider than tall is held by the width, and this close its sides crop on purpose.")
     return out
 
 

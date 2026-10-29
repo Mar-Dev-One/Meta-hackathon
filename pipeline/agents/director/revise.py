@@ -172,10 +172,38 @@ class _Editor:
         return self._try(data)
 
 
+# The shared light: every shot is lit by it, so a revision moves it in small
+# steps (a critic loop once raised all three at once, and every shot blew out).
+LIGHT = (("environment", "exposure"), ("environment", "ambient_strength"), ("lighting", "intensity"))
+LIGHT_STEP = 1.35     # times, up or down, per revision, for each
+LIGHT_AT_ONCE = 2     # of them changed in one revision
+
+
+def light_steps(before: Storyboard, after: Storyboard) -> list[str]:
+    """What's wrong with how far a revision moved the shared light."""
+    out, moved = [], []
+    for part, field in LIGHT:
+        a = getattr(getattr(before.look, part), field)
+        b = getattr(getattr(after.look, part), field)
+        if a == b:
+            continue
+        moved.append(f"look.{part}.{field}")
+        ratio = max(a, b) / max(min(a, b), 1e-6)
+        if ratio > LIGHT_STEP + 0.01:   # a hair over: values written to two decimals
+            out.append(f"look.{part}.{field} {a:g} -> {b:g} moves the shared light x{ratio:.2f} in one revision; every "
+                       f"shot is lit by it: move it at most x{LIGHT_STEP:g} "
+                       f"({a / LIGHT_STEP:.3g} to {a * LIGHT_STEP:.3g})")
+    if len(moved) > LIGHT_AT_ONCE:
+        out.append(f"{len(moved)} light settings changed at once ({', '.join(moved)}): change at most "
+                   f"{LIGHT_AT_ONCE} in one revision, the ones the fix needs")
+    return out
+
+
 async def revise(sb: Storyboard, fix: str, profile: BrandProfile | None, *, studio=None, run=None,
                  rounds: int = 3) -> tuple[Storyboard, list[str]]:
     """The storyboard changed to answer `fix`, and what changed. Its length
-    stays the same. DirectorError if it can't be made valid in `rounds`."""
+    stays the same, and the shared light moves in small steps (light_steps).
+    DirectorError if it can't be made valid in `rounds`."""
     before = sb.model_dump(by_alias=True, exclude_none=True)
     editor = _Editor(sb, profile)
     prompt = fix
@@ -185,7 +213,8 @@ async def revise(sb: Storyboard, fix: str, profile: BrandProfile | None, *, stud
                              profile=_profile_text(profile), grammar=grammar.load())
         result = spark.run_tools(text, tools=TOOLS, handle=editor.handle, system=SYSTEM, max_turns=10)
         revised = editor.storyboard()
-        found = problems(revised, profile, editor.seconds) + (await title_problems(studio, revised) if studio else [])
+        found = problems(revised, profile, editor.seconds) + light_steps(sb, revised) + \
+            (await title_problems(studio, revised) if studio else [])
         if run:
             run.event("revision", round=round_, calls=[{"name": c["name"], "arguments": c["arguments"],
                                                         "applied": c["result"].get("applied")} for c in result.calls],

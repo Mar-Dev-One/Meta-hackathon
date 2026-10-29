@@ -42,6 +42,7 @@ from pipeline.studio.render import frame_size
 MOMENTS = (0.1, 0.5, 0.9)   # where in each shot it looks, as shares of the shot
 REVEALING = 0.6             # of a reveal shot: until then the product may be out of frame or cut
 CROP = 0.97                 # a shot asking for more fill than this crops the product on purpose (camera.move)
+SIDE_CROP = 0.7             # ... and over this, a wide one's sides (camera.move's FRAMING_CLOSE)
 CROPPED = 0.85              # ... where the product fills at least this much of the frame's height or width
 CHANGED = 2                 # 0..255: a pixel the product changes by more than this is the product's
 EDGE_STEP = 1 / 180         # of the frame's height: how far inside and outside the outline it compares
@@ -251,11 +252,13 @@ def measure_frame(frame: Frame, shown: np.ndarray, mask: np.ndarray, colours: li
 
 
 def flags_for(frame: Frame, is_last: bool, fade_in: float = 0.0, revealing: bool = False,
-              cropping: bool = False) -> list[Flag]:
+              cropping: bool = False, side_cropping: bool = False) -> list[Flag]:
     """What the numbers say is wrong in one frame. While the lights fade in
     (`fade_in` seconds) an unseen or dark one, early in a reveal one out of
-    frame or cut, and in a close-up (`cropping`: a shot asking for more than
-    CROP) one cut while it fills the frame, is the move, not a fault."""
+    frame or cut, in a close-up (`cropping`: a shot asking for more than
+    CROP) one cut while it fills the frame, and in a closer shot of a wide
+    product (`side_cropping`: over SIDE_CROP) one cut only at its sides while
+    it spans the frame, is the move, not a fault."""
     out, t = [], frame.time
     if not frame.fill_area:
         if not frame.bounds.get("in_view"):
@@ -273,7 +276,9 @@ def flags_for(frame: Frame, is_last: bool, fade_in: float = 0.0, revealing: bool
             return "minor"
         return None
 
-    if frame.cut_by and not revealing and not (cropping and max(frame.fill_height, frame.fill_width) >= CROPPED):
+    sides_only = set(frame.cut_by) <= {"left", "right"}
+    if frame.cut_by and not revealing and not (cropping and max(frame.fill_height, frame.fill_width) >= CROPPED) \
+            and not (side_cropping and sides_only and frame.fill_width >= CROPPED):
         out.append(Flag("major", "product_visibility", t, f"the product is cut by the {' and '.join(frame.cut_by)} "
                                                           f"edge{'s' if len(frame.cut_by) > 1 else ''}"))
     if s := grade(frame.fill_height, SMALL, above=False):
@@ -325,6 +330,7 @@ async def measure(studio, sb: Storyboard, out_dir: Path, short: int = 540, sampl
     reveals = {shot.id: start + REVEALING * shot.duration for start, shot in zip(sb.shot_starts(), sb.shots)
                if shot.camera.move == "reveal"}
     crops = {shot.id for shot in sb.shots if shot.camera.max_fill() > CROP}
+    side_crops = {shot.id for shot in sb.shots if shot.camera.max_fill() > SIDE_CROP}
 
     shots: dict[str, ShotMeasure] = {}
     for (shot, t), picture, path, a, e in zip(moments, shown, paths, alone, empty):
@@ -336,7 +342,7 @@ async def measure(studio, sb: Storyboard, out_dir: Path, short: int = 540, sampl
         entry = shots.setdefault(shot, ShotMeasure(shot, [], []))
         entry.frames.append(frame)
         entry.flags += flags_for(frame, shot == last, sb.look.lighting.fade_in or 0.0, t < reveals.get(shot, 0.0),
-                                 shot in crops)
+                                 shot in crops, shot in side_crops)
     return list(shots.values())
 
 

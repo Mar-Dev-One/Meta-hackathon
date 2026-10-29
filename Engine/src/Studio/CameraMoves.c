@@ -88,14 +88,31 @@ typedef struct move
 #define FRAMING_STEPS      40   // bisection steps for the distance
 #define FRAMING_INSIDE     0.97f   // up to this fill, no edge of it leaves the frame
 #define FRAMING_WIDE       0.8f    // its width may fill this much of the frame's width, at any fill
+#define FRAMING_CLOSE      0.7f    // from this fill, the width may grow past the frame (the sides crop) ...
+#define FRAMING_WIDEST     3.0f    // ... to this many frame widths at fill 1
 #define TRUCK_ROOM         0.8f    // a truck's default slide: this share of the frame's width beside the subject
+
+// How much of the frame's width the subject may span at `fill`: FRAMING_WIDE
+// (or `fill`, if more) up to FRAMING_CLOSE, then rising smoothly so that a
+// close-up gets the height it asks for. In a narrow (9:16) frame a squat
+// product is held back by the width: a medium shot keeps it whole, and a
+// push-in to a close-up crops its sides instead of never getting closer. The
+// rise is smooth so a dolly through it doesn't jump. In 16:9 the width
+// hardly ever decides.
+static f32
+framing_width(f32 fill)
+{
+    f32 base = fmaxf(fill, FRAMING_WIDE);
+    if (fill <= FRAMING_CLOSE)
+        return base;
+    f32 u = fminf((fill - FRAMING_CLOSE) / (1.0f - FRAMING_CLOSE), 1.0f);
+    return fmaxf(base, glm_lerp(FRAMING_WIDE, FRAMING_WIDEST, u));
+}
 
 // Whether the subject, as a cylinder (its top and bottom rims), seen from
 // `distance` away and `elevation` degrees above, aimed at its centre, spans
-// no more than `fill` of the frame's height, and of its width no more than
-// `fill` or FRAMING_WIDE, whichever is more: in a narrow (9:16) frame a squat
-// product is held back by the width, and a fill-of-the-width limit would
-// leave it small. Azimuth doesn't matter: it's round.
+// no more than `fill` of the frame's height and framing_width(fill) of its
+// width. Azimuth doesn't matter: it's round.
 static b8
 framing_fits(const move* m, f32 distance, f32 el, f32 fill, f32 tan_v, f32 tan_h)
 {
@@ -121,10 +138,12 @@ framing_fits(const move* m, f32 distance, f32 el, f32 fill, f32 tan_v, f32 tan_h
         }
     }
     // Aimed at its centre, the outline isn't centred from above: each edge
-    // also stays inside the frame, unless `fill` asks for a crop.
-    f32 edge = fmaxf(fill, FRAMING_INSIDE);
-    return v1 - v0 <= 2.0f * fill * tan_v && h1 - h0 <= 2.0f * fmaxf(fill, FRAMING_WIDE) * tan_h
-        && fmaxf(-v0, v1) <= edge * tan_v && fmaxf(-h0, h1) <= edge * tan_h;
+    // also stays inside the frame, unless `fill` (or, sideways, a close-up's
+    // width) asks for a crop.
+    f32 edge  = fmaxf(fill, FRAMING_INSIDE);
+    f32 width = framing_width(fill);
+    return v1 - v0 <= 2.0f * fill * tan_v && h1 - h0 <= 2.0f * width * tan_h
+        && fmaxf(-v0, v1) <= edge * tan_v && fmaxf(-h0, h1) <= fmaxf(edge, width) * tan_h;
 }
 
 // How far from the subject's centre, seen from `elevation` degrees above,
@@ -435,7 +454,8 @@ static const cmd_arg MOVE_ARGS[] = {
     { "ease", "string", false, "linear, in, out or in_out (default)" },
     { "camera", "string", false, "the Camera entity (default the active one, or \"camera\"); created if missing" },
     { "fill", "number", false, "how much of the frame's height the subject fills, as seen from the camera's elevation, "
-                               "0.05 to 5 (default 0.6); up to 0.97 it's whole in the frame, over that it's cropped" },
+                               "0.05 to 5 (default 0.6); up to 0.97 it's whole in the frame, over that it's cropped; "
+                               "in a narrow frame a wide subject is held by the width, and over 0.7 its sides crop" },
     { "azimuth", "number", false, "degrees around the subject: 0 = front (+Z), 90 = its right (+X) (default 0)" },
     { "elevation", "number", false, "degrees above the subject, -85 to 85 (default 10)" },
     { "fov_degrees", "number", false, "vertical field of view (default 30)" },
