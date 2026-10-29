@@ -250,7 +250,7 @@ def measure_frame(frame: Frame, shown: np.ndarray, mask: np.ndarray, colours: li
 def flags_for(frame: Frame, is_last: bool, fade_in: float = 0.0, revealing: bool = False,
               cropping: bool = False) -> list[Flag]:
     """What the numbers say is wrong in one frame. While the lights fade in
-    (`fade_in` seconds) an unseen product, early in a reveal one out of
+    (`fade_in` seconds) an unseen or dark one, early in a reveal one out of
     frame or cut, and in a close-up (`cropping`: a shot asking for more than
     CROP) one cut while it fills the frame, is the move, not a fault."""
     out, t = [], frame.time
@@ -276,14 +276,15 @@ def flags_for(frame: Frame, is_last: bool, fade_in: float = 0.0, revealing: bool
     if s := grade(frame.fill_height, SMALL, above=False):
         out.append(Flag("minor" if is_last else s, "product_visibility", t,
                         f"the product is small: {frame.fill_height:.0%} of the frame's height"))
-    if s := grade(frame.edge_lost, EDGE_LOST):
+    lit = t >= fade_in   # while the lights fade up, a dark product is the reveal
+    if lit and (s := grade(frame.edge_lost, EDGE_LOST)):
         out.append(Flag(s, "lighting", t, f"{frame.edge_lost:.0%} of the product's outline merges with the "
                                           f"background (median contrast {frame.edge_contrast:.0f})"))
     if s := grade(frame.clipped, CLIPPED):
         out.append(Flag(s, "lighting", t, f"{frame.clipped:.0%} of the product's pixels are blown to white"))
-    if s := grade(frame.crushed, CLIPPED):
+    if lit and (s := grade(frame.crushed, CLIPPED)):
         out.append(Flag(s, "lighting", t, f"{frame.crushed:.0%} of the product's pixels are crushed to black"))
-    for colour, distance in frame.palette.items():
+    for colour, distance in frame.palette.items() if lit else ():   # in the dark, colours don't show yet
         if s := grade(distance, PALETTE):
             out.append(Flag(s, "brand", t, f"{colour} isn't on the product as rendered (nearest is {distance:.0f} away)"))
     for text, share in frame.title_overlap.items():

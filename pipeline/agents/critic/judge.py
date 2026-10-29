@@ -4,7 +4,7 @@ the storyboard's terms for the director to apply.
 
     shots = await measure(studio, sb, out_dir)
     critique = judge(sb, shots[0], profile)          # a Critique; critique.passed
-    critique = judge(sb, shots[0], provider="baseten")   # the same on Muse Spark Open
+    critique = judge(sb, shots[0], provider="meta")  # on Muse Spark instead of Muse Spark Open
 
 Spark sees the shot's three frames, the brief, the shot's intent and its
 storyboard (look, camera, titles), the brand, the shot grammar and the
@@ -13,6 +13,16 @@ measurements bind it: every major measured flag needs an issue in its
 category and a score there of 6 or less, or the answer goes back with what
 it missed, up to `tries` times. A shot passes when every score is 7 or more
 and no major issue remains (decided in code, not by the model).
+
+What the storyboard means to do is said, so it isn't judged a fault: a
+reveal's product starting off frame, the lights fading up from dark, a
+close-up cropping the product. Near the pass mark (a lowest score of 6 or
+7) the same shot judged twice can land either side (a fifth of the time in
+pipeline/agents/critic/compare.py's runs), so there it's judged once more,
+as a new sample, and the worse of the two kept.
+
+The critic runs on Muse Spark Open (Baseten) by default (CRITIC): as
+consistent and as fast as Muse Spark in the comparison, and open weights.
 """
 
 import json
@@ -27,10 +37,12 @@ from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Critique, Issue, Scores, Storyboard
 from pipeline.schemas.storyboard import Strict
 
-from .measure import ShotMeasure, storyboard_colours
+from .measure import CROP, REVEALING, ShotMeasure, storyboard_colours
 
 PASS = 7          # every score at least this
 BOUND = 6         # a category with a major measured flag scores at most this
+BORDER = (6, 7)   # lowest scores judged a second time
+CRITIC = "baseten"   # the critic's model: "baseten" Muse Spark Open, "meta" Muse Spark
 
 
 class CriticError(Exception):
@@ -84,7 +96,7 @@ Style: {style}.
 
 Its storyboard, the parts that set what you see (field paths as the director edits them):
 
-{storyboard}
+{storyboard}{intended}
 
 # The brand
 
@@ -129,6 +141,31 @@ def _storyboard_text(sb: Storyboard, index: int) -> str:
              "titles": [t.model_dump(exclude_none=True) for t in sb.titles],
              "tracks": [t.model_dump(exclude_none=True) for t in sb.tracks]}
     return json.dumps(parts, indent=1)
+
+
+def intended(sb: Storyboard, index: int) -> list[str]:
+    """What the storyboard means to happen in shot `index` that would look
+    like a fault on its own (the measured checks exempt the same)."""
+    shot, start = sb.shots[index], sb.shot_starts()[index]
+    out = []
+    if shot.camera.move == "reveal":
+        arrived = start + REVEALING * shot.duration
+        out.append(f"The move is a reveal: the camera's aim pans onto the product from {shot.camera.from_ or 'above'}, "
+                   f"so until about {arrived:g} s it's meant to be off frame or cut. Judge its framing after that.")
+    fade = sb.look.lighting.fade_in
+    if fade and start < fade:
+        out.append(f"The lights fade up from dark over the ad's first {fade:g} s (look.lighting.fade_in): until then a "
+                   f"dark product is the reveal, not a lighting fault. Judge the light after that.")
+    if shot.camera.max_fill() > CROP:
+        out.append("The shot asks for fill over 0.97: a close-up that crops the product on purpose.")
+    return out
+
+
+def _intended_text(sb: Storyboard, index: int) -> str:
+    """The intentions as a paragraph after the storyboard, or nothing (so
+    shots without any keep the prompt they always had)."""
+    notes = intended(sb, index)
+    return "\n\nIntended, not faults:\n" + "\n".join(f"- {n}" for n in notes) if notes else ""
 
 
 def _brand_text(sb: Storyboard, profile: BrandProfile | None) -> str:
@@ -188,11 +225,46 @@ def unanswered(verdict: Verdict, m: ShotMeasure) -> list[str]:
     return out
 
 
+def _low(c) -> int:
+    return min(c.scores.model_dump().values())
+
+
+def worse(a, b):
+    """Of two critiques of the same thing, the one that's harder on it:
+    failing over passing, then the lower lowest score."""
+    return min((a, b), key=lambda c: (c.passed, _low(c)))
+
+
 def judge(sb: Storyboard, m: ShotMeasure, profile: BrandProfile | None = None, *, iteration: int = 0,
-          provider: str = "meta", tries: int = 3, run=None, sample: int = 0) -> Critique:
-    """The critique of the measured shot `m` of `sb`. With a run, every
-    answer and what was wrong with it is logged. `sample` judges it again as
-    a new sample (spark.ask), for measuring how much the critic varies."""
+          provider: str = CRITIC, tries: int = 3, run=None, sample: int = 0,
+          second_opinion: bool = True) -> Critique:
+    """The critique of the measured shot `m` of `sb`; near the pass mark,
+    the worse of two (second_opinion). With a run, every answer and what was
+    wrong with it is logged, and the critique saved. `sample` judges it as a
+    new sample (spark.ask), for measuring how much the critic varies."""
+    critique = _judge_once(sb, m, profile, iteration=iteration, provider=provider, tries=tries, run=run,
+                           sample=sample)
+    if second_opinion and _low(critique) in BORDER:
+        other = _judge_once(sb, m, profile, iteration=iteration, provider=provider, tries=tries, run=run,
+                            sample=sample + 1)
+        kept = worse(critique, other)
+        if run:
+            run.event("second_opinion", shot=m.shot, iteration=iteration,
+                      first={"passed": critique.passed, "low": _low(critique)},
+                      second={"passed": other.passed, "low": _low(other)},
+                      kept="first" if kept is critique else "second")
+        critique = kept
+    if run:
+        run.save_json(f"critiques/{m.shot}.{iteration}.json", critique)
+        run.event("critique", shot=m.shot, iteration=iteration, passed=critique.passed,
+                  scores=critique.scores.model_dump(), majors=sum(i.severity == "major" for i in critique.issues),
+                  issues=len(critique.issues))
+    return critique
+
+
+def _judge_once(sb: Storyboard, m: ShotMeasure, profile: BrandProfile | None, *, iteration: int, provider: str,
+                tries: int, run, sample: int) -> Critique:
+    """One critique: the model's answer, sent back until it's valid."""
     index = next(i for i, s in enumerate(sb.shots) if s.id == m.shot)
     shot, start = sb.shots[index], sb.shot_starts()[index]
     frames = [f.path for f in m.frames]
@@ -200,6 +272,7 @@ def judge(sb: Storyboard, m: ShotMeasure, profile: BrandProfile | None = None, *
     prompt = PROMPT.format(brief=sb.brief, style=sb.style, shot_id=shot.id, start=start, end=start + shot.duration,
                            duration=sb.duration, intent=shot.intent, times=", ".join(f"{f.time:g} s" for f in m.frames),
                            size=size, aspect=sb.aspect, storyboard=_storyboard_text(sb, index),
+                           intended=_intended_text(sb, index),
                            brand=_brand_text(sb, profile), measured=_measured_text(m), flags=_flags_text(m),
                            rubric=RUBRIC, grammar=grammar.load())
     schema = {**Verdict.model_json_schema(), "title": "Verdict"}
@@ -227,13 +300,8 @@ def judge(sb: Storyboard, m: ShotMeasure, profile: BrandProfile | None = None, *
 
     scores = verdict.scores.model_dump()
     passed = min(scores.values()) >= PASS and not any(i.severity == "major" for i in verdict.issues)
-    critique = Critique(shot=shot.id, iteration=iteration, frames=[f.time for f in m.frames], scores=verdict.scores,
-                        passed=passed, issues=verdict.issues, measured=m.summary())
-    if run:
-        run.save_json(f"critiques/{shot.id}.{iteration}.json", critique)
-        run.event("critique", shot=shot.id, iteration=iteration, passed=passed, scores=scores,
-                  majors=sum(i.severity == "major" for i in verdict.issues), issues=len(verdict.issues))
-    return critique
+    return Critique(shot=shot.id, iteration=iteration, frames=[f.time for f in m.frames], scores=verdict.scores,
+                    passed=passed, issues=verdict.issues, measured=m.summary())
 
 
 def _image_size(path: str) -> tuple[int, int]:

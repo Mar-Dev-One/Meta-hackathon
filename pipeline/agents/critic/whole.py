@@ -12,7 +12,10 @@ measure.py rendered them) and the cuts (the last frame before each cut next
 to the first after). As with a shot, the measurements bind it: every major
 measured cut flag needs a continuity issue and a continuity score of 6 or
 less, or the answer goes back, up to `tries` times. It passes when every
-score is 7 or more and no major issue remains (decided in code).
+score is 7 or more and no major issue remains (decided in code). As with a
+shot (judge.py), what the storyboard means to do is said (a reveal from
+dark is an opening, not a slow start), and near the pass mark it's judged
+twice and the worse kept.
 """
 
 import json
@@ -28,7 +31,7 @@ from pipeline.schemas import AdCritique, AdIssue, AdScores, BrandProfile, Storyb
 from pipeline.schemas.storyboard import Strict
 
 from .cuts import Cut
-from .judge import BOUND, PASS, CriticError, _brand_text
+from .judge import BORDER, BOUND, CRITIC, PASS, CriticError, _brand_text, _low, intended, worse
 from .measure import ShotMeasure
 
 THUMB = 300          # pixels, the longer side of each frame in the images
@@ -76,7 +79,7 @@ frame before it (left) and the first after it (right).
 
 The shots, in order:
 
-{outline}
+{outline}{intended}
 
 Titles: {titles}
 
@@ -181,10 +184,40 @@ def unanswered(verdict: AdVerdict, cuts: list[Cut]) -> list[str]:
     return out
 
 
+def _intended_text(sb: Storyboard) -> str:
+    """Every shot's intentions (judge.intended), or nothing."""
+    notes = [f"{shot.id}: {n}" for i, shot in enumerate(sb.shots) for n in intended(sb, i)]
+    return "\n\nIntended, not faults:\n" + "\n".join(f"- {n}" for n in notes) if notes else ""
+
+
 def judge_ad(sb: Storyboard, shots: list[ShotMeasure], cuts: list[Cut], profile: BrandProfile | None = None, *,
-             out_dir: Path, iteration: int = 0, provider: str = "meta", tries: int = 3, run=None) -> AdCritique:
-    """The whole ad's critique, from its measured shots and cuts. The two
-    images are saved in `out_dir` (filmstrip.png, cuts.png)."""
+             out_dir: Path, iteration: int = 0, provider: str = CRITIC, tries: int = 3, run=None,
+             second_opinion: bool = True) -> AdCritique:
+    """The whole ad's critique, from its measured shots and cuts; near the
+    pass mark, the worse of two. The two images are saved in `out_dir`
+    (filmstrip.png, cuts.png)."""
+    critique = _judge_ad_once(sb, shots, cuts, profile, out_dir=out_dir, iteration=iteration, provider=provider,
+                              tries=tries, run=run, sample=0)
+    if second_opinion and _low(critique) in BORDER:
+        other = _judge_ad_once(sb, shots, cuts, profile, out_dir=out_dir, iteration=iteration, provider=provider,
+                               tries=tries, run=run, sample=1)
+        kept = worse(critique, other)
+        if run:
+            run.event("second_opinion", shot="ad", iteration=iteration,
+                      first={"passed": critique.passed, "low": _low(critique)},
+                      second={"passed": other.passed, "low": _low(other)},
+                      kept="first" if kept is critique else "second")
+        critique = kept
+    if run:
+        run.save_json(f"critiques/ad.{iteration}.json", critique)
+        run.event("ad_critique", iteration=iteration, passed=critique.passed, scores=critique.scores.model_dump(),
+                  majors=sum(i.severity == "major" for i in critique.issues), issues=len(critique.issues))
+    return critique
+
+
+def _judge_ad_once(sb: Storyboard, shots: list[ShotMeasure], cuts: list[Cut], profile: BrandProfile | None, *,
+                   out_dir: Path, iteration: int, provider: str, tries: int, run, sample: int) -> AdCritique:
+    """One critique of the whole ad: the model's answer, sent back until it's valid."""
     out_dir = Path(out_dir)
     strip, pairs = out_dir / "filmstrip.png", out_dir / "cuts.png"
     filmstrip(shots).save(strip)
@@ -197,13 +230,15 @@ def judge_ad(sb: Storyboard, shots: list[ShotMeasure], cuts: list[Cut], profile:
                        f"{', '.join(f'{k.t:g}' for k in t.keys)} s" for i, t in enumerate(sb.tracks))
     flags = "\n".join(f"- {f.severity} at {f.time:g} s: {f.problem}" for c in cuts for f in c.flags) or "- none"
     prompt = PROMPT.format(brief=sb.brief, style=sb.style, duration=sb.duration, aspect=sb.aspect,
-                           outline=_outline(sb), titles=titles or "none", tracks=tracks or "none",
+                           outline=_outline(sb), intended=_intended_text(sb), titles=titles or "none",
+                           tracks=tracks or "none",
                            brand=_brand_text(sb, profile), cuts=_cuts_text(cuts), flags=flags, rubric=RUBRIC,
                            grammar=grammar.load())
     schema = {**AdVerdict.model_json_schema(), "title": "AdVerdict"}
     feedback, found = "", []
     for attempt in range(1, tries + 1):
-        answer = spark.ask(prompt + feedback, images=images, schema=schema, system=SYSTEM, provider=provider)
+        answer = spark.ask(prompt + feedback, images=images, schema=schema, system=SYSTEM, provider=provider,
+                           sample=sample)
         try:
             verdict = AdVerdict.model_validate(answer.data)
         except ValidationError as e:
@@ -223,10 +258,5 @@ def judge_ad(sb: Storyboard, shots: list[ShotMeasure], cuts: list[Cut], profile:
 
     scores = verdict.scores.model_dump()
     passed = min(scores.values()) >= PASS and not any(i.severity == "major" for i in verdict.issues)
-    critique = AdCritique(iteration=iteration, scores=verdict.scores, passed=passed, issues=verdict.issues,
-                          measured=[c.to_json() | {"flags": [f.problem for f in c.flags]} for c in cuts])
-    if run:
-        run.save_json(f"critiques/ad.{iteration}.json", critique)
-        run.event("ad_critique", iteration=iteration, passed=passed, scores=scores,
-                  majors=sum(i.severity == "major" for i in verdict.issues), issues=len(verdict.issues))
-    return critique
+    return AdCritique(iteration=iteration, scores=verdict.scores, passed=passed, issues=verdict.issues,
+                      measured=[c.to_json() | {"flags": [f.problem for f in c.flags]} for c in cuts])

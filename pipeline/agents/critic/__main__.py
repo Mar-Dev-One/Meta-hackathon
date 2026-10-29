@@ -20,7 +20,7 @@ from pipeline.schemas import Storyboard
 from pipeline.studio import Studio, build
 
 from .cuts import measure_cuts
-from .judge import judge
+from .judge import CRITIC, judge
 from .loop import refine, summary
 from .measure import measure, sheet
 
@@ -36,7 +36,7 @@ parser.add_argument("--broken-cut", action="store_true", help="break the cut int
                                                               "behind, and the lights change colour at the cut")
 parser.add_argument("--storyboard", metavar="FILE", help="start from this storyboard (JSON) instead of an ad")
 parser.add_argument("--resume", metavar="RUN", help="carry on a refine run that stopped, from its last finished round")
-parser.add_argument("--provider", default="meta", choices=["meta", "baseten"],
+parser.add_argument("--provider", default=CRITIC, choices=["meta", "baseten"],
                     help="the critic's model -- meta: Muse Spark; baseten: Muse Spark Open")
 args = parser.parse_args()
 unknown = [a for a in args.ads if a not in ADS]

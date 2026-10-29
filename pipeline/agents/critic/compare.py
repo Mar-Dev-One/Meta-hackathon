@@ -43,7 +43,7 @@ def verdicts(studio, sb, shots, provider: str, samples: int, run, ad: str) -> li
         for sample in range(samples):
             began, calls = time.perf_counter(), len(usage.calls())
             try:
-                c = judge(sb, shot, provider=provider, sample=sample, run=run)
+                c = judge(sb, shot, provider=provider, sample=sample, run=run, second_opinion=False)
             except CriticError as e:
                 out.append({"shot": shot.shot, "sample": sample, "provider": provider, "error": str(e)})
                 continue

@@ -40,7 +40,7 @@ from pipeline.schemas import AdCritique, BrandProfile, Critique, Storyboard
 from pipeline.studio import build
 
 from .cuts import measure_cuts
-from .judge import judge
+from .judge import CRITIC, judge
 from .measure import measure, sheet
 from .whole import judge_ad
 
@@ -147,7 +147,7 @@ def finished_rounds(run: Run) -> list[Round]:
 
 
 async def refine(studio, sb: Storyboard | None, profile: BrandProfile | None, run: Run, rounds: int = ROUNDS,
-                 provider: str = "meta", resume: bool = False) -> tuple[Storyboard, list[Round]]:
+                 provider: str = CRITIC, resume: bool = False) -> tuple[Storyboard, list[Round]]:
     """The storyboard after at most `rounds` revisions: the first that
     passes, or the best looked at. The Studio is left built with it. With
     `resume`, the run's finished rounds are read back and it carries on from
