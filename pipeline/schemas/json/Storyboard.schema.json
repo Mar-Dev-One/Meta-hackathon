@@ -64,7 +64,7 @@
         },
         "fill": {
           "default": 0.6,
-          "description": "share of the frame the product fills; 0.45 wide, 0.6 medium, 0.9 close",
+          "description": "share of the frame's height the product fills; 0.45 wide, 0.6 medium, 0.9 close, over 0.97 crops it (a close-up)",
           "maximum": 5,
           "minimum": 0.05,
           "title": "Fill",

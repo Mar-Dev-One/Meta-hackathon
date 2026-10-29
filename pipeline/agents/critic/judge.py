@@ -16,6 +16,7 @@ and no major issue remains (decided in code, not by the model).
 """
 
 import json
+import re
 
 from PIL import Image
 from pydantic import Field, ValidationError
@@ -156,6 +157,23 @@ def _flags_text(m: ShotMeasure) -> str:
     return "\n".join(f"- {f.severity} {f.category} at {f.time:g} s: {f.problem}" for f in m.flags) or "- none"
 
 
+REPEAT = re.compile(r"^\s*(the\s+)?same\b", re.IGNORECASE)   # "same fix as above", "same as t=0.3s: ..."
+
+
+def distinct(issues: list[Issue]) -> list[Issue]:
+    """The issues without repeats: one written again for another frame
+    ("same fix as above"), or the same fix in the same category. Muse Spark
+    Open writes one issue per frame."""
+    out, seen = [], set()
+    for i in issues:
+        key = (i.category, i.fix.strip().lower())
+        if REPEAT.match(i.fix) or REPEAT.match(i.problem) or key in seen:
+            continue
+        seen.add(key)
+        out.append(i)
+    return out
+
+
 def unanswered(verdict: Verdict, m: ShotMeasure) -> list[str]:
     """The major measured flags the verdict doesn't answer: no issue in the
     flag's category, or a score there above BOUND."""
@@ -171,9 +189,10 @@ def unanswered(verdict: Verdict, m: ShotMeasure) -> list[str]:
 
 
 def judge(sb: Storyboard, m: ShotMeasure, profile: BrandProfile | None = None, *, iteration: int = 0,
-          provider: str = "meta", tries: int = 3, run=None) -> Critique:
+          provider: str = "meta", tries: int = 3, run=None, sample: int = 0) -> Critique:
     """The critique of the measured shot `m` of `sb`. With a run, every
-    answer and what was wrong with it is logged."""
+    answer and what was wrong with it is logged. `sample` judges it again as
+    a new sample (spark.ask), for measuring how much the critic varies."""
     index = next(i for i, s in enumerate(sb.shots) if s.id == m.shot)
     shot, start = sb.shots[index], sb.shot_starts()[index]
     frames = [f.path for f in m.frames]
@@ -186,9 +205,11 @@ def judge(sb: Storyboard, m: ShotMeasure, profile: BrandProfile | None = None, *
     schema = {**Verdict.model_json_schema(), "title": "Verdict"}
     feedback, found = "", []
     for attempt in range(1, tries + 1):
-        answer = spark.ask(prompt + feedback, images=frames, schema=schema, system=SYSTEM, provider=provider)
+        answer = spark.ask(prompt + feedback, images=frames, schema=schema, system=SYSTEM, provider=provider,
+                           sample=sample)
         try:
             verdict = Verdict.model_validate(answer.data)
+            verdict.issues = distinct(verdict.issues)
         except ValidationError as e:
             found = _errors(e)
         else:

@@ -1,5 +1,6 @@
-"""The critic loop: build, measure, judge; if shots fail, the director
-revises the storyboard from the critiques, and round again.
+"""The critic loop: build, measure, judge every shot and the whole ad; if
+any fails, the director revises the storyboard from the critiques, and
+round again.
 
     best, rounds = await refine(studio, sb, profile, run)       # at most 3 revisions
     rounds[-1].passed, [r.score for r in rounds]
@@ -8,14 +9,21 @@ The set (light, backdrop, pedestal) is shared by every shot, so a fix for
 one shot can change the others: each round rebuilds the whole ad and judges
 every shot. An unchanged shot renders the same frames in the same Studio
 session, so its critique comes from the cache (a new session can differ by a
-level in a few pixels, and then it's judged again). The director gets the failing shots' issues, the worst
-first, with the shots that passed named so it leaves them be, and what
-earlier rounds changed and how the scores moved, so it doesn't undo a fix.
+level in a few pixels, and then it's judged again). The cuts are measured
+and the whole ad judged too (whole.py), every round: a shot can be fine on
+its own and cut badly from the one before, which matters more than a shot's
+small flaw, so it doesn't wait for every shot to pass. A round passes when
+every shot and the ad do. The director gets the ad's issues and the failing
+shots', the worst first, with the shots that passed named so it leaves them
+be, and what earlier rounds changed and how the scores moved, so it doesn't
+undo a fix.
 
 Every round is kept in the run: rounds/<i>/ holds its storyboard, frames,
-masks and contact sheet; critiques/<shot>.<i>.json its critiques; the log
-a "round" event with every shot's scores. If no round passes, the best one
-is kept: the most shots passing, then the highest lowest score.
+masks and contact sheet (and cuts/, filmstrip.png, cuts.png for the whole
+ad); critiques/<shot>.<i>.json and ad.<i>.json its critiques; the log a
+"round" event with every shot's scores and the ad's. If no round passes, the
+best one is kept: the most shots passing (the whole ad counting as one more),
+then the highest lowest score.
 
 A run that stopped (the network, a crash) carries on from its last finished
 round: refine(studio, None, profile, Run.reopen(folder), resume=True). The
@@ -28,11 +36,13 @@ from dataclasses import dataclass
 from pipeline.agents.director.revise import revise
 from pipeline.agents.director.write import DirectorError
 from pipeline.runs import Run, events
-from pipeline.schemas import BrandProfile, Critique, Storyboard
+from pipeline.schemas import AdCritique, BrandProfile, Critique, Storyboard
 from pipeline.studio import build
 
+from .cuts import measure_cuts
 from .judge import judge
 from .measure import measure, sheet
+from .whole import judge_ad
 
 ROUNDS = 3        # revisions at most (so up to 4 looks)
 
@@ -43,16 +53,23 @@ class Round:
     storyboard: Storyboard
     critiques: list[Critique]
     changes: list[str]           # what the revision that made it changed ([] for the first)
+    ad: AdCritique | None = None  # the whole ad's (None only in runs from before it existed)
 
     @property
-    def passed(self) -> bool:
+    def shots_passed(self) -> bool:
         return all(c.passed for c in self.critiques)
 
     @property
+    def passed(self) -> bool:
+        return self.shots_passed and self.ad is not None and self.ad.passed
+
+    @property
     def score(self) -> tuple[int, int, float]:
-        """For choosing the best round: shots passing, the lowest score, the mean of the shots' lowest."""
-        lows = [min(c.scores.model_dump().values()) for c in self.critiques]
-        return sum(c.passed for c in self.critiques), min(lows), round(sum(lows) / len(lows), 2)
+        """For choosing the best round: shots passing (and the whole ad, as
+        one more), the lowest score, the mean of the shots' lowest."""
+        lows = [_low(c) for c in self.critiques] + ([_low(self.ad)] if self.ad else [])
+        passing = sum(c.passed for c in self.critiques) + bool(self.ad and self.ad.passed)
+        return passing, min(lows), round(sum(lows) / len(lows), 2)
 
 
 def fix_text(r: Round, history: list[Round]) -> str:
@@ -60,6 +77,12 @@ def fix_text(r: Round, history: list[Round]) -> str:
     first), the shots that passed, and the earlier rounds."""
     lines = [f"The critic looked at every shot of the ad (round {r.index}). Fix what failed; each fix it suggests "
              f"is a starting point in storyboard terms, use your judgment on the values.", ""]
+    if r.ad and not r.ad.passed:
+        scores = ", ".join(f"{k} {v}" for k, v in r.ad.scores.model_dump().items())
+        lines.append(f"## The whole ad failed ({scores})")
+        for i in sorted(r.ad.issues, key=lambda i: i.severity != "major"):
+            lines.append(f"- {i.severity} {i.category} ({i.where}): {i.problem}\n  suggested fix: {i.fix}")
+        lines.append("")
     for c in r.critiques:
         if c.passed:
             continue
@@ -81,7 +104,7 @@ def fix_text(r: Round, history: list[Round]) -> str:
     return "\n".join(lines)
 
 
-def _low(c: Critique) -> int:
+def _low(c: Critique | AdCritique) -> int:
     return min(c.scores.model_dump().values())
 
 
@@ -95,9 +118,15 @@ async def look(studio, run: Run, sb: Storyboard, index: int, changes: list[str],
     sheet(shots).save(run.path("rounds", str(index), "sheet.png"))
     critiques = [judge(sb, s, profile, iteration=index, provider=provider, run=run) for s in shots]
     r = Round(index, sb, critiques, changes)
+    cuts = await measure_cuts(studio, sb, run.folder("rounds", str(index), "cuts"))
+    run.save_json(f"rounds/{index}/cuts.json", [c.to_json() for c in cuts])
+    r.ad = judge_ad(sb, shots, cuts, profile, out_dir=run.folder("rounds", str(index)), iteration=index,
+                    provider=provider, run=run)
     run.event("round", index=index, passed=r.passed, score=r.score, changes=changes,
               shots={c.shot: {"passed": c.passed, "scores": c.scores.model_dump(),
-                              "majors": sum(i.severity == "major" for i in c.issues)} for c in critiques})
+                              "majors": sum(i.severity == "major" for i in c.issues)} for c in critiques},
+              ad={"passed": r.ad.passed, "scores": r.ad.scores.model_dump(),
+                  "majors": sum(i.severity == "major" for i in r.ad.issues)} if r.ad else None)
     return r
 
 
@@ -111,7 +140,9 @@ def finished_rounds(run: Run) -> list[Round]:
             sb = Storyboard.model_validate_json(run.path("rounds", str(i), "storyboard.json").read_text(encoding="utf-8"))
             critiques = [Critique.model_validate_json(run.path("critiques", f"{s.id}.{i}.json").read_text(encoding="utf-8"))
                          for s in sb.shots]
-            found[i] = Round(i, sb, critiques, e["changes"])
+            ad = run.path("critiques", f"ad.{i}.json")
+            found[i] = Round(i, sb, critiques, e["changes"],
+                             AdCritique.model_validate_json(ad.read_text(encoding="utf-8")) if ad.exists() else None)
     return [found[i] for i in sorted(found)]
 
 
@@ -158,7 +189,8 @@ def summary(rounds: list[Round]) -> str:
     out = []
     for r in rounds:
         shots = "  ".join(f"{c.shot} {'ok' if c.passed else 'FAIL'} {_low(c)}" for c in r.critiques)
-        out.append(f"round {r.index}: {shots}   score {r.score}")
+        ad = f"   ad {'ok' if r.ad.passed else 'FAIL'} {_low(r.ad)}" if r.ad else ""
+        out.append(f"round {r.index}: {shots}{ad}   score {r.score}")
         for change in r.changes:
             out.append(f"    {change}")
     return "\n".join(out)

@@ -1,5 +1,6 @@
-"""The critic's verdict on one shot: scores against the rubric, measured
-numbers, and fixes written in Studio terms for the director to apply."""
+"""The critic's verdicts: on one shot (Critique) and on the whole ad, how
+the shots work together (AdCritique). Scores against the rubric, measured numbers,
+and fixes written in Studio terms for the director to apply."""
 
 from typing import Literal
 
@@ -35,3 +36,29 @@ class Critique(Strict):
     passed: bool = Field(description="every score 7 or more and no major issue")
     issues: list[Issue] = Field(default_factory=list)
     measured: dict[str, float] = Field(default_factory=dict, description="the renderer's numbers it used: fill, centre, cut edges, contrast ...")
+
+
+AdCategory = Literal["pacing", "continuity", "arc", "brand"]
+
+
+class AdScores(Strict):
+    pacing: int = Field(ge=0, le=10, description="shot lengths and moves fit the brief's energy; the ad breathes")
+    continuity: int = Field(ge=0, le=10, description="every cut feels like the same ad: light, colour, side of the product")
+    arc: int = Field(ge=0, le=10, description="opens strong, builds, lands on the hero and the name")
+    brand: int = Field(ge=0, le=10, description="the ad as a whole is unmistakably this brand")
+
+
+class AdIssue(Strict):
+    severity: Literal["minor", "major"]
+    category: AdCategory
+    where: str = Field(description="the shots or cut it's about: 's2', 's2->s3', 'all'")
+    problem: str = Field(description="what's wrong, concretely: 'the cut to s3 swings to the back of the can'")
+    fix: str = Field(description="what to change, in storyboard terms: 'shots[2].camera.azimuth 160 -> 30'")
+
+
+class AdCritique(Strict):
+    iteration: int = Field(ge=0, description="0 for the first look, +1 per revision")
+    scores: AdScores
+    passed: bool = Field(description="every score 7 or more and no major issue")
+    issues: list[AdIssue] = Field(default_factory=list)
+    measured: list[dict] = Field(default_factory=list, description="the cuts as measured: view turn, the set's light ...")

@@ -83,16 +83,20 @@ def _record(kind: str, model: str, began: float, cached: bool, numbers=(0, 0, 0)
 
 def ask(prompt: str, *, images: list[ImageInput] = (), schema: type[BaseModel] | dict | None = None,
         system: str | None = None, model: str | None = None, provider: str = "meta",
-        reasoning: str | None = None, cache_ok: bool = True) -> SparkResult:
-    """One question, optionally with images and an answer schema."""
+        reasoning: str | None = None, cache_ok: bool = True, sample: int = 0) -> SparkResult:
+    """One question, optionally with images and an answer schema. `sample`
+    asks the same again as a new sample (its own cache entry; the model sees
+    the same request): for measuring how much answers vary."""
     images = list(images)
     chat = provider == "baseten"
     model = model or (config.SPARK_OPEN if chat else config.SPARK)
     schema_name, schema_json = _schema_of(schema) if schema is not None else (None, None)
 
-    key = cache.request_key("spark.ask", {"model": model, "provider": provider, "prompt": prompt, "system": system,
-                                          "images": client.image_keys(images), "schema": schema_json,
-                                          "reasoning": reasoning})
+    request = {"model": model, "provider": provider, "prompt": prompt, "system": system,
+               "images": client.image_keys(images), "schema": schema_json, "reasoning": reasoning}
+    if sample:
+        request["sample"] = sample   # only when set, so sample 0 keeps the keys cached before it existed
+    key = cache.request_key("spark.ask", request)
     began = time.perf_counter()
     stored = cache.get_json(key, cache_ok)
     if stored is not None:

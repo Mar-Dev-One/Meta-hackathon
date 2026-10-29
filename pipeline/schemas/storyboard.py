@@ -205,6 +205,14 @@ class Track(Strict):
     field: str
     keys: list[Key] = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def _one_key_per_time(self):
+        times = [k.t for k in self.keys]
+        if len(set(times)) != len(times):
+            raise ValueError(f"two keys of {self.entity}.{self.field} are at the same time ({times}): one key per "
+                             f"time; to hold a value from the start, give one key")
+        return self
+
 
 # --- The storyboard -------------------------------------------------------------------------------
 

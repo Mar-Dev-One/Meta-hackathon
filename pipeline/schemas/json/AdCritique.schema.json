@@ -1,0 +1,132 @@
+{
+  "$defs": {
+    "AdIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "severity": {
+          "enum": [
+            "minor",
+            "major"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "pacing",
+            "continuity",
+            "arc",
+            "brand"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "where": {
+          "description": "the shots or cut it's about: 's2', 's2->s3', 'all'",
+          "title": "Where",
+          "type": "string"
+        },
+        "problem": {
+          "description": "what's wrong, concretely: 'the cut to s3 swings to the back of the can'",
+          "title": "Problem",
+          "type": "string"
+        },
+        "fix": {
+          "description": "what to change, in storyboard terms: 'shots[2].camera.azimuth 160 -> 30'",
+          "title": "Fix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "severity",
+        "category",
+        "where",
+        "problem",
+        "fix"
+      ],
+      "title": "AdIssue",
+      "type": "object"
+    },
+    "AdScores": {
+      "additionalProperties": false,
+      "properties": {
+        "pacing": {
+          "description": "shot lengths and moves fit the brief's energy; the ad breathes",
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Pacing",
+          "type": "integer"
+        },
+        "continuity": {
+          "description": "every cut feels like the same ad: light, colour, side of the product",
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Continuity",
+          "type": "integer"
+        },
+        "arc": {
+          "description": "opens strong, builds, lands on the hero and the name",
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Arc",
+          "type": "integer"
+        },
+        "brand": {
+          "description": "the ad as a whole is unmistakably this brand",
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Brand",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pacing",
+        "continuity",
+        "arc",
+        "brand"
+      ],
+      "title": "AdScores",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "iteration": {
+      "description": "0 for the first look, +1 per revision",
+      "minimum": 0,
+      "title": "Iteration",
+      "type": "integer"
+    },
+    "scores": {
+      "$ref": "#/$defs/AdScores"
+    },
+    "passed": {
+      "description": "every score 7 or more and no major issue",
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "issues": {
+      "items": {
+        "$ref": "#/$defs/AdIssue"
+      },
+      "title": "Issues",
+      "type": "array"
+    },
+    "measured": {
+      "description": "the cuts as measured: view turn, the set's light ...",
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Measured",
+      "type": "array"
+    }
+  },
+  "required": [
+    "iteration",
+    "scores",
+    "passed"
+  ],
+  "title": "AdCritique",
+  "type": "object"
+}
