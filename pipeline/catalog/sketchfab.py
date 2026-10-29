@@ -2,7 +2,9 @@
 an account's API token (Settings > Password & API) as SKETCHFAB_API_TOKEN
 in .env. Results are downloadable models under CC0 or CC-BY only."""
 
+import json
 import os
+import time
 from pathlib import Path
 
 from pipeline.meta import config  # noqa: F401 -- loads .env, where the token lives
@@ -46,9 +48,19 @@ def search(query: str, limit: int = 12) -> list[Candidate]:
     return out[:limit]
 
 
+INFO_AGE = 7 * 24 * 3600   # seconds a model's details are kept: Sketchfab limits how often it's asked
+
+
 def model_info(uid: str) -> dict:
-    """A model's public details (name, author, licence, thumbnails), no token."""
-    return get(f"{API}/models/{uid}").json()
+    """A model's public details (name, author, licence, thumbnails), no
+    token; kept on disk for a week, so repeated searches don't ask again."""
+    path = CACHE / "sketchfab" / "info" / f"{uid}.json"
+    if path.exists() and time.time() - path.stat().st_mtime < INFO_AGE:
+        return json.loads(path.read_text(encoding="utf-8"))
+    info = get(f"{API}/models/{uid}").json()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(info), encoding="utf-8")
+    return info
 
 
 def download(c: Candidate) -> Path:

@@ -15,7 +15,8 @@ from .common import ALLOWED_LICENCES, CACHE, MAX_FACES, Candidate, CatalogError,
 from .sketchfab import candidate, model_info
 
 DATASET = "https://huggingface.co/datasets/allenai/objaverse/resolve/main"
-CHECK = 40   # candidates looked up on Sketchfab per search, at most
+CHECK = 24   # candidates looked up on Sketchfab per search, at most (it limits how often it's asked)
+BATCH = 8    # looked up together; the search stops once it has enough
 
 # Product words people use for LVIS's category names.
 SYNONYMS = {
@@ -80,8 +81,12 @@ def search(query: str, limit: int = 12) -> list[Candidate]:
             return None
         return candidate(model, licence, source="objaverse")
 
-    with ThreadPoolExecutor(8) as pool:
-        found = [c for c in pool.map(look, uids) if c]
+    found: list[Candidate] = []
+    with ThreadPoolExecutor(BATCH) as pool:
+        for start in range(0, len(uids), BATCH):
+            found += [c for c in pool.map(look, uids[start:start + BATCH]) if c]
+            if len(found) >= limit:
+                break
     return found[:limit]
 
 

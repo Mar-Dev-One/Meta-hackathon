@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from .storyboard import HEX, Font, Label, PartLook, Product, ProfilePart, Strict, Surface
+from .storyboard import HEX, Font, Label, PartLook, Product, ProfilePart, Strict
 
 
 class Swatch(Strict):
@@ -75,13 +75,11 @@ class BrandProfile(Strict):
     photos: list[str] = Field(default_factory=list, description="the photos it was read from")
 
     def product(self) -> Product:
-        """The storyboard's product: the 3D model with the main material's
-        finish over its texture, the traced shape, or the template with its
-        parts dressed in the materials; with the label."""
+        """The storyboard's product: the 3D model (dressed in the materials
+        already: pipeline.studio.models.fit), the traced shape, or the
+        template with its parts dressed in the materials; with the label."""
         if self.model:
-            main = self.materials[0].surface() if self.materials else {}
-            return Product(model=self.model, height=self.height,
-                           finish=Surface(**{k: v for k, v in main.items() if k != "color"}) if main else None)
+            return Product(model=self.model, height=self.height)
         if self.profile_parts:
             return Product(template=None, profile_parts=self.profile_parts, label=self.label)
         looks = {m.name: PartLook(**m.surface()) for m in self.materials}

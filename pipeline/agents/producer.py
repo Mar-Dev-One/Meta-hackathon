@@ -49,7 +49,9 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     run.event("brief", text=brief, photo=Path(photo).name, category=category, format=format,
               model=Path(model).name if model else None)
     analysis = analyse(run, photo, category)
-    profile = with_model(run, analysis.profile, model, credit) if model else analysis.profile
+    box = analysis.seg.product.box
+    aspect = (box[3] - box[1]) / max(box[2] - box[0], 1)   # the product's outline in the photo, height / width
+    profile = with_model(run, analysis.profile, model, credit, aspect) if model else analysis.profile
     sb = await write(brief, profile, studio=studio, run=run, aspect=FORMATS[format])
     if critic:
         sb, _ = await refine(studio, sb, profile, run)
@@ -62,12 +64,16 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     return await final_cut(studio, run, sb, Path(photo).stem, aspects=aspects, short=short)
 
 
-def with_model(run: Run, profile: BrandProfile, model: Path | str, credit: dict | None) -> BrandProfile:
-    """The brand profile with `model` as its product: fitted upright to the
-    product's real height (run's product.glb), in place of the traced shape
-    and the label (a label can't be wrapped onto any shape). Saved again as
-    brand_profile.json; the model's credit as model_credit.json."""
-    fitted = models.normalize(model, run.path("product.glb"), height=profile.height)
+def with_model(run: Run, profile: BrandProfile, model: Path | str, credit: dict | None,
+               aspect: float | None = None) -> BrandProfile:
+    """The brand profile with `model` as its product (run's product.glb):
+    stood the way up that matches the product's `aspect` in its photo, fitted
+    to its real height, and dressed in the analyst's materials part by part,
+    in place of the traced shape and the label (a label can't be wrapped
+    onto any shape). Saved again as brand_profile.json; the model's credit
+    as model_credit.json."""
+    parts = {m.name: m.surface() for m in profile.materials}
+    fitted = models.fit(model, run.path("product.glb"), height=profile.height, aspect=aspect, parts=parts)
     height, width = models.size(fitted)
     profile = profile.model_copy(update={"model": str(fitted), "profile_parts": None, "template": None, "label": None})
     run.output("brand_profile", run.save_json("brand_profile.json", profile))
