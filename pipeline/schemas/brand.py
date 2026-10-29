@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from .storyboard import HEX, Font, Label, PartLook, Product, ProfilePart, Strict
+from .storyboard import HEX, Font, Label, PartLook, Product, ProfilePart, Strict, Surface
 
 
 class Swatch(Strict):
@@ -63,6 +63,8 @@ class BrandProfile(Strict):
         None, description="the Studio template closest to its shape; null when the traced profile is used")
     height: float = Field(gt=0.005, le=5, description="real height in meters (estimated from the category)")
     profile_parts: list[ProfilePart] | None = Field(None, description="the shape traced from the photo's silhouette")
+    model: str | None = Field(None, description="the product as a 3D model file (.glb), for shapes that aren't "
+                                                "round (found online or given); then no profile")
     materials: list[PartMaterial]
     palette: list[Swatch] = Field(min_length=1, max_length=8)
     typography: Typography
@@ -73,8 +75,13 @@ class BrandProfile(Strict):
     photos: list[str] = Field(default_factory=list, description="the photos it was read from")
 
     def product(self) -> Product:
-        """The storyboard's product: the traced shape (or the template, its
-        parts dressed in the materials), with the label."""
+        """The storyboard's product: the 3D model with the main material's
+        finish over its texture, the traced shape, or the template with its
+        parts dressed in the materials; with the label."""
+        if self.model:
+            main = self.materials[0].surface() if self.materials else {}
+            return Product(model=self.model, height=self.height,
+                           finish=Surface(**{k: v for k, v in main.items() if k != "color"}) if main else None)
         if self.profile_parts:
             return Product(template=None, profile_parts=self.profile_parts, label=self.label)
         looks = {m.name: PartLook(**m.surface()) for m in self.materials}

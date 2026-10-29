@@ -131,12 +131,17 @@ class Product(Strict):
     width: float | None = Field(None, gt=0.005, le=5, description="meters across at the widest")
     parts: dict[str, PartLook] = Field(default_factory=dict, description="template parts' looks by name: body, cap, lid, collar, bulb")
     profile_parts: list[ProfilePart] | None = Field(None, description="the shape as profiles (from the brand analyst), instead of a template")
+    model: str | None = Field(None, description="the product as a 3D model file (.glb: meters, Y up, base at the "
+                                                "origin), for shapes that aren't round; instead of a template "
+                                                "or profiles (pipeline.studio.models)")
+    finish: Surface | None = Field(None, description="a model's finish over its own texture: metallic, roughness, "
+                                                     "clear coat, glass")
     label: Label | None = None
 
     @model_validator(mode="after")
     def _shape(self):
-        if (self.template is None) == (self.profile_parts is None):
-            raise ValueError("give exactly one of `template` and `profile_parts`")
+        if sum(x is not None for x in (self.template, self.profile_parts, self.model)) != 1:
+            raise ValueError("give exactly one of `template`, `profile_parts` and `model`")
         return self
 
 

@@ -4,8 +4,9 @@ commands. The hand-made ads and the director both build through this.
     length = await build(studio, storyboard)    # then shot.preview / shot.render up to `length`
 """
 
-from pipeline.schemas import Storyboard
+from pipeline.schemas import Product, Storyboard
 
+from . import models
 from .client import Studio
 
 PRODUCT = "product"   # the product entity every shot frames
@@ -33,6 +34,21 @@ async def build_scene(studio: Studio, sb: Storyboard) -> dict:
         top = look.pedestal.height
 
     product = sb.product
+    if product.model:
+        await place_product_model(studio, product, top)
+    else:
+        await create_product(studio, product, top)
+
+    lighting = look.lighting
+    glow = {k: v for k, v in (("glow", lighting.glow), ("glow_color", lighting.glow_color)) if v is not None}
+    lights = await studio.call("lighting.preset", subject=PRODUCT, name=lighting.preset, intensity=lighting.intensity,
+                               turn=lighting.turn, warmth=lighting.warmth, **glow)
+    return {light["entity"]: light["intensity"] for light in lights["lights"]}
+
+
+async def create_product(studio: Studio, product: Product, top: float) -> None:
+    """A product spun from a profile (a template or the analyst's traced
+    parts), standing at the origin on the pedestal's top."""
     args = {"name": PRODUCT, "position": [0, top, 0]}
     if product.template:
         args["template"] = product.template
@@ -46,11 +62,23 @@ async def build_scene(studio: Studio, sb: Storyboard) -> dict:
         args["label"] = _clean(product.label)
     await studio.call("product.create", **args)
 
-    lighting = look.lighting
-    glow = {k: v for k, v in (("glow", lighting.glow), ("glow_color", lighting.glow_color)) if v is not None}
-    lights = await studio.call("lighting.preset", subject=PRODUCT, name=lighting.preset, intensity=lighting.intensity,
-                               turn=lighting.turn, warmth=lighting.warmth, **glow)
-    return {light["entity"]: light["intensity"] for light in lights["lights"]}
+
+# The finish fields place_model takes as overrides of a model's material; its
+# colours stay its texture's.
+MODEL_FINISH = ("metallic", "roughness", "transmission", "ior", "thickness")
+
+
+async def place_product_model(studio: Studio, product: Product, top: float) -> None:
+    """A product as a 3D model file (any shape: pipeline.studio.models),
+    installed into the Studio's assets and stood at the origin on the
+    pedestal's top, in its own size (normalized to meters), with its finish."""
+    key = models.install(studio, product.model)
+    args = {"model": key, "name": PRODUCT, "position": [0, top, 0], "scale": [1, 1, 1]}
+    if product.finish:
+        finish = {k: v for k, v in _clean(product.finish).items() if k in MODEL_FINISH}
+        if finish:
+            args["material"] = finish
+    await studio.call("place_model", **args)
 
 
 async def add_titles(studio: Studio, sb: Storyboard) -> None:

@@ -124,7 +124,8 @@ def shot_times(sb: Storyboard) -> list[tuple[str, float]]:
 def storyboard_colours(sb: Storyboard) -> list[str]:
     """The product's colours as written: each part's, or for glass, the
     colour of what it holds (what a camera sees). Labels aren't included."""
-    parts = list(sb.product.parts.values()) + list(sb.product.profile_parts or [])
+    parts = list(sb.product.parts.values()) + list(sb.product.profile_parts or []) + \
+        ([sb.product.finish] if sb.product.finish else [])
     out = []
     for p in parts:
         colour = p.attenuation_color if p.transmission and p.attenuation_color else p.color

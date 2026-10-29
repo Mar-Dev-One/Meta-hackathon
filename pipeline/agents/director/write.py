@@ -19,6 +19,7 @@ from pydantic import Field, ValidationError
 from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
 from pipeline.schemas.storyboard import Look, Product, Shot, Strict, Title, Track
+from pipeline.studio import models
 
 from . import grammar
 from .styles import STYLES
@@ -103,6 +104,8 @@ def aspect_in(brief: str) -> str:
 
 def product_size(product: Product) -> tuple[float, float]:
     """The product's height and width in meters, as the Studio builds it."""
+    if product.model:
+        return models.size(product.model)
     if product.profile_parts:
         points = [pt for part in product.profile_parts for pt in part.profile]
         return max(y for _, y in points), 2 * max(r for r, _ in points)
