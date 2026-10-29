@@ -51,6 +51,8 @@ Presets: three_point, rim_dark (luxury, moody), high_key (clean, bright), top_so
 - `turn` (-360 .. 360, default 0.0): degrees to turn the whole setup around the product
 - `warmth` (-1 .. 1, default 0.0): -1 cooler .. 1 warmer
 - `fade_in` (>0 .. 10): seconds over which every light rises from dark at the start (a reveal)
+- `glow` (0 .. 20): a soft pool of light on the wall behind the product: glass lights up in it in the colour of what it holds (a backlit bottle); 1 subtle, 2-3 strong; for glass on a dark set
+- `glow_color`: the glow's colour (default warm)
 
 ## The set (`look`)
 
@@ -107,6 +109,9 @@ Keys on any number field of an entity, eased between. The useful one: the produc
 - fill 0.45 wide, 0.6 medium, 0.9 close; a close-up (0.9+) is for the label or the cap.
 - Depth of field (`aperture`) keeps the product sharp and softens what's behind it: use the style's on most
   shots, wider (2-2.8) on close-ups and the hero to set the product apart, 0 on a wide shot whose set should read.
+- Glass (a see-through product) shows what's behind it: on a dark set, give the light a `glow` (about 2), a warm
+  pool on the wall behind, so the glass lights up in its liquid's colour. It's behind the product as seen from
+  the front: keep glass shots within about 35 degrees of azimuth 0, or the glass turns dark.
 - The last shot is the hero: static, from the front (azimuth near 0), fill 0.45-0.6, with the brand
   name as a title over it. It lasts at least 2.5 s and the name appears at least 0.4 s into it.
 - Titles: the brand name in the brand's font from the brand profile (size 0.06-0.13), an optional tagline

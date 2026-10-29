@@ -47,8 +47,9 @@ async def build_scene(studio: Studio, sb: Storyboard) -> dict:
     await studio.call("product.create", **args)
 
     lighting = look.lighting
+    glow = {k: v for k, v in (("glow", lighting.glow), ("glow_color", lighting.glow_color)) if v is not None}
     lights = await studio.call("lighting.preset", subject=PRODUCT, name=lighting.preset, intensity=lighting.intensity,
-                               turn=lighting.turn, warmth=lighting.warmth)
+                               turn=lighting.turn, warmth=lighting.warmth, **glow)
     return {light["entity"]: light["intensity"] for light in lights["lights"]}
 
 

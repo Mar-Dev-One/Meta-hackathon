@@ -36,3 +36,6 @@ int arg_number(const cJSON* args, const char* name, f32 min, f32 max, f32* out, 
 int arg_vec3(const cJSON* args, const char* name, f32 out[3], char* error, size_t error_size);
 int arg_bool(const cJSON* args, const char* name, b8* out, char* error, size_t error_size);
 int arg_string(const cJSON* args, const char* name, const char** out, char* error, size_t error_size);
+// A colour: "#RRGGBB" (sRGB, as palettes give colours; made linear) or
+// [r, g, b] (linear). Writes out[0..2].
+int arg_color(const cJSON* args, const char* name, f32 out[3], char* error, size_t error_size);

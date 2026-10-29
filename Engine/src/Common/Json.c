@@ -118,3 +118,18 @@ arg_string(const cJSON* args, const char* name, const char** out, char* error, s
     *out = item->valuestring;
     return 1;
 }
+
+int
+arg_color(const cJSON* args, const char* name, f32 out[3], char* error, size_t error_size)
+{
+    const cJSON* item = cJSON_GetObjectItemCaseSensitive(args, name);
+    if (!item)
+        return 0;
+    f32 rgba[4];
+    if (cJSON_IsString(item) ? parse_hex_color(item->valuestring, rgba, true) : json_read_floats(item, rgba, 3))
+    {
+        memcpy(out, rgba, 3 * sizeof(f32));
+        return 1;
+    }
+    return set_error(error, error_size, "\"%s\" must be \"#RRGGBB\" (sRGB) or [r, g, b] (linear 0..1)", name), -1;
+}

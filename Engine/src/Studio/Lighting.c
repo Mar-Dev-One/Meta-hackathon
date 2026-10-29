@@ -8,6 +8,11 @@
 // A preset's lights are entities called light_<role> ("light_key",
 // "light_rim_left", ...): applying a preset removes the previous preset's
 // lights, and each one can still be changed or keyframed by name.
+//
+// `glow` adds light_glow: a soft pool of light on the backdrop's wall right
+// behind the subject. Glass shows what's behind it, so on a dark set it reads
+// dark; with a glow behind it, it lights up in the colour of what it holds --
+// the backlit bottle of every perfume advert.
 
 #include "LightingCommands.h"
 
@@ -26,6 +31,15 @@
 // lights a subject about as a key light should.
 #define REFERENCE_INTENSITY 6.0f
 #define REFERENCE_DISTANCE  1.5f
+
+// The glow: a spot up and out from the wall (shares of the subject's distance
+// to it), aimed at the wall behind the subject, its pool's radius a share of
+// that distance too -- wide, so the glass still has light behind it when the
+// camera is 30-40 degrees round, and fully soft-edged.
+#define GLOW_LIFT    0.4f
+#define GLOW_REACH   0.5f
+#define GLOW_POOL    0.8f
+#define GLOW_KELVIN  3400.0f   // warm, as a backlight usually is
 
 typedef struct preset_light
 {
@@ -117,11 +131,14 @@ cmd_lighting_preset(void* user, command_context* ctx, const cJSON* args, cJSON**
 
     const char* name    = NULL;
     const char* subject = NULL;
-    f32 intensity = 1.0f, turn = 0.0f, warmth = 0.0f;
+    f32 intensity = 1.0f, turn = 0.0f, warmth = 0.0f, glow = 0.0f, glow_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    int has_glow_color = 0;
     if (arg_string(args, "name", &name, error, error_size) < 0 || arg_string(args, "subject", &subject, error, error_size) < 0
         || arg_number(args, "intensity", 0.0f, 20.0f, &intensity, error, error_size) < 0
         || arg_number(args, "turn", -360.0f, 360.0f, &turn, error, error_size) < 0
-        || arg_number(args, "warmth", -1.0f, 1.0f, &warmth, error, error_size) < 0)
+        || arg_number(args, "warmth", -1.0f, 1.0f, &warmth, error, error_size) < 0
+        || arg_number(args, "glow", 0.0f, 20.0f, &glow, error, error_size) < 0
+        || (has_glow_color = arg_color(args, "glow_color", glow_color, error, error_size)) < 0)
         return false;
 
     const lighting_preset* preset = NULL;
@@ -184,6 +201,45 @@ cmd_lighting_preset(void* user, command_context* ctx, const cJSON* args, cJSON**
         json_add_floats(item, "color", color, 3);
         cJSON_AddItemToArray(lights, item);
     }
+    if (glow > 0.0f)
+    {
+        // The wall: the back of the backdrop entity, or where a default cyclorama's would be.
+        entity_id backdrop = world_find(s->w, "backdrop");
+        vec3      back_lo, back_hi;
+        f32       wall = center[2] - 3.0f;
+        if (backdrop && world_bounds(s->w, backdrop, back_lo, back_hi))
+            wall = back_lo[2];
+
+        f32  gap    = fmaxf(center[2] - wall, 0.5f);
+        vec3 aim    = { center[0], center[1] - 0.1f * gap, wall + 0.01f };   // the camera looks a little down: the glass sees the wall below its own height
+        vec3 source = { aim[0], aim[1] + GLOW_LIFT * gap, aim[2] + GLOW_REACH * gap };
+        vec3 direction;
+        glm_vec3_sub(aim, source, direction);
+        f32  reach = glm_vec3_norm(direction);
+        glm_vec3_normalize(direction);
+        f32  cone  = atanf(GLOW_POOL * gap / reach) / DEG_TO_RAD;
+
+        f32 color[3];
+        if (has_glow_color)
+            memcpy(color, glow_color, sizeof(color));
+        else
+            kelvin_to_rgb(GLOW_KELVIN - 1500.0f * warmth, color);
+        f32 glow_falloff = (reach / REFERENCE_DISTANCE) * (reach / REFERENCE_DISTANCE);
+
+        light l;
+        light_init_spot(&l, direction, color, glow * REFERENCE_INTENSITY * glow_falloff, 3.0f * reach, 0.0f, cone);
+        l.cast_shadows = false;
+        entity_id light_entity = world_create(s->w, LIGHT_PREFIX "glow");
+        glm_vec3_copy(source, world_transform(s->w, light_entity)->position);
+        world_add_light(s->w, light_entity, l);
+
+        cJSON* item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "entity", world_name(s->w, light_entity));
+        json_add_floats(item, "position", source, 3);
+        cJSON_AddNumberToObject(item, "intensity", json_round6(l.intensity));
+        json_add_floats(item, "color", color, 3);
+        cJSON_AddItemToArray(lights, item);
+    }
     studio_evaluate(s, s->timeline.time, NULL);
 
     *out_result = cJSON_CreateObject();
@@ -199,6 +255,9 @@ static const cmd_arg PRESET_ARGS[] = {
     { "intensity", "number", false, "times the preset's brightness, 0 to 20 (default 1)" },
     { "turn", "number", false, "degrees to turn the whole setup around the subject (default 0)" },
     { "warmth", "number", false, "-1 (cooler) to 1 (warmer); 0 = the preset's own colours" },
+    { "glow", "number", false, "a soft pool of light on the backdrop's wall behind the subject (light_glow): glass "
+                               "lights up in it; 0 none (default), 1 subtle, 3 strong" },
+    { "glow_color", "string", false, "the glow's colour, \"#RRGGBB\" (default warm, following warmth)" },
 };
 
 static const cmd_host_command LIGHTING_COMMANDS[] = {

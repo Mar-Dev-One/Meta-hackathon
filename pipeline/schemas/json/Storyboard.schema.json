@@ -466,6 +466,35 @@
           "default": null,
           "description": "seconds over which every light rises from dark at the start (a reveal)",
           "title": "Fade In"
+        },
+        "glow": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "a soft pool of light on the wall behind the product: glass lights up in it in the colour of what it holds (a backlit bottle); 1 subtle, 2-3 strong; for glass on a dark set",
+          "title": "Glow"
+        },
+        "glow_color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "the glow's colour (default warm)",
+          "title": "Glow Color"
         }
       },
       "required": [

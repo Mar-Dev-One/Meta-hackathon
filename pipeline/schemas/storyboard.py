@@ -58,6 +58,11 @@ class Lighting(Strict):
     turn: float = Field(0.0, ge=-360, le=360, description="degrees to turn the whole setup around the product")
     warmth: float = Field(0.0, ge=-1, le=1, description="-1 cooler .. 1 warmer")
     fade_in: float | None = Field(None, gt=0, le=10, description="seconds over which every light rises from dark at the start (a reveal)")
+    glow: float | None = Field(None, ge=0, le=20, description="a soft pool of light on the wall behind the product: "
+                                                              "glass lights up in it in the colour of what it holds "
+                                                              "(a backlit bottle); 1 subtle, 2-3 strong; for glass "
+                                                              "on a dark set")
+    glow_color: str | None = Field(None, pattern=HEX, description="the glow's colour (default warm)")
 
 
 class Look(Strict):
