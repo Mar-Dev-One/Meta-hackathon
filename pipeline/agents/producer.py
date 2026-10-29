@@ -18,7 +18,8 @@ storyboard (the default).
 from pathlib import Path
 
 from pipeline.runs import Run
-from pipeline.studio import build, final_cut, preview
+from pipeline.schemas import BrandProfile
+from pipeline.studio import build, final_cut, models, preview
 
 from .analyst import analyse
 from .critic.loop import refine
@@ -31,21 +32,27 @@ FORMATS = {"horizontal": "16:9", "vertical": "9:16", "both": None}
 
 
 async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str = "product", short: int = 1080,
-                  video: bool = True, critic: bool = True, format: str = "both") -> dict[str, Path] | None:
+                  video: bool = True, critic: bool = True, format: str = "both", model: Path | str | None = None,
+                  credit: dict | None = None) -> dict[str, Path] | None:
     """The ad for `brief` with the product in `photo`: its videos by aspect
     (None with video=False). `format` is "horizontal" (16:9), "vertical"
     (9:16) or "both": the director plans for the chosen frame, or, for both,
     the brief's (vertical if it says so) and the other is reframed from it.
-    Without the critic, the director's first storyboard is built and a few
-    frames previewed (frames/)."""
+    `model` is a 3D model file (.glb) of the product, for shapes that aren't
+    round (pipeline.catalog finds them; `credit` is its candidate's, kept in
+    the run as model_credit.json); without one the shape is traced from the
+    photo as a round product. Without the critic, the director's first
+    storyboard is built and a few frames previewed (frames/)."""
     if format not in FORMATS:
         raise ValueError(f"format must be one of {', '.join(FORMATS)}, not {format!r}")
     run.watch(studio)
-    run.event("brief", text=brief, photo=Path(photo).name, category=category, format=format)
+    run.event("brief", text=brief, photo=Path(photo).name, category=category, format=format,
+              model=Path(model).name if model else None)
     analysis = analyse(run, photo, category)
-    sb = await write(brief, analysis.profile, studio=studio, run=run, aspect=FORMATS[format])
+    profile = with_model(run, analysis.profile, model, credit) if model else analysis.profile
+    sb = await write(brief, profile, studio=studio, run=run, aspect=FORMATS[format])
     if critic:
-        sb, _ = await refine(studio, sb, analysis.profile, run)
+        sb, _ = await refine(studio, sb, profile, run)
     else:
         await build(studio, sb)
         await preview(studio, run, sb)
@@ -53,6 +60,23 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
         return None
     aspects = (sb.aspect,) + (tuple(a for a in ("16:9", "9:16") if a != sb.aspect) if format == "both" else ())
     return await final_cut(studio, run, sb, Path(photo).stem, aspects=aspects, short=short)
+
+
+def with_model(run: Run, profile: BrandProfile, model: Path | str, credit: dict | None) -> BrandProfile:
+    """The brand profile with `model` as its product: fitted upright to the
+    product's real height (run's product.glb), in place of the traced shape
+    and the label (a label can't be wrapped onto any shape). Saved again as
+    brand_profile.json; the model's credit as model_credit.json."""
+    fitted = models.normalize(model, run.path("product.glb"), height=profile.height)
+    height, width = models.size(fitted)
+    profile = profile.model_copy(update={"model": str(fitted), "profile_parts": None, "template": None, "label": None})
+    run.output("brand_profile", run.save_json("brand_profile.json", profile))
+    if credit:
+        run.output("model_credit", run.save_json("model_credit.json", credit))
+    run.event("model_fitted", file="product.glb", height=round(height, 4), width=round(width, 4),
+              source=(credit or {}).get("source", "upload"), name=(credit or {}).get("name"),
+              credit=(credit or {}).get("credit"))
+    return profile
 
 
 if __name__ == "__main__":
@@ -72,6 +96,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-critic", action="store_true", help="render the director's first storyboard as it is")
     parser.add_argument("--format", choices=list(FORMATS), default="both",
                         help="horizontal (16:9), vertical (9:16) or both (default)")
+    parser.add_argument("--model", help="a 3D model file (.glb) of the product, for shapes that aren't round")
     args = parser.parse_args()
 
     async def main() -> None:
@@ -79,7 +104,8 @@ if __name__ == "__main__":
         async with Studio() as studio:
             with Run.create(f"ad-{Path(args.photo).stem}") as run:
                 videos = await make_ad(studio, run, args.brief, args.photo, args.category, args.size,
-                                       video=not args.preview, critic=not args.no_critic, format=args.format)
+                                       video=not args.preview, critic=not args.no_critic, format=args.format,
+                                       model=args.model)
         summary = json.loads((run.root / "run.json").read_text(encoding="utf-8"))
         made = "\n".join(str(v) for v in videos.values()) if videos else str(run.root)
         print(f"{made}\n{time.time() - began:.0f} s, {summary['model_calls']} model calls "

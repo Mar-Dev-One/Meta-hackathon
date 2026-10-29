@@ -8,7 +8,9 @@ happens, open any run that's already done.
 
     GET  /                           the page: start an ad, watch it, open any run
     POST /runs                       a photo (file) and a brief: queues an ad (pipeline.agents.producer);
-                                     format = horizontal, vertical or both (default)
+                                     format = horizontal, vertical or both (default); optionally a 3D model of
+                                     the product: model_pick (a search result's JSON) or model_file (a .glb)
+    GET  /models/search?q=           3D models of a product online, ones we may use (pipeline.catalog)
     GET  /runs                       every run, newest first: status, brief, outputs
     GET  /runs/{id}                  one run: its summary (run.json) and outputs
     GET  /runs/{id}/events           its log as Server-Sent Events: followed live while it runs;
@@ -34,7 +36,9 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
+from pipeline import catalog
 from pipeline.agents.producer import FORMATS, make_ad
+from pipeline.catalog.common import Candidate
 from pipeline.runs import RUNS, Run, all_runs, events
 from pipeline.studio import Studio
 
@@ -42,6 +46,7 @@ PAGE = Path(__file__).with_name("static") / "index.html"
 POLL = 0.25          # seconds between looks at a live run's log
 HEARTBEAT = 15.0     # seconds between keep-alive comments on a quiet stream
 PHOTO_TYPES = (".png", ".jpg", ".jpeg", ".webp")
+MODEL_TYPES = (".glb",)
 
 app = FastAPI(title="Studio", description="Product photo and brief in, finished ad out.")
 
@@ -56,6 +61,8 @@ class Job:
     video: bool
     size: int
     format: str
+    model_pick: Candidate | None = None   # a search result, downloaded by the worker
+    model_file: Path | None = None        # an uploaded model
 
 
 jobs: "queue.Queue[Job]" = queue.Queue()
@@ -81,8 +88,12 @@ def _work() -> None:
 async def _make(job: Job) -> None:
     async with Studio() as studio:
         with job.run:
+            model, credit = job.model_file, None
+            if job.model_pick:
+                job.run.event("model_download", source=job.model_pick.source, name=job.model_pick.name)
+                model, credit = catalog.download(job.model_pick), job.model_pick.to_json()
             await make_ad(studio, job.run, job.brief, job.photo, job.category, job.size, video=job.video,
-                          critic=job.critic, format=job.format)
+                          critic=job.critic, format=job.format, model=model, credit=credit)
 
 
 threading.Thread(target=_work, name="producer", daemon=True).start()
@@ -131,10 +142,36 @@ def page() -> FileResponse:
     return FileResponse(PAGE, headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/models/search")
+def search_models(q: str, limit: int = 12) -> list[dict]:
+    """3D models of `q` online that we may use (CC0, CC-BY), from every
+    source, best first; each with its thumbnail, licence and credit."""
+    if not q.strip():
+        raise HTTPException(422, "nothing to search for")
+    return [c.to_json() for c in catalog.search(q.strip(), limit=min(max(limit, 1), 24))]
+
+
+def _pick(text: str) -> Candidate:
+    """A search result sent back by the page, checked: a known source, a
+    licence we accept, and, for Sketchfab, a token to download it with."""
+    try:
+        data = json.loads(text)
+        pick = Candidate(**{k: data[k] for k in Candidate.__dataclass_fields__ if k in data})
+    except (ValueError, TypeError) as e:
+        raise HTTPException(422, f"model_pick isn't a search result: {e}")
+    if pick.source not in catalog.SOURCES or pick.licence not in catalog.ALLOWED_LICENCES:
+        raise HTTPException(422, f"model_pick: unknown source {pick.source!r} or licence {pick.licence!r}")
+    if pick.source == "sketchfab" and not catalog.sketchfab.token():
+        raise HTTPException(422, "downloading from Sketchfab needs SKETCHFAB_API_TOKEN in .env "
+                                 "(sketchfab.com > Settings > Password & API); pick another model or add it")
+    return pick
+
+
 @app.post("/runs", status_code=202)
 async def start(photo: UploadFile = File(...), brief: str = Form(...), category: str = Form("product"),
                 critic: bool = Form(True), video: bool = Form(True), size: int = Form(1080),
-                format: str = Form("both")) -> dict:
+                format: str = Form("both"), model_pick: str = Form(""),
+                model_file: UploadFile | None = File(None)) -> dict:
     """Queues an ad: the photo and brief in, a run id back to follow."""
     name = Path(photo.filename or "photo.png").name
     if Path(name).suffix.lower() not in PHOTO_TYPES:
@@ -143,15 +180,24 @@ async def start(photo: UploadFile = File(...), brief: str = Form(...), category:
         raise HTTPException(422, "the brief is empty")
     if format not in FORMATS:
         raise HTTPException(422, f"the format must be one of {', '.join(FORMATS)}")
+    pick = _pick(model_pick) if model_pick.strip() else None
+    model_name = Path(model_file.filename or "").name if model_file and model_file.filename else ""
+    if model_name and Path(model_name).suffix.lower() not in MODEL_TYPES:
+        raise HTTPException(422, f"the model must be a {', '.join(MODEL_TYPES)} file")
     run = Run.create(f"ad-{Path(name).stem}")
     upload = run.path("upload", name)
     with upload.open("wb") as out:
         shutil.copyfileobj(photo.file, out)
+    model_upload = None
+    if model_name and not pick:
+        model_upload = run.path("upload", model_name)
+        with model_upload.open("wb") as out:
+            shutil.copyfileobj(model_file.file, out)
     rid = run.root.name
     waiting.append(rid)
     run.event("queued", position=len(waiting), brief=brief, category=category, critic=critic, video=video,
-              format=format)
-    jobs.put(Job(run, upload, brief.strip(), category, critic, video, size, format))
+              format=format, model=pick.name if pick else model_name or None)
+    jobs.put(Job(run, upload, brief.strip(), category, critic, video, size, format, pick, model_upload))
     return {"id": rid, "status": "queued", "position": len(waiting), "events": f"/runs/{rid}/events"}
 
 

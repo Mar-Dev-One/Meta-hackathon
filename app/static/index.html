@@ -93,6 +93,17 @@
   .log b { color: var(--text); font-weight: 600; }
   .zoom { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; z-index: 9; cursor: zoom-out; }
   .zoom img { max-width: 94vw; max-height: 94vh; }
+  .models { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+  .mcard { background: var(--panel-2); border: 1.5px solid var(--line); border-radius: 9px; overflow: hidden; cursor: pointer; }
+  .mcard:hover { border-color: #6b5631; }
+  .mcard.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .mcard.off { opacity: .45; cursor: not-allowed; }
+  .mcard img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #0b0b0c; display: block; }
+  .mcard .body { padding: 7px 9px 9px; font-size: 12px; }
+  .mcard .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip { display: inline-flex; gap: 6px; align-items: center; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 12px; max-width: 100%; }
+  .chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip button { background: none; border: 0; color: var(--dim); cursor: pointer; font-size: 14px; }
   @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } aside { border-right: 0; } .profile { grid-template-columns: 1fr; } main { padding: 16px; } }
 </style>
 </head>
@@ -104,6 +115,13 @@
       <div id="drop" class="drop">Drop a product photo, or click<input id="photo" type="file" accept="image/png,image/jpeg,image/webp" hidden></div>
       <label class="field">Brief<textarea id="brief" placeholder="Luxury perfume ad, dark and moody, 15 seconds." required></textarea></label>
       <label class="field">What it is<input id="category" type="text" placeholder="perfume bottle"></label>
+      <div class="field">3D model <span class="meta">optional: for a product that isn't round</span>
+        <div class="row">
+          <button type="button" class="btn ghost" id="findModels">Find models online</button>
+          <label class="btn ghost" style="cursor:pointer">Upload .glb<input id="modelFile" type="file" accept=".glb" hidden></label>
+        </div>
+        <div id="modelChosen"></div>
+      </div>
       <label class="field">Format<select id="format">
         <option value="both">Both: horizontal and vertical</option>
         <option value="horizontal">Horizontal 16:9 (YouTube, web)</option>
@@ -129,6 +147,14 @@
   <main>
     <div id="empty" class="empty">Start an ad, or open a run.</div>
 
+    <section id="modelsCard" class="card hidden">
+      <div class="head"><h2>3D models</h2>
+        <form id="modelSearch" class="row"><input id="modelQuery" type="text" placeholder="perfume bottle">
+          <button class="btn ghost" type="submit">Search</button></form></div>
+      <div class="meta" id="modelsMeta">Models we may use (CC0 or CC-BY), from Sketchfab, Objaverse and Poly Haven. Pick one for your product.</div>
+      <div class="models" id="models"></div>
+    </section>
+
     <section id="top" class="hidden">
       <div class="head">
         <div class="brief" id="briefText"></div>
@@ -146,6 +172,7 @@
           <div class="meta" id="brandSub"></div>
           <div class="swatches" id="swatches"></div>
           <dl class="kv" id="brandKv"></dl>
+          <div class="meta" id="modelCredit" style="margin-top:10px"></div>
         </div>
       </div>
     </section>
@@ -222,6 +249,7 @@ function reset() {
   for (const id of ["profileImgs", "swatches", "brandKv", "strip", "timebar", "scores", "sheets", "frames", "videos", "log", "issues"]) $(id).replaceChildren();
   for (const id of ["profileCard", "storyCard", "criticCard", "previewCard", "finalCard", "issues"]) show(id, false);
   $("titles").textContent = ""; $("cost").textContent = ""; $("criticMeta").textContent = "";
+  $("modelCredit").textContent = ""; show("modelsCard", false);
 }
 
 function open(id, speed = Number($("speed").value)) {
@@ -236,7 +264,8 @@ function open(id, speed = Number($("speed").value)) {
   source.addEventListener("end", () => { source.close(); loadRuns(); });
   const kinds = ["started", "queued", "brief", "analyse", "segmented", "read", "output", "saved", "model", "draft", "studio",
     "preview", "critique", "ad_critique", "second_opinion", "round", "revision", "revised", "revision_failed", "refined",
-    "render", "rendered", "music", "finished", "failed", "resumed", "critique_draft", "ad_critique_draft", "resumed_rounds"];
+    "render", "rendered", "music", "finished", "failed", "resumed", "critique_draft", "ad_critique_draft", "resumed_rounds",
+    "model_download", "model_fitted"];
   for (const k of kinds) source.addEventListener(k, (m) => handle(JSON.parse(m.data)));
   source.onerror = () => { if (source.readyState === EventSource.CLOSED) loadRuns(); };
 }
@@ -280,6 +309,12 @@ const HANDLERS = {
   },
   finished: (e) => { setStatus(e.status); if (e.cost != null) $("cost").textContent = `$${e.cost.toFixed(3)} on Meta models · ${Math.round(e.seconds)} s`; },
   failed: (e) => setStatus("failed"),
+  model_download: (e) => { $("modelCredit").textContent = `Downloading the 3D model from ${e.source}: ${e.name}…`; },
+  model_fitted: (e) => {
+    show("profileCard");
+    $("modelCredit").replaceChildren(document.createTextNode(
+      `3D model: ${e.source === "upload" ? "your own" : e.credit || e.name} · ${(e.height * 100).toFixed(1)} × ${(e.width * 100).toFixed(1)} cm`));
+  },
 };
 
 function logLine(e) {
@@ -408,6 +443,62 @@ function video(label, path) {
     el("figcaption", {}, document.createTextNode(name + " · "), el("a", { href: file(path), download: "", text: "download" }))));
 }
 
+// --- 3D models -------------------------------------------------------------------
+let modelPick = null;
+
+function setModel(text) {
+  $("modelChosen").replaceChildren(...(text ? [el("div", { class: "chip", style: "margin-top:8px" }, el("span", { text }),
+    el("button", { type: "button", title: "remove", text: "×", onclick: clearModel }))] : []));
+}
+function clearModel() {
+  modelPick = null; $("modelFile").value = ""; setModel("");
+  document.querySelectorAll(".mcard.sel").forEach((c) => c.classList.remove("sel"));
+}
+
+async function findModels(query) {
+  if (source) source.close();
+  run = null; history.replaceState(null, "", "#");
+  for (const id of ["top", "profileCard", "storyCard", "criticCard", "previewCard", "finalCard", "logCard", "empty"]) show(id, false);
+  show("modelsCard");
+  $("modelQuery").value = query;
+  $("modelsMeta").textContent = `Searching for “${query}”…`;
+  $("models").replaceChildren();
+  let found = [];
+  try {
+    const r = await fetch(`/models/search?q=${encodeURIComponent(query)}&limit=12`);
+    found = await r.json();
+    if (!r.ok) throw new Error(found.detail || r.statusText);
+  } catch (err) { $("modelsMeta").textContent = "The search failed: " + err.message; return; }
+  $("modelsMeta").textContent = found.length
+    ? `${found.length} models of “${query}” we may use (CC0 or CC-BY). Pick one; its author is credited with the ad.`
+    : `Nothing found for “${query}”: try other words, or upload a .glb.`;
+  $("models").replaceChildren(...found.map((m) => {
+    const card = el("div", { class: "mcard" + (m.needs_token ? " off" : ""), title: m.needs_token ? "Sketchfab needs SKETCHFAB_API_TOKEN in .env to download this" : m.credit },
+      el("img", { src: m.thumbnail, alt: m.name, loading: "lazy" }),
+      el("div", { class: "body" }, el("div", { class: "name", text: m.name }),
+        el("div", { class: "meta", text: `by ${m.author}` }),
+        el("div", { class: "row", style: "margin-top:4px;gap:5px" },
+          el("span", { class: "pill", text: m.source }), el("span", { class: "pill", text: m.licence === "cc0" ? "CC0" : "CC BY" }),
+          el("span", { class: "meta", text: m.faces ? `${(m.faces / 1000).toFixed(m.faces < 10000 ? 1 : 0)}k faces` : "" })),
+        m.needs_token ? el("div", { class: "meta", style: "color:var(--warn);margin-top:3px", text: "needs a Sketchfab token" }) : null,
+        el("a", { href: m.page, target: "_blank", rel: "noopener", text: "view", onclick: (e) => e.stopPropagation() })));
+    if (!m.needs_token) card.onclick = () => {
+      document.querySelectorAll(".mcard.sel").forEach((c) => c.classList.remove("sel"));
+      card.classList.add("sel"); modelPick = m; $("modelFile").value = "";
+      setModel(`${m.name} · ${m.source}, ${m.licence === "cc0" ? "CC0" : "CC BY"}`);
+    };
+    return card;
+  }));
+}
+
+$("findModels").onclick = () => findModels(($("category").value || $("brief").value.split(/[,.]/)[0] || "product").trim());
+$("modelSearch").onsubmit = (e) => { e.preventDefault(); if ($("modelQuery").value.trim()) findModels($("modelQuery").value.trim()); };
+$("modelFile").onchange = () => {
+  const f = $("modelFile").files[0]; if (!f) return;
+  modelPick = null; document.querySelectorAll(".mcard.sel").forEach((c) => c.classList.remove("sel"));
+  setModel(`${f.name} · your own`);
+};
+
 // --- Starting an ad --------------------------------------------------------------
 const drop = $("drop"), input = $("photo");
 drop.onclick = () => input.click();
@@ -430,6 +521,8 @@ $("form").onsubmit = async (e) => {
   data.append("critic", $("critic").checked);
   data.append("video", $("video").checked);
   data.append("format", $("format").value);
+  if (modelPick) data.append("model_pick", JSON.stringify(modelPick));
+  else if ($("modelFile").files[0]) data.append("model_file", $("modelFile").files[0]);
   $("go").disabled = true; $("formMsg").textContent = "Starting…";
   try {
     const r = await fetch("/runs", { method: "POST", body: data });
