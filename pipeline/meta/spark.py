@@ -99,31 +99,27 @@ def ask(prompt: str, *, images: list[ImageInput] = (), schema: type[BaseModel] |
         _record("text", model, began, True)
         return SparkResult(text=stored["text"], data=_parse(model, stored["text"], schema), model=model, cached=True)
 
-    try:
+    def request() -> tuple[str, tuple[int, int, int]]:
         if chat:
             messages = ([{"role": "system", "content": system}] if system else []) + \
                        [{"role": "user", "content": _user_content(prompt, images, chat=True)}]
             extra = {"response_format": {"type": "json_schema", "json_schema": {"name": schema_name, "schema": schema_json}}} \
                 if schema_json else {}
             response = client.baseten().chat.completions.create(model=model, messages=messages, **extra)
-            text, numbers = response.choices[0].message.content or "", _usage_numbers(response.usage)
-        else:
-            extra = {}
-            if system:
-                extra["instructions"] = system
-            if schema_json:
-                extra["text"] = {"format": {"type": "json_schema", "name": schema_name, "schema": schema_json}}
-            if reasoning:
-                extra["reasoning"] = {"effort": reasoning}
-            response = client.meta().responses.create(
-                model=model, input=[{"type": "message", "role": "user", "content": _user_content(prompt, images, chat=False)}],
-                **extra)
-            text, numbers = response.output_text, _usage_numbers(response.usage)
-    except config.MissingKey:
-        raise   # not a model failure: say which key to set
-    except Exception as e:   # noqa: BLE001 -- every failure leaves as a MetaError
-        raise client.wrap_error(model, e) from e
+            return response.choices[0].message.content or "", _usage_numbers(response.usage)
+        extra = {}
+        if system:
+            extra["instructions"] = system
+        if schema_json:
+            extra["text"] = {"format": {"type": "json_schema", "name": schema_name, "schema": schema_json}}
+        if reasoning:
+            extra["reasoning"] = {"effort": reasoning}
+        response = client.meta().responses.create(
+            model=model, input=[{"type": "message", "role": "user", "content": _user_content(prompt, images, chat=False)}],
+            **extra)
+        return response.output_text, _usage_numbers(response.usage)
 
+    text, numbers = client.call(model, request)
     _record("text", model, began, False, numbers)
     data = _parse(model, text, schema)    # parse before caching: a bad answer isn't kept
     cache.put_json(key, {"text": text})
@@ -152,13 +148,9 @@ def run_tools(prompt: str, *, tools: list[dict], handle: Callable[[str, dict], A
         stored = cache.get_json(key, cache_ok)
         if stored is None:
             all_cached = False
-            try:
-                extra = {"instructions": system} if system else {}
-                response = client.meta().responses.create(model=model, input=history, tools=tools, **extra)
-            except config.MissingKey:
-                raise   # not a model failure: say which key to set
-            except Exception as e:   # noqa: BLE001
-                raise client.wrap_error(model, e) from e
+            extra = {"instructions": system} if system else {}
+            response = client.call(model, lambda: client.meta().responses.create(model=model, input=history,
+                                                                                 tools=tools, **extra))
             # The whole output (reasoning included) goes back with the next
             # turn, as the model produced it.
             stored = {"text": response.output_text,

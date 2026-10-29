@@ -22,13 +22,8 @@ def generate(prompt: str, *, size: str = "1024x1024", out: Path | None = None, c
     png = cache.get_bytes(key, ".png", cache_ok)
     cached = png is not None
     if not cached:
-        try:
-            result = client.meta().images.generate(model=config.IMAGE, prompt=prompt, size=size,
-                                                   extra_body={"output_format": "png"})
-        except config.MissingKey:
-            raise   # not a model failure: say which key to set
-        except Exception as e:   # noqa: BLE001
-            raise client.wrap_error(config.IMAGE, e) from e
+        result = client.call(config.IMAGE, lambda: client.meta().images.generate(
+            model=config.IMAGE, prompt=prompt, size=size, extra_body={"output_format": "png"}))
         png = base64.b64decode(result.data[0].b64_json)
     stored = cache.put_bytes(key, ".png", png) if not cached else cache.path(key, ".png")
     usage.record(usage.Call(kind="image", model=config.IMAGE, cached=cached,

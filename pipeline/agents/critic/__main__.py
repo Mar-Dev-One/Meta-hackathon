@@ -6,6 +6,7 @@ a critique per shot in critiques/; with --refine, the whole loop (rounds/).
     python -m pipeline.agents.critic noctis kora --judge  # and judged by Muse Spark
     python -m pipeline.agents.critic kora --judge --provider baseten   # by Muse Spark Open
     python -m pipeline.agents.critic fizzo --refine --broken           # broken on purpose, fixed by the loop
+    python -m pipeline.agents.critic --resume runs/<folder>            # a refine run that stopped, carried on
 """
 
 import argparse
@@ -27,6 +28,7 @@ parser.add_argument("--judge", action="store_true", help="also score each shot w
 parser.add_argument("--refine", action="store_true", help="the critic loop: judge, revise, rebuild, up to 3 times")
 parser.add_argument("--broken", action="store_true", help="break the ad first: a shot slides the product out of "
                                                           "frame and the light is nearly off")
+parser.add_argument("--resume", metavar="RUN", help="carry on a refine run that stopped, from its last finished round")
 parser.add_argument("--provider", default="meta", choices=["meta", "baseten"],
                     help="the critic's model -- meta: Muse Spark; baseten: Muse Spark Open")
 args = parser.parse_args()
@@ -59,6 +61,12 @@ def show(s, critique) -> None:
 
 async def main() -> None:
     async with Studio() as studio:
+        if args.resume:
+            with Run.reopen(args.resume) as run:
+                run.watch(studio)
+                _, rounds = await refine(studio, None, None, run, provider=args.provider, resume=True)
+            print(f"\n{run.root}\n{summary(rounds)}")
+            return
         for name in args.ads or list(ADS):
             with Run.create(f"{name}{'-broken' if args.broken else ''}-{'refine' if args.refine else 'critic'}") as run:
                 run.watch(studio)

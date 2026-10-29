@@ -6,8 +6,9 @@ revises the storyboard from the critiques, and round again.
 
 The set (light, backdrop, pedestal) is shared by every shot, so a fix for
 one shot can change the others: each round rebuilds the whole ad and judges
-every shot. An unchanged shot renders the same frames, so its critique comes
-from the cache. The director gets the failing shots' issues, the worst
+every shot. An unchanged shot renders the same frames in the same Studio
+session, so its critique comes from the cache (a new session can differ by a
+level in a few pixels, and then it's judged again). The director gets the failing shots' issues, the worst
 first, with the shots that passed named so it leaves them be, and what
 earlier rounds changed and how the scores moved, so it doesn't undo a fix.
 
@@ -15,13 +16,18 @@ Every round is kept in the run: rounds/<i>/ holds its storyboard, frames,
 masks and contact sheet; critiques/<shot>.<i>.json its critiques; the log
 a "round" event with every shot's scores. If no round passes, the best one
 is kept: the most shots passing, then the highest lowest score.
+
+A run that stopped (the network, a crash) carries on from its last finished
+round: refine(studio, None, profile, Run.reopen(folder), resume=True). The
+rounds after it are new: their shots may be judged again (above), so they
+can turn out differently.
 """
 
 from dataclasses import dataclass
 
 from pipeline.agents.director.revise import revise
 from pipeline.agents.director.write import DirectorError
-from pipeline.runs import Run
+from pipeline.runs import Run, events
 from pipeline.schemas import BrandProfile, Critique, Storyboard
 from pipeline.studio import build
 
@@ -95,11 +101,34 @@ async def look(studio, run: Run, sb: Storyboard, index: int, changes: list[str],
     return r
 
 
-async def refine(studio, sb: Storyboard, profile: BrandProfile | None, run: Run, rounds: int = ROUNDS,
-                 provider: str = "meta") -> tuple[Storyboard, list[Round]]:
+def finished_rounds(run: Run) -> list[Round]:
+    """The rounds a run already finished (each logged as a "round" event once
+    every shot was judged), read back from its folder, in order."""
+    found = {}
+    for e in events(run.root):
+        if e["kind"] == "round":
+            i = e["index"]
+            sb = Storyboard.model_validate_json(run.path("rounds", str(i), "storyboard.json").read_text(encoding="utf-8"))
+            critiques = [Critique.model_validate_json(run.path("critiques", f"{s.id}.{i}.json").read_text(encoding="utf-8"))
+                         for s in sb.shots]
+            found[i] = Round(i, sb, critiques, e["changes"])
+    return [found[i] for i in sorted(found)]
+
+
+async def refine(studio, sb: Storyboard | None, profile: BrandProfile | None, run: Run, rounds: int = ROUNDS,
+                 provider: str = "meta", resume: bool = False) -> tuple[Storyboard, list[Round]]:
     """The storyboard after at most `rounds` revisions: the first that
-    passes, or the best looked at. The Studio is left built with it."""
-    history = [await look(studio, run, sb, 0, [], profile, provider)]
+    passes, or the best looked at. The Studio is left built with it. With
+    `resume`, the run's finished rounds are read back and it carries on from
+    the last (`sb` may then be None)."""
+    history = finished_rounds(run) if resume else []
+    built = None   # the round the Studio holds now
+    if history:
+        run.event("resumed_rounds", rounds=[r.index for r in history])
+    else:
+        if sb is None:
+            raise ValueError(f"nothing to resume in {run.root}, and no storyboard to start from")
+        history, built = [await look(studio, run, sb, 0, [], profile, provider)], 0
     while not history[-1].passed and len(history) <= rounds:
         last = history[-1]
         try:
@@ -112,9 +141,10 @@ async def refine(studio, sb: Storyboard, profile: BrandProfile | None, run: Run,
             run.event("revision_failed", round=last.index + 1, error="the revision changed nothing")
             break
         history.append(await look(studio, run, revised, last.index + 1, changes, profile, provider))
+        built = last.index + 1
 
     best = next((r for r in history if r.passed), None) or max(history, key=lambda r: r.score)
-    if best is not history[-1]:
+    if best.index != built:
         await build(studio, best.storyboard)
     run.output("storyboard", run.save_json("storyboard.json", best.storyboard))
     run.output("sheet", run.path("rounds", str(best.index), "sheet.png"))

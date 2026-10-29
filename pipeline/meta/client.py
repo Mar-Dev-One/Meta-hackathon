@@ -3,18 +3,28 @@ Baseten (OpenAI-compatible), retries, readable errors, and images as inputs."""
 
 import base64
 import mimetypes
+import sys
+import time
 from functools import cache as memoize
 from pathlib import Path
+from typing import Callable, TypeVar
 
 import openai
 from openai import OpenAI
 
 from . import cache, config
 
+T = TypeVar("T")
+
 # Retries with backoff for rate limits (429) and transient failures (5xx,
 # timeouts); the openai client does the waiting.
 MAX_RETRIES = 4
 TIMEOUT_SECONDS = 180
+
+# Then an outage (no connection, timeouts, 5xx) is waited out this many more
+# times, this many seconds each, before a call fails: about 2 minutes, so a
+# long run survives a dropped connection.
+OUTAGE_WAITS = (10, 20, 40, 60)
 
 
 class MetaError(Exception):
@@ -47,6 +57,23 @@ def wrap_error(model: str, error: Exception) -> MetaError:
     if isinstance(error, openai.APIConnectionError):
         return MetaError(model, f"couldn't reach the API: {error}")
     return MetaError(model, str(error))
+
+
+def call(model: str, request: Callable[[], T]) -> T:
+    """request()'s result, with an outage waited out (OUTAGE_WAITS); any
+    other failure, or the outage outlasting the waits, as a MetaError. A
+    missing key isn't a model failure: it's raised as it is."""
+    for wait in (*OUTAGE_WAITS, None):
+        try:
+            return request()
+        except config.MissingKey:
+            raise
+        except Exception as e:   # noqa: BLE001 -- every failure leaves as a MetaError
+            outage = isinstance(e, (openai.APIConnectionError, openai.InternalServerError))
+            if wait is None or not outage:
+                raise wrap_error(model, e) from e
+            print(f"{wrap_error(model, e)}; trying again in {wait} s", file=sys.stderr)
+            time.sleep(wait)
 
 
 # --- Images as inputs --------------------------------------------------------------------

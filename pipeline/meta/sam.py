@@ -72,12 +72,7 @@ def segment(image: ImageInput, prompt: str, cache_ok: bool = True) -> list[Mask]
     stored = cache.get_json(key, cache_ok)
     cached = stored is not None
     if not cached:
-        try:
-            stored = {"text": _raw_output(image, prompt)}
-        except config.MissingKey:
-            raise   # not a model failure: say which key to set
-        except Exception as e:   # noqa: BLE001
-            raise client.wrap_error(config.SAM, e) from e
+        stored = {"text": client.call(config.SAM, lambda: _raw_output(image, prompt))}
         cache.put_json(key, stored)
     usage.record(usage.Call(kind="segment", model=config.SAM, cached=cached,
                             seconds=round(time.perf_counter() - began, 3), units=1,

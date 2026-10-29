@@ -59,6 +59,18 @@ class Run:
         run.event("started", slug=slug)
         return run
 
+    @classmethod
+    def reopen(cls, root: Path | str) -> "Run":
+        """An existing run folder, to carry on where it stopped (a "resumed"
+        event in its log). Its time, cost and outputs in run.json count from
+        here on."""
+        root = Path(root).resolve()   # absolute, like create()'s: the Studio writes into it from its own folder
+        if not (root / "log.jsonl").exists():
+            raise FileNotFoundError(f"{root} isn't a run folder (no log.jsonl)")
+        run = cls(root)
+        run.event("resumed")
+        return run
+
     def __enter__(self) -> "Run":
         usage.add_listener(self._on_model_call)
         return self
