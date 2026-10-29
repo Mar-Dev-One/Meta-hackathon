@@ -52,6 +52,18 @@ TOOLS = [
      "parameters": {"type": "object", "properties": {"title": CHANGES}, "required": ["title"]}},
     {"type": "function", "name": "remove_title", "description": "Removes a title (by its index, from 0).",
      "parameters": {"type": "object", "properties": {"index": {"type": "integer"}}, "required": ["index"]}},
+    {"type": "function", "name": "edit_track",
+     "description": "Changes an animation track (by its index, from 0): any of entity, component, field, keys. "
+                    "\"keys\" replaces all of them: give the whole list, e.g. {\"keys\": [{\"t\": 0, \"value\": "
+                    "[0, -90, 0], \"ease\": \"out\"}, {\"t\": 4.5, \"value\": [0, 0, 0]}]}.",
+     "parameters": {"type": "object", "properties": {"index": {"type": "integer"}, "changes": CHANGES},
+                    "required": ["index", "changes"]}},
+    {"type": "function", "name": "add_track",
+     "description": "Adds an animation track: {entity, component, field, keys: [{t, value, ease}]}; e.g. the product "
+                    "turning: entity \"product\", component \"Transform\", field \"rotation_deg\".",
+     "parameters": {"type": "object", "properties": {"track": CHANGES}, "required": ["track"]}},
+    {"type": "function", "name": "remove_track", "description": "Removes an animation track (by its index, from 0).",
+     "parameters": {"type": "object", "properties": {"index": {"type": "integer"}}, "required": ["index"]}},
 ]
 
 SYSTEM = ("You are the director of a studio that makes short 3D product adverts, revising one of your ads. You "
@@ -100,7 +112,7 @@ def diff(a, b, path: str = "") -> list[str]:
 class _Editor:
     """The storyboard being revised, as plain data, and the tools' handler."""
 
-    def __init__(self, sb: Storyboard, profile: BrandProfile):
+    def __init__(self, sb: Storyboard, profile: BrandProfile | None):
         self.data = sb.model_dump(by_alias=True, exclude_none=True)
         self.data["product"] = sb.product.model_dump(by_alias=True)
         self.profile, self.seconds = profile, sb.duration
@@ -149,12 +161,18 @@ class _Editor:
             data["titles"].append(args["title"])
         elif name == "remove_title":
             del data["titles"][args["index"]]
+        elif name == "edit_track":
+            data["tracks"][args["index"]] = _merge(data["tracks"][args["index"]], args["changes"])
+        elif name == "add_track":
+            data.setdefault("tracks", []).append(args["track"])
+        elif name == "remove_track":
+            del data["tracks"][args["index"]]
         else:
             return {"applied": False, "errors": [f"no tool {name!r}"]}
         return self._try(data)
 
 
-async def revise(sb: Storyboard, fix: str, profile: BrandProfile, *, studio=None, run=None,
+async def revise(sb: Storyboard, fix: str, profile: BrandProfile | None, *, studio=None, run=None,
                  rounds: int = 3) -> tuple[Storyboard, list[str]]:
     """The storyboard changed to answer `fix`, and what changed. Its length
     stays the same. DirectorError if it can't be made valid in `rounds`."""

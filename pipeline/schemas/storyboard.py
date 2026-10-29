@@ -165,6 +165,14 @@ class CameraMove(Strict):
                                                                   "= all sharp, 2-2.8 a very soft background "
                                                                   "(close-ups, heroes), 4-5.6 a softened set")
 
+    def max_fill(self) -> float:
+        """The most of the frame's height the product fills during the move
+        (a dolly's defaults as camera.move applies them)."""
+        if self.move == "dolly":
+            return max(self.from_fill if self.from_fill is not None else 0.6 * self.fill,
+                       self.to_fill if self.to_fill is not None else self.fill)
+        return self.fill
+
 
 class Shot(Strict):
     id: str = Field(description="s1, s2, ...")

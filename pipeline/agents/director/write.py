@@ -110,7 +110,9 @@ def product_size(product: Product) -> tuple[float, float]:
     return product.height or height, product.width or width
 
 
-def _profile_text(p: BrandProfile) -> str:
+def _profile_text(p: BrandProfile | None) -> str:
+    if p is None:
+        return "(none: the storyboard's product, colours and style stand for the brand)"
     height, width = product_size(p.product())
     facts = {"brand": p.brand, "product_name": p.product_name, "category": p.category,
              "size": f"{height * 100:.1f} cm tall, {width * 100:.1f} cm wide",
@@ -133,7 +135,7 @@ def assemble(plan: Plan, profile: BrandProfile, brief: str, aspect: str) -> Stor
     return Storyboard.model_validate(data)
 
 
-def problems(sb: Storyboard, profile: BrandProfile, seconds: float) -> list[str]:
+def problems(sb: Storyboard, profile: BrandProfile | None, seconds: float) -> list[str]:
     """The craft rules in code: what's wrong with the storyboard, each said
     so it can be fixed."""
     out = []
@@ -151,7 +153,7 @@ def problems(sb: Storyboard, profile: BrandProfile, seconds: float) -> list[str]
         out.append(f"the last shot ({hero.id}) must be the hero: a static move from the front (azimuth within "
                    f"{HERO_AZIMUTH} degrees of 0), at least {HERO_MIN:g} s long")
 
-    if profile.brand:
+    if profile and profile.brand:
         brand = profile.brand.casefold().replace(" ", "")
         named = [t for t in sb.titles if brand in t.text.casefold().replace(" ", "")]
         if not named:
@@ -183,19 +185,16 @@ def problems(sb: Storyboard, profile: BrandProfile, seconds: float) -> list[str]
     return out
 
 
-def shot_at(sb: Storyboard, t: float) -> Shot:
-    """The shot on screen at `t` seconds."""
-    for start, shot in zip(sb.shot_starts(), sb.shots):
-        if t < start + shot.duration:
-            return shot
-    return sb.shots[-1]
+def shots_from(sb: Storyboard, t: float) -> list[Shot]:
+    """The shots on screen from `t` seconds to the end (a title stays on)."""
+    return [shot for start, shot in zip(sb.shot_starts(), sb.shots) if t < start + shot.duration] or sb.shots[-1:]
 
 
 async def title_problems(studio, sb: Storyboard) -> list[str]:
     """Titles that don't fit the frame, overlap each other or the product
-    (centred in the frame, `fill` of its height in the shot the title
-    appears in), as the Studio measures them at the ad's frame size (placed
-    as build() places them)."""
+    (centred in the frame, `fill` of its height, in every shot from the
+    title's start to the end), as the Studio measures them at the ad's frame
+    size (placed as build() places them)."""
     width, height = FRAMES[sb.aspect]
     out, boxes = [], []
     for t in sb.titles:
@@ -209,13 +208,13 @@ async def title_problems(studio, sb: Storyboard) -> list[str]:
             if y < oy + oh and oy < y + h and x < ox + ow and ox < x + w:
                 out.append(f"titles {other!r} and {t.text!r} overlap: move them apart vertically")
         boxes.append((t.text, (x, y, w, h)))
-        shot = shot_at(sb, t.start)
-        fill = max(f for f in (shot.camera.fill, shot.camera.from_fill, shot.camera.to_fill) if f is not None)
-        top, bottom = 0.5 - 0.5 * fill - TITLE_CLEAR, 0.5 + 0.5 * fill + TITLE_CLEAR
-        if y < bottom and top < y + h:
-            out.append(f"title {t.text!r} (y {y:.2f} to {y + h:.2f} of the frame) is over the product, which "
-                       f"fills {top + TITLE_CLEAR:.2f} to {bottom - TITLE_CLEAR:.2f} in {shot.id} (fill {fill:g}): "
-                       f"lower that shot's fill or move the title clear of it")
+        for shot in shots_from(sb, t.start):
+            fill = shot.camera.max_fill()
+            top, bottom = 0.5 - 0.5 * fill - TITLE_CLEAR, 0.5 + 0.5 * fill + TITLE_CLEAR
+            if y < bottom and top < y + h:
+                out.append(f"title {t.text!r} (y {y:.2f} to {y + h:.2f} of the frame) is over the product, which "
+                           f"fills {top + TITLE_CLEAR:.2f} to {bottom - TITLE_CLEAR:.2f} in {shot.id} (fill "
+                           f"{fill:g}): lower that shot's fill or move the title clear of it")
     return out
 
 

@@ -320,8 +320,7 @@ async def measure(studio, sb: Storyboard, out_dir: Path, short: int = 540, sampl
     last = sb.shots[-1].id
     reveals = {shot.id: start + REVEALING * shot.duration for start, shot in zip(sb.shot_starts(), sb.shots)
                if shot.camera.move == "reveal"}
-    crops = {shot.id for shot in sb.shots
-             if max(f for f in (shot.camera.fill, shot.camera.from_fill, shot.camera.to_fill) if f is not None) > CROP}
+    crops = {shot.id for shot in sb.shots if shot.camera.max_fill() > CROP}
 
     shots: dict[str, ShotMeasure] = {}
     for (shot, t), picture, path, a, e in zip(moments, shown, paths, alone, empty):
