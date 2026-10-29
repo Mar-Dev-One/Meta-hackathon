@@ -31,7 +31,7 @@ Built for the **Meta Global AI Developer Hackathon** (October 27 to November 4, 
 2. **Director** (brief + profile → storyboard). Muse Spark plans the ad as data: the look (set, lights, environment), the shots (one camera move each: orbit, dolly, crane, truck, reveal, zoom), titles and animation. Code checks the craft rules (lengths add up, consecutive shots move differently, the ending is a hero shot with the brand's name, titles fit the frame and stay off the product) and sends problems back to the model.
 3. **Studio** (storyboard → frames). The C renderer builds the set and the product as glTF, keys every camera move on a timeline, draws titles with signed-distance-field fonts, and renders deterministic frames offscreen at any size.
 4. **Critic loop** (frames → scores and fixes). Each shot is measured, then judged against a rubric. The cuts and the whole ad are judged too. Failing issues go back to the director as storyboard edits, the ad is rebuilt and judged again: at most 3 revisions, and the best round is kept. See [The critic](#the-critic).
-5. **Final cut.** The ad is rendered in 16:9 and 9:16 from the same storyboard: titles are refitted, and a squat product is framed by the frame's width. It gets music in the style's mood, cut to length and landing on the hero shot, and is encoded as H.264 and AAC.
+5. **Final cut.** The ad is rendered horizontal (16:9), vertical (9:16), or both from the same storyboard, as you choose. For a second frame, titles are refitted, and a squat product is framed by the frame's width. It gets music in the style's mood, cut to length and landing on the hero shot, and is encoded as H.264 and AAC.
 
 Every run is a folder (`runs/<time>-<name>/`) holding every input, output, frame, critique and a timed log of each model call and renderer command. A run can be replayed in the app at its real pace, for demos.
 
@@ -99,13 +99,13 @@ python -m venv .venv
 .venv\Scripts\python -m app
 ```
 
-In the app, drop a product photo, write a brief and press **Make the ad**. The page fills in as the agents work: the brand profile, the storyboard, a table of critic scores round by round (click a cell for its issues and fixes), and the videos. Any past run can be opened, or replayed at its real pace.
+In the app, drop a product photo, write a brief, choose the format (horizontal 16:9, vertical 9:16, or both) and press **Make the ad**. The page fills in as the agents work: the brand profile, the storyboard, a table of critic scores round by round (click a cell for its issues and fixes), and the videos. Any past run can be opened, or replayed at its real pace.
 
 From the command line:
 
 ```bat
-:: A photo and a brief in, an ad out (16:9 and 9:16, in runs\)
-.venv\Scripts\python -m pipeline.agents.producer Assets\photos\aurelle_perfume.png "Luxury perfume ad, dark and moody, 15 seconds." --category "perfume bottle"
+:: A photo and a brief in, an ad out (in runs\); --format horizontal, vertical or both (the default)
+.venv\Scripts\python -m pipeline.agents.producer Assets\photos\aurelle_perfume.png "Luxury perfume ad, dark and moody, 15 seconds." --category "perfume bottle" --format horizontal
 
 :: Five ads written by hand as storyboards (test footage and examples)
 .venv\Scripts\python -m pipeline.demos.ads fizzo kora --vertical
@@ -121,7 +121,7 @@ From the command line:
 .venv\Scripts\python -m pipeline.runs
 ```
 
-The app's API: `POST /runs` (a photo and a brief), `GET /runs`, `GET /runs/{id}`, `GET /runs/{id}/events` (Server-Sent Events, live or replayed with `?speed=1`) and `GET /runs/{id}/files/{path}`.
+The app's API: `POST /runs` (a photo, a brief and a `format`), `GET /runs`, `GET /runs/{id}`, `GET /runs/{id}/events` (Server-Sent Events, live or replayed with `?speed=1`) and `GET /runs/{id}/files/{path}`.
 
 ## The Studio
 

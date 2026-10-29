@@ -104,6 +104,11 @@
       <div id="drop" class="drop">Drop a product photo, or click<input id="photo" type="file" accept="image/png,image/jpeg,image/webp" hidden></div>
       <label class="field">Brief<textarea id="brief" placeholder="Luxury perfume ad, dark and moody, 15 seconds." required></textarea></label>
       <label class="field">What it is<input id="category" type="text" placeholder="perfume bottle"></label>
+      <label class="field">Format<select id="format">
+        <option value="both">Both: horizontal and vertical</option>
+        <option value="horizontal">Horizontal 16:9 (YouTube, web)</option>
+        <option value="vertical">Vertical 9:16 (Reels, TikTok, Stories)</option>
+      </select></label>
       <div class="row">
         <label class="toggle"><input id="critic" type="checkbox" checked> critic loop</label>
         <label class="toggle"><input id="video" type="checkbox" checked> video</label>
@@ -424,6 +429,7 @@ $("form").onsubmit = async (e) => {
   data.append("category", $("category").value || "product");
   data.append("critic", $("critic").checked);
   data.append("video", $("video").checked);
+  data.append("format", $("format").value);
   $("go").disabled = true; $("formMsg").textContent = "Starting…";
   try {
     const r = await fetch("/runs", { method: "POST", body: data });

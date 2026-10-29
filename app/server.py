@@ -3,11 +3,12 @@ happens, open any run that's already done.
 
     python -m app                      # http://127.0.0.1:8000: the page (app/static/index.html)
     curl -F photo=@Assets/photos/mira_jar.png -F "brief=Face cream, calm and bright, 10 seconds." \\
-         -F category=jar http://127.0.0.1:8000/runs
+         -F category=jar -F format=vertical http://127.0.0.1:8000/runs
     curl -N http://127.0.0.1:8000/runs/<id>/events
 
     GET  /                           the page: start an ad, watch it, open any run
-    POST /runs                       a photo (file) and a brief: queues an ad (pipeline.agents.producer)
+    POST /runs                       a photo (file) and a brief: queues an ad (pipeline.agents.producer);
+                                     format = horizontal, vertical or both (default)
     GET  /runs                       every run, newest first: status, brief, outputs
     GET  /runs/{id}                  one run: its summary (run.json) and outputs
     GET  /runs/{id}/events           its log as Server-Sent Events: followed live while it runs;
@@ -33,7 +34,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
-from pipeline.agents.producer import make_ad
+from pipeline.agents.producer import FORMATS, make_ad
 from pipeline.runs import RUNS, Run, all_runs, events
 from pipeline.studio import Studio
 
@@ -54,6 +55,7 @@ class Job:
     critic: bool
     video: bool
     size: int
+    format: str
 
 
 jobs: "queue.Queue[Job]" = queue.Queue()
@@ -80,7 +82,7 @@ async def _make(job: Job) -> None:
     async with Studio() as studio:
         with job.run:
             await make_ad(studio, job.run, job.brief, job.photo, job.category, job.size, video=job.video,
-                          critic=job.critic)
+                          critic=job.critic, format=job.format)
 
 
 threading.Thread(target=_work, name="producer", daemon=True).start()
@@ -131,21 +133,25 @@ def page() -> FileResponse:
 
 @app.post("/runs", status_code=202)
 async def start(photo: UploadFile = File(...), brief: str = Form(...), category: str = Form("product"),
-                critic: bool = Form(True), video: bool = Form(True), size: int = Form(1080)) -> dict:
+                critic: bool = Form(True), video: bool = Form(True), size: int = Form(1080),
+                format: str = Form("both")) -> dict:
     """Queues an ad: the photo and brief in, a run id back to follow."""
     name = Path(photo.filename or "photo.png").name
     if Path(name).suffix.lower() not in PHOTO_TYPES:
         raise HTTPException(422, f"the photo must be one of {', '.join(PHOTO_TYPES)}")
     if not brief.strip():
         raise HTTPException(422, "the brief is empty")
+    if format not in FORMATS:
+        raise HTTPException(422, f"the format must be one of {', '.join(FORMATS)}")
     run = Run.create(f"ad-{Path(name).stem}")
     upload = run.path("upload", name)
     with upload.open("wb") as out:
         shutil.copyfileobj(photo.file, out)
     rid = run.root.name
     waiting.append(rid)
-    run.event("queued", position=len(waiting), brief=brief, category=category, critic=critic, video=video)
-    jobs.put(Job(run, upload, brief.strip(), category, critic, video, size))
+    run.event("queued", position=len(waiting), brief=brief, category=category, critic=critic, video=video,
+              format=format)
+    jobs.put(Job(run, upload, brief.strip(), category, critic, video, size, format))
     return {"id": rid, "status": "queued", "position": len(waiting), "events": f"/runs/{rid}/events"}
 
 
