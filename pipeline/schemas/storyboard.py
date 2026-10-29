@@ -27,7 +27,11 @@ class Strict(BaseModel):
 # --- The look --------------------------------------------------------------------------------
 
 class Environment(Strict):
-    hdri: str = Field("hdri/citrus_orchard_road_puresky_4k.hdr", description="HDRI under the Studio's assets, for reflections and ambient light")
+    hdri: str = Field("hdri/studio_small_09_2k.hdr", description="HDRI under the Studio's assets, for reflections "
+                                                                 "and ambient light: hdri/studio_small_09_2k.hdr (a "
+                                                                 "photo studio's softboxes: clean highlights on glass "
+                                                                 "and metal) or hdri/citrus_orchard_road_puresky_4k.hdr "
+                                                                 "(an open sky)")
     use_ibl: bool = Field(True, description="light and reflect with the HDRI")
     show_skybox: bool = Field(False, description="show the HDRI as the background (usually off: the backdrop is the background)")
     ambient_strength: float = Field(0.06, ge=0, le=4, description="0.05 dark and moody, 0.6 bright and airy")

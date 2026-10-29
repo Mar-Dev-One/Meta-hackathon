@@ -255,8 +255,8 @@
       "additionalProperties": false,
       "properties": {
         "hdri": {
-          "default": "hdri/citrus_orchard_road_puresky_4k.hdr",
-          "description": "HDRI under the Studio's assets, for reflections and ambient light",
+          "default": "hdri/studio_small_09_2k.hdr",
+          "description": "HDRI under the Studio's assets, for reflections and ambient light: hdri/studio_small_09_2k.hdr (a photo studio's softboxes: clean highlights on glass and metal) or hdri/citrus_orchard_road_puresky_4k.hdr (an open sky)",
           "title": "Hdri",
           "type": "string"
         },

@@ -9,16 +9,22 @@
 // move that starts where another ends is a cut: the last key sits just
 // before the end (MOVE_END_GAP), the next move's first key at its start.
 //
-// Framing: the subject's bounding sphere fills `fill` of the frame's
-// smaller dimension (0.6 by default), seen from `azimuth` degrees around it
-// (0 = from the front, +Z; 90 = from its right, +X) and `elevation` degrees
-// above it.
+// Framing: the subject's bounding sphere fills `fill` of the frame's height
+// (0.6 by default), and its width -- products are round, spun from a
+// profile, so that's its widest diameter from any side -- at most `fill` of
+// the frame's width; seen from `azimuth` degrees around it (0 = from the
+// front, +Z; 90 = from its right, +X) and `elevation` degrees above it. In a
+// landscape or square frame the height decides; in a vertical one a squat
+// product fills the narrow width instead of shrinking to fit its sphere.
 //
 // Focus: two more tracks on the camera, its aperture (the move's `aperture`,
 // 0 = all sharp) and its focus distance, keyed with every pose at the depth
 // of the subject's near side along the view -- so with a wide aperture the
 // product's front (its label) stays sharp through the move while what's
-// behind it softens.
+// behind it softens. The aperture opens no wider than keeps the subject
+// itself sharp from its near side to its centre (SHARP_BLUR): close up,
+// real depth of field is millimetres, and a blurred label is no use -- but
+// the set behind still blurs a lot at the narrower aperture.
 
 #include "CameraMoves.h"
 
@@ -38,6 +44,10 @@
 // A move's last key is this long before its end, so the next move's first
 // key can start a new shot at exactly the end time.
 #define MOVE_END_GAP 0.001f
+
+// The most blur, as a share of the frame's height, the subject's centre may
+// have when its near side is in focus (about 1.3 pixels at 1080p).
+#define SHARP_BLUR 0.0012f
 
 typedef enum move_kind
 {
@@ -62,6 +72,7 @@ typedef struct move
 
     vec3 center;   // the subject's bounding sphere
     f32  radius;
+    f32  half_width;  // half its widest horizontal size
     f32  near_side;   // how far its near surface is in front of its centre (half its horizontal size)
     f32  aperture;    // f-number; 0 = no depth of field
 
@@ -71,13 +82,13 @@ typedef struct move
 } move;
 
 // How far from the subject's centre its bounding sphere fills `fill` of the
-// frame's smaller dimension.
+// frame's height and its width no more than `fill` of the frame's width.
 static f32
 framing_distance(const move* m, f32 fill, f32 fov)
 {
     f32 tan_v = tanf(0.5f * fov * DEG_TO_RAD);
     f32 tan_h = tan_v * m->aspect;
-    return m->radius / (fill * fminf(tan_v, tan_h));
+    return fmaxf(m->radius / (fill * tan_v), m->half_width / (fill * tan_h));
 }
 
 // A point `distance` from `center`, `azimuth` degrees around and `elevation` degrees up.
@@ -159,10 +170,22 @@ add_pose_keys(studio* s, move_tracks* tracks, f32 t, f32 u, timeline_ease ease, 
     glm_vec3_sub(target, position, forward);
     glm_vec3_normalize(forward);
     glm_vec3_sub((f32*)m->center, position, to_subject);
-    key.value[0] = fmaxf(glm_vec3_dot(to_subject, forward) - m->near_side, 0.05f);
+    f32 focus = fmaxf(glm_vec3_dot(to_subject, forward) - m->near_side, 0.05f);
+    key.value[0] = focus;
     if (!timeline_add_key(&s->timeline, tracks->camera, "Camera", "focus_distance", &key, error, error_size))
         return false;
-    key.value[0] = m->aperture;
+
+    // The aperture, narrowed if need be so the subject's centre stays sharp
+    // (Scene/Camera.h's thin lens: blur = f^2 / (N (s - f) H) * (1 - s / d)).
+    f32 aperture = m->aperture;
+    f32 focal    = CAMERA_SENSOR_HEIGHT * 0.5f / tanf(0.5f * fov * DEG_TO_RAD);
+    if (aperture > 0.0f && focus > focal)
+    {
+        f32 centre = focus + m->near_side;
+        f32 widest = focal * focal * (1.0f - focus / centre) / ((focus - focal) * CAMERA_SENSOR_HEIGHT * SHARP_BLUR);
+        aperture   = fminf(fmaxf(aperture, widest), 64.0f);
+    }
+    key.value[0] = aperture;
     if (!timeline_add_key(&s->timeline, tracks->camera, "Camera", "aperture", &key, error, error_size))
         return false;
     tracks->keys += 5;
@@ -303,7 +326,8 @@ cmd_camera_move(void* user, command_context* ctx, const cJSON* args, cJSON** out
     }
     glm_vec3_center(lo, hi, m.center);
     m.radius    = fmaxf(0.5f * glm_vec3_distance(lo, hi), 1e-3f);
-    m.near_side = 0.25f * ((hi[0] - lo[0]) + (hi[2] - lo[2]));
+    m.near_side  = 0.25f * ((hi[0] - lo[0]) + (hi[2] - lo[2]));
+    m.half_width = 0.5f * fmaxf(hi[0] - lo[0], hi[2] - lo[2]);
     if (!cJSON_GetObjectItemCaseSensitive(args, "travel"))
         m.travel = 2.0f * m.radius;
 
@@ -349,7 +373,8 @@ static const cmd_arg MOVE_ARGS[] = {
     { "elevation", "number", false, "degrees above the subject, -85 to 85 (default 10)" },
     { "fov_degrees", "number", false, "vertical field of view (default 30)" },
     { "aspect", "number", false, "the frame's width / height, for framing (default 16/9)" },
-    { "aperture", "number", false, "depth of field: the f-number, the focus kept on the subject's near side; "
+    { "aperture", "number", false, "depth of field: the f-number, the focus kept on the subject's near side and the "
+                                   "aperture never wider than keeps the subject itself sharp; "
                                    "0 = everything sharp (default), 2-2.8 a very soft background, 4-5.6 a softened set, "
                                    "8+ nearly all sharp" },
     { "to_azimuth", "number", false, "orbit: where it ends (default azimuth + 60)" },
