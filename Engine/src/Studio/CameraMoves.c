@@ -87,11 +87,15 @@ typedef struct move
 #define FRAMING_RIM_POINTS 24   // per rim circle
 #define FRAMING_STEPS      40   // bisection steps for the distance
 #define FRAMING_INSIDE     0.97f   // up to this fill, no edge of it leaves the frame
+#define FRAMING_WIDE       0.8f    // its width may fill this much of the frame's width, at any fill
+#define TRUCK_ROOM         0.8f    // a truck's default slide: this share of the frame's width beside the subject
 
 // Whether the subject, as a cylinder (its top and bottom rims), seen from
 // `distance` away and `elevation` degrees above, aimed at its centre, spans
-// no more than `fill` of the frame's height and of its width. Azimuth
-// doesn't matter: it's round.
+// no more than `fill` of the frame's height, and of its width no more than
+// `fill` or FRAMING_WIDE, whichever is more: in a narrow (9:16) frame a squat
+// product is held back by the width, and a fill-of-the-width limit would
+// leave it small. Azimuth doesn't matter: it's round.
 static b8
 framing_fits(const move* m, f32 distance, f32 el, f32 fill, f32 tan_v, f32 tan_h)
 {
@@ -119,7 +123,7 @@ framing_fits(const move* m, f32 distance, f32 el, f32 fill, f32 tan_v, f32 tan_h
     // Aimed at its centre, the outline isn't centred from above: each edge
     // also stays inside the frame, unless `fill` asks for a crop.
     f32 edge = fmaxf(fill, FRAMING_INSIDE);
-    return v1 - v0 <= 2.0f * fill * tan_v && h1 - h0 <= 2.0f * fill * tan_h
+    return v1 - v0 <= 2.0f * fill * tan_v && h1 - h0 <= 2.0f * fmaxf(fill, FRAMING_WIDE) * tan_h
         && fmaxf(-v0, v1) <= edge * tan_v && fmaxf(-h0, h1) <= edge * tan_h;
 }
 
@@ -384,7 +388,13 @@ cmd_camera_move(void* user, command_context* ctx, const cJSON* args, cJSON** out
     m.half_width = 0.5f * fmaxf(hi[0] - lo[0], hi[2] - lo[2]);
     m.half_height = 0.5f * (hi[1] - lo[1]);
     if (!cJSON_GetObjectItemCaseSensitive(args, "travel"))
-        m.travel = 2.0f * m.radius;
+    {
+        // Side to side within the frame: most of the room beside it at its
+        // framing, so it stays whole in any frame (in 9:16 there's little).
+        f32 distance = framing_distance(&m, m.fill, m.fov, m.elevation);
+        f32 frame_w  = 2.0f * distance * tanf(0.5f * m.fov * DEG_TO_RAD) * m.aspect;
+        m.travel     = TRUCK_ROOM * fmaxf(frame_w - 2.0f * m.half_width, 0.0f);
+    }
 
     // The camera and its target, then the keys.
     studio_camera_entity(s, camera);
@@ -439,7 +449,8 @@ static const cmd_arg MOVE_ARGS[] = {
     { "to_fill", "number", false, "dolly: the framing it ends on (default fill)" },
     { "from_elevation", "number", false, "crane: start (default elevation - 15)" },
     { "to_elevation", "number", false, "crane: end (default elevation + 25)" },
-    { "travel", "number", false, "truck: meters moved to the right, negative for left (default the subject's width)" },
+    { "travel", "number", false, "truck: meters moved to the right, negative for left (default: most of the room "
+                                 "beside the subject in the frame, so it stays whole)" },
     { "from", "string", false, "reveal: where the aim starts, above (default), below, left or right" },
     { "from_fov", "number", false, "zoom: start lens (default fov_degrees * 1.5)" },
     { "to_fov", "number", false, "zoom: end lens (default fov_degrees)" },

@@ -42,7 +42,7 @@ from pipeline.studio.render import frame_size
 MOMENTS = (0.1, 0.5, 0.9)   # where in each shot it looks, as shares of the shot
 REVEALING = 0.6             # of a reveal shot: until then the product may be out of frame or cut
 CROP = 0.97                 # a shot asking for more fill than this crops the product on purpose (camera.move)
-CROPPED = 0.85              # ... where the product fills at least this much of the frame's height
+CROPPED = 0.85              # ... where the product fills at least this much of the frame's height or width
 CHANGED = 2                 # 0..255: a pixel the product changes by more than this is the product's
 EDGE_STEP = 1 / 180         # of the frame's height: how far inside and outside the outline it compares
 LOST = 10.0                 # Lab distance under which an outline point merges with the background
@@ -70,6 +70,7 @@ class Frame:
     time: float
     path: str
     fill_height: float = 0.0          # the product's height as a share of the frame's
+    fill_width: float = 0.0           # its width as a share of the frame's (a narrow frame crops by width)
     fill_area: float = 0.0            # its pixels' share of the frame
     cut_by: list[str] = field(default_factory=list)
     center: list[float] = field(default_factory=list)
@@ -198,9 +199,10 @@ def outline(mask: np.ndarray, step: int) -> tuple[np.ndarray, np.ndarray]:
         inside.append((y + step, x))
         outside.append((y - step, x))
     inside, outside = np.array(inside).reshape(-1, 2), np.array(outside).reshape(-1, 2)
-    ok = (outside[:, 0] >= 0) & (outside[:, 0] < h) & (outside[:, 1] >= 0) & (outside[:, 1] < w)
+    in_frame = lambda p: (p[:, 0] >= 0) & (p[:, 0] < h) & (p[:, 1] >= 0) & (p[:, 1] < w)
+    ok = in_frame(outside) & in_frame(inside)   # a product at the frame's edge has points past it on both sides
     inside, outside = inside[ok], outside[ok]
-    ok = ~mask[outside[:, 0], outside[:, 1]] & mask[np.clip(inside[:, 0], 0, h - 1), np.clip(inside[:, 1], 0, w - 1)]
+    ok = ~mask[outside[:, 0], outside[:, 1]] & mask[inside[:, 0], inside[:, 1]]
     return inside[ok], outside[ok]
 
 
@@ -212,6 +214,7 @@ def measure_frame(frame: Frame, shown: np.ndarray, mask: np.ndarray, colours: li
         return   # out of frame, or too dark to tell from the background: flags_for says which
     rows, cols = np.flatnonzero(mask.any(1)), np.flatnonzero(mask.any(0))
     frame.fill_height = (rows[-1] - rows[0] + 1) / h
+    frame.fill_width = (cols[-1] - cols[0] + 1) / w
     frame.fill_area = mask.mean()
     frame.cut_by = [edge for edge, hit in (("top", mask[0].any()), ("bottom", mask[-1].any()),
                                             ("left", mask[:, 0].any()), ("right", mask[:, -1].any())) if hit]
@@ -270,7 +273,7 @@ def flags_for(frame: Frame, is_last: bool, fade_in: float = 0.0, revealing: bool
             return "minor"
         return None
 
-    if frame.cut_by and not revealing and not (cropping and frame.fill_height >= CROPPED):
+    if frame.cut_by and not revealing and not (cropping and max(frame.fill_height, frame.fill_width) >= CROPPED):
         out.append(Flag("major", "product_visibility", t, f"the product is cut by the {' and '.join(frame.cut_by)} "
                                                           f"edge{'s' if len(frame.cut_by) > 1 else ''}"))
     if s := grade(frame.fill_height, SMALL, above=False):

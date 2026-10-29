@@ -5,6 +5,7 @@ through this.
     length = await build(studio, sb)
     frames = await preview(studio, run, sb)                # frames/: the middle of each shot, and the end
     video = await render(studio, run, sb, "aurelle")       # final/aurelle.mp4, faded in and out, with music
+    videos = await final_cut(studio, run, sb, "aurelle")   # final/aurelle_16x9.mp4 and final/aurelle_9x16.mp4
 
 Sizes follow the storyboard's frame: `short` is its shorter side, so 1080
 gives 1920x1080, 1080x1920 or 1080x1080.
@@ -16,6 +17,8 @@ from pathlib import Path
 from pipeline.encode import finish
 from pipeline.encode.music import mood_of, music_for
 from pipeline.schemas import Storyboard
+
+from .build import build
 
 ASPECT_SIZES = {"16:9": (16, 9), "9:16": (9, 16), "1:1": (1, 1)}
 
@@ -66,3 +69,22 @@ async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samp
     raw.unlink(missing_ok=True)
     run.output("video", video)
     return video
+
+
+async def final_cut(studio, run, sb: Storyboard, name: str, aspects: tuple[str, ...] = ("16:9", "9:16"),
+                    short: int = 1080, samples: int = 16) -> dict[str, Path]:
+    """The ad in every aspect, from the same storyboard (reframed: titles
+    fitted to each frame), as final/<name>_<w>x<h>.mp4 with the same music;
+    each aspect's storyboard saved as storyboard_<w>x<h>.json. Leaves the
+    Studio built with the last aspect."""
+    from .reframe import reframe      # here: reframe imports frame_size from this module
+
+    videos = {}
+    for aspect in aspects:
+        tag = aspect.replace(":", "x")
+        framed = await reframe(studio, sb, aspect)
+        run.save_json(f"storyboard_{tag}.json", framed)
+        await build(studio, framed)
+        videos[aspect] = await render(studio, run, framed, f"{name}_{tag}", short=short, samples=samples)
+        run.output(f"video_{tag}", videos[aspect])
+    return videos

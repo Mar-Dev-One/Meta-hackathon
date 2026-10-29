@@ -6,6 +6,7 @@ good storyboard.
     python -m pipeline.demos.ads                      # every ad, each a run in runs/; the video also in pipeline/demos/out/<name>.mp4
     python -m pipeline.demos.ads fizzo kora           # some of them
     python -m pipeline.demos.ads --preview            # a few frames of each as PNGs, to check the look first
+    python -m pipeline.demos.ads kora --vertical      # also the 9:16 version (out/<name>_9x16.mp4)
     python -m pipeline.demos.ads --list
     python -m pipeline.demos.ads --export             # each storyboard as JSON in pipeline/demos/out/storyboards
 
@@ -25,7 +26,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pipeline.runs import Run
 from pipeline.schemas import (Backdrop, CameraMove, Environment, Label, Lighting, Look, PartLook, Pedestal, Product,
                               Shot, Storyboard, Title, Track)
-from pipeline.studio import Studio, build, preview, render
+from pipeline.studio import Studio, build, final_cut, preview, render
 
 OUT = Path(__file__).resolve().parent / "out"
 FONTS = Path("C:/Windows/Fonts")   # system fonts for the label artwork (the titles use the Studio's OFL fonts)
@@ -236,7 +237,7 @@ def storyboard_for(name: str) -> Storyboard:
         update={"label": sb.product.label.model_copy(update={"image": str(image)})})})
 
 
-async def make(studio: Studio, name: str, preview_only: bool, short: int, samples: int) -> Path:
+async def make(studio: Studio, name: str, preview_only: bool, short: int, samples: int, vertical: bool = False) -> Path:
     """One ad as a run (pipeline/runs.py): its inputs, storyboard, every
     Studio command, and its frames or video, in runs/<time>-<name>/. Returns
     the run's folder."""
@@ -256,15 +257,18 @@ async def make(studio: Studio, name: str, preview_only: bool, short: int, sample
             return run.root
         final = await render(studio, run, sb, name, short=short, samples=samples)
         shutil.copyfile(final, OUT / f"{name}.mp4")   # the latest of each, where it's easy to find
+        if vertical:
+            tall = (await final_cut(studio, run, sb, name, aspects=("9:16",), short=short, samples=samples))["9:16"]
+            shutil.copyfile(tall, OUT / f"{name}_9x16.mp4")
         return run.root
 
 
-async def run(names: list[str], preview_only: bool, short: int, samples: int) -> None:
+async def run(names: list[str], preview_only: bool, short: int, samples: int, vertical: bool = False) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     async with Studio() as studio:
         for name in names:
             began = time.time()
-            folder = await make(studio, name, preview_only, short, samples)
+            folder = await make(studio, name, preview_only, short, samples, vertical)
             print(f"{name}: {time.time() - began:.0f}s -> {folder}")
 
 
@@ -286,6 +290,7 @@ if __name__ == "__main__":
     parser.add_argument("--export", action="store_true", help="write each storyboard as JSON and stop")
     parser.add_argument("--size", type=int, default=1080, help="the frame's shorter side in pixels (default 1080)")
     parser.add_argument("--samples", type=int, default=16)
+    parser.add_argument("--vertical", action="store_true", help="also the 9:16 version, from the same storyboard")
     args = parser.parse_args()
     unknown = [a for a in args.ads if a not in ADS]
     if unknown:
@@ -298,4 +303,4 @@ if __name__ == "__main__":
     elif args.export:
         export(names)
     else:
-        asyncio.run(run(names, args.preview, args.size, args.samples))
+        asyncio.run(run(names, args.preview, args.size, args.samples, args.vertical))
