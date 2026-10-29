@@ -4,7 +4,7 @@ through this.
 
     length = await build(studio, sb)
     frames = await preview(studio, run, sb)                # frames/: the middle of each shot, and the end
-    video = await render(studio, run, sb, "aurelle")       # final/aurelle.mp4, faded in and out
+    video = await render(studio, run, sb, "aurelle")       # final/aurelle.mp4, faded in and out, with music
 
 Sizes follow the storyboard's frame: `short` is its shorter side, so 1080
 gives 1920x1080, 1080x1920 or 1080x1080.
@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from pipeline.encode import finish
+from pipeline.encode.music import mood_of, music_for
 from pipeline.schemas import Storyboard
 
 ASPECT_SIZES = {"16:9": (16, 9), "9:16": (9, 16), "1:1": (1, 1)}
@@ -45,8 +46,10 @@ async def preview(studio, run, sb: Storyboard, short: int = 360, samples: int = 
 
 
 async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samples: int = 16,
-                 fade_in: float = 0.4, fade_out: float = 0.6) -> Path:
-    """The built storyboard as final/<name>.mp4 in the run, faded from and to black."""
+                 fade_in: float = 0.4, fade_out: float = 0.6, music: bool = True) -> Path:
+    """The built storyboard as final/<name>.mp4 in the run, faded from and to
+    black, with music in the style's mood (pipeline.encode.music) unless
+    `music` is off."""
     width, height = frame_size(sb.aspect, short)
     raw = run.path("final", "raw.mp4")
     frames = round(sb.duration * sb.fps)
@@ -55,7 +58,11 @@ async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samp
     result = await studio.call("shot.render", video=str(raw), end=sb.duration - 1e-3, fps=sb.fps, width=width,
                                height=height, samples=samples)
     run.event("rendered", frames=result["frames"], seconds=round(time.time() - began, 1))
-    video = finish(raw, run.path("final", f"{name}.mp4"), fade_in=fade_in, fade_out=fade_out)
+    sound = None
+    if music:
+        sound = music_for(sb, run.path("final", "music.wav"))
+        run.event("music", mood=mood_of(sb), file=str(sound.relative_to(run.root)))
+    video = finish(raw, run.path("final", f"{name}.mp4"), fade_in=fade_in, fade_out=fade_out, audio=sound)
     raw.unlink(missing_ok=True)
     run.output("video", video)
     return video
