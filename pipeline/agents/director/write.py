@@ -18,7 +18,7 @@ from pydantic import Field, ValidationError
 
 from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
-from pipeline.schemas.storyboard import Look, Shot, Strict, Title, Track
+from pipeline.schemas.storyboard import Look, Product, Shot, Strict, Title, Track
 
 from . import grammar
 from .styles import STYLES
@@ -33,6 +33,12 @@ TITLE_DELAY = 0.4         # the name appears at least this long after the hero s
 TITLE_SEEN = 0.8          # ... and at least this long before the end
 MAX_TITLES = 2            # titles stay on once in, so this many are on screen together
 TITLE_BANDS = ((0.0, 0.2), (0.72, 1.0))   # where a title's centre may be (above or below the product)
+PEDESTAL_WIDTH = (1.2, 7.0)   # a pedestal's width, in product widths: wider than it, not a dance floor
+PEDESTAL_HEIGHT = 1.5         # at most this many product heights tall, or it upstages the product
+
+# Templates' real sizes (height, width) in meters, as product.create makes them (Products.c).
+TEMPLATE_SIZES = {"perfume": (0.12, 0.08), "bottle": (0.30, 0.075), "jar": (0.07, 0.09), "can": (0.122, 0.066),
+                  "dropper": (0.11, 0.04)}
 
 
 class DirectorError(Exception):
@@ -49,8 +55,8 @@ class Plan(Strict):
 
 
 SYSTEM = ("You are the director of a studio that makes short 3D product adverts. You plan an ad as shots for a "
-          "renderer whose every option is in the shot grammar, and you only use what it offers. You follow the "
-          "brand profile and the ad-craft rules. Answer in the schema.")
+          "renderer whose every option is in the shot grammar, and you only use what it offers. The brief comes "
+          "first, then the brand profile and the ad-craft rules. Answer in the schema.")
 
 PROMPT = """# The brief
 
@@ -62,7 +68,12 @@ Length: {seconds:g} seconds. Frame: {aspect}.
 
 {profile}
 
-The product (its 3D shape, materials and label) is built from this profile; you plan everything around it.
+The product (its 3D shape, materials and label) is built from this profile; you plan everything around it,
+sized for it (a pedestal a little wider than it and not much taller).
+
+Its do_not list is the brand's usual taste: follow it, unless the brief asks for something it rules out (say,
+a bright summer campaign for a brand that's usually muted). Then the brief wins, and the brand stays
+recognisable through its name, its type and its palette's accents.
 
 # The style library (whole looks; start from one, adapt its colours to the palette)
 
@@ -89,8 +100,19 @@ def aspect_in(brief: str) -> str:
     return "16:9"
 
 
+def product_size(product: Product) -> tuple[float, float]:
+    """The product's height and width in meters, as the Studio builds it."""
+    if product.profile_parts:
+        points = [pt for part in product.profile_parts for pt in part.profile]
+        return max(y for _, y in points), 2 * max(r for r, _ in points)
+    height, width = TEMPLATE_SIZES[product.template]
+    return product.height or height, product.width or width
+
+
 def _profile_text(p: BrandProfile) -> str:
-    facts = {"brand": p.brand, "product_name": p.product_name, "category": p.category, "height_m": p.height,
+    height, width = product_size(p.product())
+    facts = {"brand": p.brand, "product_name": p.product_name, "category": p.category,
+             "size": f"{height * 100:.1f} cm tall, {width * 100:.1f} cm wide",
              "materials": [f"{m.name}: {m.looks_like} ({m.color})" for m in p.materials],
              "palette": [f"{s.hex} {s.role} {s.share:.0%}" for s in p.palette],
              "typography": p.typography.model_dump(), "mood": p.mood, "do_not": p.do_not,
@@ -142,6 +164,16 @@ def problems(sb: Storyboard, profile: BrandProfile, seconds: float) -> list[str]
         if not any(lo <= t.y <= hi for lo, hi in TITLE_BANDS):
             out.append(f"title {t.text!r} is centred at y {t.y:g}, over the product: put it at y 0.72-0.95 "
                        f"(below) or 0.05-0.2 (above)")
+    if sb.look.pedestal:
+        height, width = product_size(sb.product)
+        ped = sb.look.pedestal
+        lo, hi = PEDESTAL_WIDTH
+        if not lo * width <= ped.width <= hi * width or ped.height > PEDESTAL_HEIGHT * height:
+            out.append(f"the pedestal ({ped.width * 100:.0f} cm wide, {ped.height * 100:.0f} cm tall) is out of "
+                       f"proportion with the product ({width * 100:.1f} cm wide, {height * 100:.1f} cm tall): make it "
+                       f"{lo * width * 100:.0f}-{hi * width * 100:.0f} cm wide and at most "
+                       f"{PEDESTAL_HEIGHT * height * 100:.0f} cm tall (about {2.5 * width * 100:.0f} x "
+                       f"{0.6 * height * 100:.0f} cm suits most), or set it to null")
     for track in sb.tracks:
         if track.entity != "product" and not track.entity.startswith("light_"):
             out.append(f"a track animates {track.entity!r}: tracks may only animate the product or the lights")

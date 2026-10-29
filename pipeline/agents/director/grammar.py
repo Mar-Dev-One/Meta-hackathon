@@ -61,8 +61,9 @@ CRAFT = """\
   (0.025-0.035) under it; placed under the product (y 0.8-0.93) so they don't cover it; at most 2 on screen.
 - Script is for words in lower or mixed case ("Aurelle", "Skin, simply."), never all capitals; light
   titles on a dark set, dark on a light one.
-- Colours (backdrop, pedestal, titles) come from the brand's palette or sit well with it; follow every
-  "do not" in the brand profile.
+- Colours (backdrop, pedestal, titles) come from the brand's palette or sit well with it. The brand profile's
+  "do not"s are its usual taste: follow them unless the brief asks otherwise, in which case the brief wins.
+- The set is sized for the product: a pedestal 1.2-7 times its width and at most 1.5 times its height.
 - Start from the style that fits the brief and the brand, then adapt its colours to the palette."""
 
 

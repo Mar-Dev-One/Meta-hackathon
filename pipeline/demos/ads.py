@@ -73,7 +73,7 @@ ADS: dict[str, dict] = {
             title="Noctis: Noir Absolu", brief="Luxury perfume ad, dark and moody, 13 seconds.",
             style="dark and moody luxury",
             look=Look(environment=DARK, backdrop=Backdrop(color="#0A0A0C"),
-                      pedestal=Pedestal(width=0.32, height=0.22, color="#0E0E10"),
+                      pedestal=Pedestal(width=0.32, height=0.18, color="#0E0E10"),
                       lighting=Lighting(preset="rim_dark", fade_in=2.5, glow=2)),
             product=Product(template="perfume",
                             parts={"body": PartLook(color="#F4EEF0", transmission=1, roughness=0.04,

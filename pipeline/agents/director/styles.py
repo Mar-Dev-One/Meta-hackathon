@@ -40,7 +40,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
     Style(
         name="luxury_dark", use_for="perfume, spirits, jewellery, watches: luxurious, moody, premium",
         look=Look(environment=Environment(), backdrop=Backdrop(color="#0A0A0C"),
-                  pedestal=Pedestal(width=0.32, height=0.22, color="#0E0E10"),
+                  pedestal=Pedestal(width=0.32, height=0.18, color="#0E0E10"),
                   lighting=Lighting(preset="rim_dark", fade_in=2.5, glow=2)),
         title=TitleStyle(font="serif", color="#ECE4D2", size=0.075, tracking=0.25,
                          tagline_font="sans", tagline_color="#C9A45C"),
