@@ -99,18 +99,40 @@ arg_color(const cJSON* args, const char* name, f32 out[3], char* error, size_t e
     return set_error(error, error_size, "\"%s\" must be \"#RRGGBB\" (sRGB) or [r, g, b] (linear 0..1)", name), -1;
 }
 
-// A material's overrides from JSON: color, opacity, metallic, roughness, emissive.
+// A material's overrides from JSON: color, opacity, metallic, roughness,
+// emissive; glass (transmission, ior, thickness, attenuation_color,
+// attenuation_distance), a clear coat (clearcoat, clearcoat_roughness) and
+// specular (specular, specular_color).
 static b8
 read_material(const cJSON* json, geo_material* m, char* error, size_t error_size)
 {
     f32 opacity = m->base_color[3];
+    int has_specular = 0, has_specular_color = 0;
+    if (!m->has_specular)
+    {
+        m->specular = 1.0f;
+        glm_vec3_one(m->specular_color);
+    }
     if (arg_color(json, "color", m->base_color, error, error_size) < 0
         || arg_number(json, "opacity", 0.02f, 1.0f, &opacity, error, error_size) < 0
         || arg_number(json, "metallic", 0.0f, 1.0f, &m->metallic, error, error_size) < 0
         || arg_number(json, "roughness", 0.0f, 1.0f, &m->roughness, error, error_size) < 0
-        || arg_color(json, "emissive", m->emissive, error, error_size) < 0)
+        || arg_color(json, "emissive", m->emissive, error, error_size) < 0
+        || arg_number(json, "transmission", 0.0f, 1.0f, &m->transmission, error, error_size) < 0
+        || arg_number(json, "ior", 1.0f, 3.0f, &m->ior, error, error_size) < 0
+        || arg_number(json, "thickness", 0.0f, 5.0f, &m->thickness, error, error_size) < 0
+        || arg_color(json, "attenuation_color", m->attenuation_color, error, error_size) < 0
+        || arg_number(json, "attenuation_distance", 0.0f, 100.0f, &m->attenuation_distance, error, error_size) < 0
+        || arg_number(json, "clearcoat", 0.0f, 1.0f, &m->clearcoat, error, error_size) < 0
+        || arg_number(json, "clearcoat_roughness", 0.0f, 1.0f, &m->clearcoat_roughness, error, error_size) < 0
+        || (has_specular = arg_number(json, "specular", 0.0f, 1.0f, &m->specular, error, error_size)) < 0
+        || (has_specular_color = arg_color(json, "specular_color", m->specular_color, error, error_size)) < 0)
         return false;
     m->base_color[3] = opacity;
+    m->has_specular  = m->has_specular || has_specular > 0 || has_specular_color > 0;
+    if (cJSON_GetObjectItemCaseSensitive(json, "attenuation_color") && m->attenuation_distance <= 0.0f)
+        return set_error(error, error_size, "\"attenuation_color\" needs \"attenuation_distance\": the meters of glass "
+                         "after which light has taken on that colour (smaller is deeper)");
     return true;
 }
 
@@ -140,6 +162,19 @@ typedef struct product_part
     uint32            count;
     geo_material      material;
 } product_part;
+
+// Glass that wasn't given a thickness is as thick as the part is wide: a
+// solid bottle of liquid (the light crosses its whole body).
+static void
+default_thickness(product_part* part)
+{
+    if (part->material.transmission <= 0.0f || part->material.thickness > 0.0f)
+        return;
+    f32 widest = 0.0f;
+    for (uint32 i = 0; i < part->count; ++i)
+        widest = fmaxf(widest, part->profile[i].r);
+    part->material.thickness = 2.0f * widest;
+}
 
 // The body's radius at height y (the profile's outermost crossing), 0 if none.
 static f32
@@ -287,6 +322,7 @@ read_parts(const cJSON* args, const product_template* t, f32 height, f32 width, 
             char part_error[200];
             if (overrides && !read_material(overrides, &part->material, part_error, sizeof(part_error)))
                 return set_error(error, error_size, "parts.%s: %s", part->name, part_error);
+            default_thickness(part);
         }
         const cJSON* item;
         cJSON_ArrayForEach(item, parts_json)
@@ -317,6 +353,7 @@ read_parts(const cJSON* args, const product_template* t, f32 height, f32 width, 
             || !read_material(json, &part->material, part_error, sizeof(part_error)))
             return set_error(error, error_size, "parts[%d]: %s", p, part_error);
         snprintf(part->name, sizeof(part->name), "%s", name);
+        default_thickness(part);
     }
     return true;
 }
@@ -558,7 +595,11 @@ static const cmd_arg PRODUCT_ARGS[] = {
     { "height", "number", false, "meters (templates: perfume 0.12, bottle 0.30, jar 0.07, can 0.122, dropper 0.11)" },
     { "width", "number", false, "meters across at the widest" },
     { "parts", "object", false, "template: {\"cap\": {\"color\": \"#c9a45c\", \"metallic\": 1, \"roughness\": 0.2}, \"body\": {\"opacity\": 0.85}}; "
-                                "no template: [{\"name\", \"profile\": [[radius, height], ...] bottom to top in meters, \"color\", ...}]" },
+                                "no template: [{\"name\", \"profile\": [[radius, height], ...] bottom to top in meters, \"color\", ...}]. "
+                                "Each part: color, opacity, metallic, roughness, emissive; glass: transmission (0..1), ior (1.5), "
+                                "thickness (m; default the part's width), attenuation_color and attenuation_distance (m) for "
+                                "the colour light takes on through it; clearcoat and clearcoat_roughness; specular and "
+                                "specular_color" },
     { "label", "object", false, "{\"image\": path to a PNG/JPG, \"part\": \"body\", \"from\": m, \"to\": m, \"arc\": degrees (150)}: "
                                 "wrapped round the front, top of the image up" },
     { "position", "vec3", false, "where its base centre goes, e.g. on a pedestal's top" },

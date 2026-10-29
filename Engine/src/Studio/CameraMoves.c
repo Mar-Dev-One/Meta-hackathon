@@ -13,6 +13,12 @@
 // smaller dimension (0.6 by default), seen from `azimuth` degrees around it
 // (0 = from the front, +Z; 90 = from its right, +X) and `elevation` degrees
 // above it.
+//
+// Focus: two more tracks on the camera, its aperture (the move's `aperture`,
+// 0 = all sharp) and its focus distance, keyed with every pose at the depth
+// of the subject's near side along the view -- so with a wide aperture the
+// product's front (its label) stays sharp through the move while what's
+// behind it softens.
 
 #include "CameraMoves.h"
 
@@ -56,6 +62,8 @@ typedef struct move
 
     vec3 center;   // the subject's bounding sphere
     f32  radius;
+    f32  near_side;   // how far its near surface is in front of its centre (half its horizontal size)
+    f32  aperture;    // f-number; 0 = no depth of field
 
     f32 fov, fill, azimuth, elevation, aspect;
     f32 to_azimuth, from_fill, to_fill, from_elevation, to_elevation, travel, from_fov, to_fov;
@@ -145,7 +153,19 @@ add_pose_keys(studio* s, move_tracks* tracks, f32 t, f32 u, timeline_ease ease, 
     key.value[0] = fov;
     if (!timeline_add_key(&s->timeline, tracks->camera, "Camera", "fov_degrees", &key, error, error_size))
         return false;
-    tracks->keys += 3;
+
+    // The focus: the subject's near side, as a depth along the view.
+    vec3 forward, to_subject;
+    glm_vec3_sub(target, position, forward);
+    glm_vec3_normalize(forward);
+    glm_vec3_sub((f32*)m->center, position, to_subject);
+    key.value[0] = fmaxf(glm_vec3_dot(to_subject, forward) - m->near_side, 0.05f);
+    if (!timeline_add_key(&s->timeline, tracks->camera, "Camera", "focus_distance", &key, error, error_size))
+        return false;
+    key.value[0] = m->aperture;
+    if (!timeline_add_key(&s->timeline, tracks->camera, "Camera", "aperture", &key, error, error_size))
+        return false;
+    tracks->keys += 5;
     return true;
 }
 
@@ -156,6 +176,8 @@ write_move(studio* s, move_tracks* tracks, const move* m, char* error, size_t er
     timeline_remove_keys(&s->timeline, tracks->camera, "Transform", "position", m->start, end);
     timeline_remove_keys(&s->timeline, tracks->target, "Transform", "position", m->start, end);
     timeline_remove_keys(&s->timeline, tracks->camera, "Camera", "fov_degrees", m->start, end);
+    timeline_remove_keys(&s->timeline, tracks->camera, "Camera", "focus_distance", m->start, end);
+    timeline_remove_keys(&s->timeline, tracks->camera, "Camera", "aperture", m->start, end);
 
     f32 last = end - fminf(MOVE_END_GAP, 0.5f * m->duration);
     if (m->kind == MOVE_ORBIT || m->kind == MOVE_CRANE)
@@ -241,7 +263,8 @@ cmd_camera_move(void* user, command_context* ctx, const cJSON* args, cJSON** out
         || arg_number(args, "fill", 0.05f, 5.0f, &m.fill, error, error_size) < 0
         || arg_number(args, "azimuth", -3600.0f, 3600.0f, &m.azimuth, error, error_size) < 0
         || arg_number(args, "elevation", -85.0f, 85.0f, &m.elevation, error, error_size) < 0
-        || arg_number(args, "aspect", 0.2f, 5.0f, &m.aspect, error, error_size) < 0)
+        || arg_number(args, "aspect", 0.2f, 5.0f, &m.aspect, error, error_size) < 0
+        || arg_number(args, "aperture", 0.0f, 64.0f, &m.aperture, error, error_size) < 0)
         return false;
 
     m.to_azimuth     = m.azimuth + 60.0f;
@@ -279,7 +302,8 @@ cmd_camera_move(void* user, command_context* ctx, const cJSON* args, cJSON** out
         return set_error(error, error_size, "\"%s\" isn't an entity with a MeshRenderer and a model", subject);
     }
     glm_vec3_center(lo, hi, m.center);
-    m.radius = fmaxf(0.5f * glm_vec3_distance(lo, hi), 1e-3f);
+    m.radius    = fmaxf(0.5f * glm_vec3_distance(lo, hi), 1e-3f);
+    m.near_side = 0.25f * ((hi[0] - lo[0]) + (hi[2] - lo[2]));
     if (!cJSON_GetObjectItemCaseSensitive(args, "travel"))
         m.travel = 2.0f * m.radius;
 
@@ -325,6 +349,9 @@ static const cmd_arg MOVE_ARGS[] = {
     { "elevation", "number", false, "degrees above the subject, -85 to 85 (default 10)" },
     { "fov_degrees", "number", false, "vertical field of view (default 30)" },
     { "aspect", "number", false, "the frame's width / height, for framing (default 16/9)" },
+    { "aperture", "number", false, "depth of field: the f-number, the focus kept on the subject's near side; "
+                                   "0 = everything sharp (default), 2-2.8 a very soft background, 4-5.6 a softened set, "
+                                   "8+ nearly all sharp" },
     { "to_azimuth", "number", false, "orbit: where it ends (default azimuth + 60)" },
     { "from_fill", "number", false, "dolly: the framing it starts from (default fill * 0.6: pushes in)" },
     { "to_fill", "number", false, "dolly: the framing it ends on (default fill)" },

@@ -71,11 +71,33 @@ class Look(Strict):
 
 # --- The product -------------------------------------------------------------------------------
 
-class PartLook(Strict):
+class Surface(Strict):
+    """A part's finish: what product.create takes for each part. Unset = the
+    template's (or, for glass, clear coat and specular, not used)."""
     color: str | None = Field(None, pattern=HEX, description="sRGB")
-    opacity: float | None = Field(None, ge=0.02, le=1, description="below 1: glass, see-through")
+    opacity: float | None = Field(None, ge=0.02, le=1, description="below 1: see-through by fading out (a ghost, not "
+                                                                   "glass; for glass use transmission)")
     metallic: float | None = Field(None, ge=0, le=1)
     roughness: float | None = Field(None, ge=0, le=1, description="0 mirror .. 1 matte; glass ~0.05, gold ~0.2")
+    transmission: float | None = Field(None, ge=0, le=1, description="glass and clear liquids: 0.9-1 shows the set "
+                                                                     "through it, bent and tinted (then keep opacity unset)")
+    ior: float | None = Field(None, ge=1, le=3, description="glass: index of refraction, 1.5 glass, 1.33 water")
+    thickness: float | None = Field(None, ge=0, le=5, description="glass: meters light travels through it (default "
+                                                                  "the part's width: a solid bottle of liquid)")
+    attenuation_color: str | None = Field(None, pattern=HEX, description="glass: the colour light takes on through "
+                                                                         "it, i.e. the liquid's (amber perfume, green oil)")
+    attenuation_distance: float | None = Field(None, gt=0, le=100, description="glass: meters of it after which light "
+                                                                               "has fully taken on attenuation_color; "
+                                                                               "smaller is deeper; needed with it")
+    clearcoat: float | None = Field(None, ge=0, le=1, description="a glossy lacquer over it (lacquered caps, coated "
+                                                                  "labels), 0..1")
+    clearcoat_roughness: float | None = Field(None, ge=0, le=1)
+    specular: float | None = Field(None, ge=0, le=1, description="strength of a non-metal's reflections (default 1)")
+    specular_color: str | None = Field(None, pattern=HEX, description="tint of a non-metal's reflections")
+
+
+class PartLook(Surface):
+    pass
 
 
 class Label(Strict):
@@ -86,13 +108,9 @@ class Label(Strict):
     arc: float = Field(110, ge=5, le=360, description="degrees it wraps around the front; 360 all the way round")
 
 
-class ProfilePart(Strict):
+class ProfilePart(Surface):
     name: str
     profile: list[list[float]] = Field(min_length=2, description="[radius, height] in meters, bottom to top")
-    color: str | None = Field(None, pattern=HEX)
-    opacity: float | None = Field(None, ge=0.02, le=1)
-    metallic: float | None = Field(None, ge=0, le=1)
-    roughness: float | None = Field(None, ge=0, le=1)
 
 
 class Product(Strict):
@@ -131,6 +149,10 @@ class CameraMove(Strict):
     from_: Literal["above", "below", "left", "right"] | None = Field(None, alias="from", description="reveal: where the aim starts")
     from_fov: float | None = Field(None, ge=1, le=179, description="zoom: start lens")
     to_fov: float | None = Field(None, ge=1, le=179, description="zoom: end lens")
+    aperture: float | None = Field(None, ge=0, le=64, description="depth of field, the f-number: the product's front "
+                                                                  "stays sharp and what's behind softens; unset or 0 "
+                                                                  "= all sharp, 2-2.8 a very soft background "
+                                                                  "(close-ups, heroes), 4-5.6 a softened set")
 
 
 class Shot(Strict):

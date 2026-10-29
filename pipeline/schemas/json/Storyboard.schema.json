@@ -228,6 +228,21 @@
           "default": null,
           "description": "zoom: end lens",
           "title": "To Fov"
+        },
+        "aperture": {
+          "anyOf": [
+            {
+              "maximum": 64,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "depth of field, the f-number: the product's front stays sharp and what's behind softens; unset or 0 = all sharp, 2-2.8 a very soft background (close-ups, heroes), 4-5.6 a softened set",
+          "title": "Aperture"
         }
       },
       "required": [
@@ -533,7 +548,7 @@
             }
           ],
           "default": null,
-          "description": "below 1: glass, see-through",
+          "description": "below 1: see-through by fading out (a ghost, not glass; for glass use transmission)",
           "title": "Opacity"
         },
         "metallic": {
@@ -564,6 +579,138 @@
           "default": null,
           "description": "0 mirror .. 1 matte; glass ~0.05, gold ~0.2",
           "title": "Roughness"
+        },
+        "transmission": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass and clear liquids: 0.9-1 shows the set through it, bent and tinted (then keep opacity unset)",
+          "title": "Transmission"
+        },
+        "ior": {
+          "anyOf": [
+            {
+              "maximum": 3,
+              "minimum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass: index of refraction, 1.5 glass, 1.33 water",
+          "title": "Ior"
+        },
+        "thickness": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass: meters light travels through it (default the part's width: a solid bottle of liquid)",
+          "title": "Thickness"
+        },
+        "attenuation_color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass: the colour light takes on through it, i.e. the liquid's (amber perfume, green oil)",
+          "title": "Attenuation Color"
+        },
+        "attenuation_distance": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 100,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass: meters of it after which light has fully taken on attenuation_color; smaller is deeper; needed with it",
+          "title": "Attenuation Distance"
+        },
+        "clearcoat": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "a glossy lacquer over it (lacquered caps, coated labels), 0..1",
+          "title": "Clearcoat"
+        },
+        "clearcoat_roughness": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clearcoat Roughness"
+        },
+        "specular": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "strength of a non-metal's reflections (default 1)",
+          "title": "Specular"
+        },
+        "specular_color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "tint of a non-metal's reflections",
+          "title": "Specular Color"
         }
       },
       "title": "PartLook",
@@ -701,22 +848,6 @@
     "ProfilePart": {
       "additionalProperties": false,
       "properties": {
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "profile": {
-          "description": "[radius, height] in meters, bottom to top",
-          "items": {
-            "items": {
-              "type": "number"
-            },
-            "type": "array"
-          },
-          "minItems": 2,
-          "title": "Profile",
-          "type": "array"
-        },
         "color": {
           "anyOf": [
             {
@@ -728,6 +859,7 @@
             }
           ],
           "default": null,
+          "description": "sRGB",
           "title": "Color"
         },
         "opacity": {
@@ -742,6 +874,7 @@
             }
           ],
           "default": null,
+          "description": "below 1: see-through by fading out (a ghost, not glass; for glass use transmission)",
           "title": "Opacity"
         },
         "metallic": {
@@ -770,7 +903,156 @@
             }
           ],
           "default": null,
+          "description": "0 mirror .. 1 matte; glass ~0.05, gold ~0.2",
           "title": "Roughness"
+        },
+        "transmission": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass and clear liquids: 0.9-1 shows the set through it, bent and tinted (then keep opacity unset)",
+          "title": "Transmission"
+        },
+        "ior": {
+          "anyOf": [
+            {
+              "maximum": 3,
+              "minimum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass: index of refraction, 1.5 glass, 1.33 water",
+          "title": "Ior"
+        },
+        "thickness": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass: meters light travels through it (default the part's width: a solid bottle of liquid)",
+          "title": "Thickness"
+        },
+        "attenuation_color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass: the colour light takes on through it, i.e. the liquid's (amber perfume, green oil)",
+          "title": "Attenuation Color"
+        },
+        "attenuation_distance": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 100,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass: meters of it after which light has fully taken on attenuation_color; smaller is deeper; needed with it",
+          "title": "Attenuation Distance"
+        },
+        "clearcoat": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "a glossy lacquer over it (lacquered caps, coated labels), 0..1",
+          "title": "Clearcoat"
+        },
+        "clearcoat_roughness": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clearcoat Roughness"
+        },
+        "specular": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "strength of a non-metal's reflections (default 1)",
+          "title": "Specular"
+        },
+        "specular_color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "tint of a non-metal's reflections",
+          "title": "Specular Color"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "profile": {
+          "description": "[radius, height] in meters, bottom to top",
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "minItems": 2,
+          "title": "Profile",
+          "type": "array"
         }
       },
       "required": [

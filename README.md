@@ -48,10 +48,10 @@ The method is the command name and the params are its arguments:
   | `environment.get` / `environment.set` | HDRI, image-based lighting, exposure, bloom, tone mapping, SSAO |
   | `render.get` / `render.set` | Antialiasing, shadows, background colour |
   | `camera.get` / `camera.set` | Creates or moves a Camera entity, aims it at a point once and makes it the one the frame is seen through |
-  | `product.create` | A product spun from a profile: a template (`perfume`, `bottle`, `jar`, `can`, `dropper`) or your own parts, colours as `"#RRGGBB"`, and an optional label image wrapped round its body |
+  | `product.create` | A product spun from a profile: a template (`perfume`, `bottle`, `jar`, `can`, `dropper`) or your own parts, colours as `"#RRGGBB"`, and an optional label image wrapped round its body. A part can be glass (`transmission`, `ior`, `thickness`, `attenuation_color` / `attenuation_distance`: it shows the set behind it, bent and tinted), clear-coated (`clearcoat`) or have its own `specular`; they're written into the product's glTF as the `KHR_materials_*` extensions |
   | `backdrop.create` | A cyclorama (a floor curving up into a wall) or a round pedestal, optionally covered with an image |
   | `lighting.preset` | A lighting setup around a subject: `three_point`, `rim_dark`, `high_key`, `top_soft`, `split`, `neon_dual`; its lights are `light_*` entities |
-  | `camera.move` | A shot's camera move around a subject: `static`, `orbit`, `dolly`, `crane`, `truck`, `reveal` or `zoom`, framed so the subject fills a share of the frame. Written as timeline keys; moves placed end to end are cuts |
+  | `camera.move` | A shot's camera move around a subject: `static`, `orbit`, `dolly`, `crane`, `truck`, `reveal` or `zoom`, framed so the subject fills a share of the frame, and with an `aperture`, a shallow focus that keeps the subject's front sharp while what's behind softens. Written as timeline keys (position, aim, lens, focus, aperture); moves placed end to end are cuts |
   | `timeline.set_track` / `timeline.add_key` | Keyframes any number, vec3 or colour field of any component (`Transform.position`, `Camera.fov_degrees`, `Light.intensity`, `MeshRenderer.material.roughness`, ...) with easing: linear, in, out, in_out, step or a cubic bezier |
   | `timeline.remove_track` / `timeline.clear` / `timeline.get` | Edit and read the tracks |
   | `timeline.seek` | Shows the scene at a time: every animated field set to its value then |

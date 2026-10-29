@@ -25,6 +25,7 @@ The settings, as the Studio describes them:
 - `azimuth`: degrees around the subject: 0 = front (+Z), 90 = its right (+X) (default 0)
 - `elevation`: degrees above the subject, -85 to 85 (default 10)
 - `fov_degrees`: vertical field of view (default 30)
+- `aperture`: depth of field: the f-number, the focus kept on the subject's near side; 0 = everything sharp (default), 2-2.8 a very soft background, 4-5.6 a softened set, 8+ nearly all sharp
 - `to_azimuth`: orbit: where it ends (default azimuth + 60)
 - `from_fill`: dolly: the framing it starts from (default fill * 0.6: pushes in)
 - `to_fill`: dolly: the framing it ends on (default fill)

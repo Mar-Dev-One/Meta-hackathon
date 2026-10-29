@@ -31,6 +31,20 @@ typedef struct geo_material
     b8          texture_repeat;  // tile it (a backdrop's surface); otherwise clamp at its edges (a label)
     b8          alpha_mask;      // with a texture: discard its transparent pixels (a label's cut-out shape)
     b8          double_sided;
+
+    // Glass, clear coat and specular, written as glTF's KHR_materials_*
+    // extensions. Zero means "not used" throughout, so a material that
+    // doesn't set them is written exactly as before.
+    f32 transmission;            // 0..1: glass and clear liquids (KHR_materials_transmission)
+    f32 ior;                     // index of refraction; 0 = glTF's default, 1.5 (KHR_materials_ior)
+    f32 thickness;               // meters the light travels through it (KHR_materials_volume)
+    f32 attenuation_color[3];    // linear RGB the light takes on through it...
+    f32 attenuation_distance;    // ...fully after this many meters; 0 = no absorption
+    f32 clearcoat;               // 0..1: a glossy coat over it (KHR_materials_clearcoat)
+    f32 clearcoat_roughness;
+    b8  has_specular;            // write KHR_materials_specular:
+    f32 specular;                // its strength, 0..1
+    f32 specular_color[3];       // and its linear RGB tint
 } geo_material;
 
 // One material's triangles.

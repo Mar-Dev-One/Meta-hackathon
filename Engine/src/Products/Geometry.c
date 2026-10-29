@@ -307,8 +307,61 @@ add_accessor(cJSON* views, cJSON* accessors, byte_buffer* buffer, const void* da
 #define GLTF_ARRAY        34962
 #define GLTF_ELEMENTS     34963
 
+// The material extensions geo_write_gltf() can write, as bits of `used`.
+enum
+{
+    EXT_TRANSMISSION = 1 << 0,
+    EXT_VOLUME       = 1 << 1,
+    EXT_IOR          = 1 << 2,
+    EXT_CLEARCOAT    = 1 << 3,
+    EXT_SPECULAR     = 1 << 4,
+};
+static const char* const EXTENSION_NAMES[] = { "KHR_materials_transmission", "KHR_materials_volume", "KHR_materials_ior",
+                                               "KHR_materials_clearcoat", "KHR_materials_specular" };
+
+// Glass, clear coat and specular as the material's extensions; their bits added to `used`.
+static void
+material_extensions_json(const geo_material* m, cJSON* json, uint32* used)
+{
+    cJSON* ext = NULL;
+    if (m->transmission > 0.0f || m->ior > 0.0f || m->clearcoat > 0.0f || m->has_specular)
+        ext = cJSON_AddObjectToObject(json, "extensions");
+    if (m->transmission > 0.0f)
+    {
+        cJSON* transmission = cJSON_AddObjectToObject(ext, "KHR_materials_transmission");
+        cJSON_AddNumberToObject(transmission, "transmissionFactor", json_round6(m->transmission));
+        cJSON* volume = cJSON_AddObjectToObject(ext, "KHR_materials_volume");
+        cJSON_AddNumberToObject(volume, "thicknessFactor", json_round6(m->thickness));
+        if (m->attenuation_distance > 0.0f)
+        {
+            json_add_floats(volume, "attenuationColor", m->attenuation_color, 3);
+            cJSON_AddNumberToObject(volume, "attenuationDistance", json_round6(m->attenuation_distance));
+        }
+        *used |= EXT_TRANSMISSION | EXT_VOLUME;
+    }
+    if (m->ior > 0.0f)
+    {
+        cJSON_AddNumberToObject(cJSON_AddObjectToObject(ext, "KHR_materials_ior"), "ior", json_round6(m->ior));
+        *used |= EXT_IOR;
+    }
+    if (m->clearcoat > 0.0f)
+    {
+        cJSON* coat = cJSON_AddObjectToObject(ext, "KHR_materials_clearcoat");
+        cJSON_AddNumberToObject(coat, "clearcoatFactor", json_round6(m->clearcoat));
+        cJSON_AddNumberToObject(coat, "clearcoatRoughnessFactor", json_round6(m->clearcoat_roughness));
+        *used |= EXT_CLEARCOAT;
+    }
+    if (m->has_specular)
+    {
+        cJSON* specular = cJSON_AddObjectToObject(ext, "KHR_materials_specular");
+        cJSON_AddNumberToObject(specular, "specularFactor", json_round6(m->specular));
+        json_add_floats(specular, "specularColorFactor", m->specular_color, 3);
+        *used |= EXT_SPECULAR;
+    }
+}
+
 static cJSON*
-material_json(const geo_material* m, cJSON* textures, cJSON* images, cJSON* samplers)
+material_json(const geo_material* m, cJSON* textures, cJSON* images, cJSON* samplers, uint32* used)
 {
     cJSON* json = cJSON_CreateObject();
     cJSON* pbr  = cJSON_AddObjectToObject(json, "pbrMetallicRoughness");
@@ -351,6 +404,7 @@ material_json(const geo_material* m, cJSON* textures, cJSON* images, cJSON* samp
         cJSON_AddStringToObject(json, "alphaMode", "BLEND");
     if (m->double_sided)
         cJSON_AddBoolToObject(json, "doubleSided", true);
+    material_extensions_json(m, json, used);
     return json;
 }
 
@@ -370,6 +424,7 @@ geo_write_gltf(const char* path, const geo_part* parts, uint32 part_count, char*
     cJSON* samplers   = cJSON_CreateArray();
     cJSON* primitives = cJSON_CreateArray();
     byte_buffer buffer = { 0 };
+    uint32 used = 0;   // EXT_* bits
 
     for (uint32 p = 0; p < part_count; ++p)
     {
@@ -416,7 +471,7 @@ geo_write_gltf(const char* path, const geo_part* parts, uint32 part_count, char*
         cJSON_AddNumberToObject(primitive, "indices",
                                 add_accessor(views, accessors, &buffer, part->indices, part->index_count * sizeof(uint32),
                                              part->index_count, GLTF_UNSIGNED_INT, "SCALAR", GLTF_ELEMENTS));
-        cJSON_AddItemToArray(materials, material_json(&part->material, textures, images, samplers));
+        cJSON_AddItemToArray(materials, material_json(&part->material, textures, images, samplers, &used));
         cJSON_AddNumberToObject(primitive, "material", cJSON_GetArraySize(materials) - 1);
         cJSON_AddItemToArray(primitives, primitive);
     }
@@ -448,6 +503,13 @@ geo_write_gltf(const char* path, const geo_part* parts, uint32 part_count, char*
         cJSON_Delete(images);
         cJSON_Delete(samplers);
         cJSON_Delete(textures);
+    }
+    if (used)
+    {
+        cJSON* names = cJSON_AddArrayToObject(root, "extensionsUsed");
+        for (uint32 i = 0; i < sizeof(EXTENSION_NAMES) / sizeof(EXTENSION_NAMES[0]); ++i)
+            if (used & (1u << i))
+                cJSON_AddItemToArray(names, cJSON_CreateString(EXTENSION_NAMES[i]));
     }
 
     cJSON* meshes = cJSON_AddArrayToObject(root, "meshes");
