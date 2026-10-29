@@ -30,9 +30,11 @@ class StudioError(Exception):
 class Studio:
     """Starts a Studio (or attaches to a running one) and runs commands on it."""
 
-    def __init__(self, exe: Path | str | None = None, hidden: bool = True, width: int = 1280, height: int = 720,
+    def __init__(self, exe: Path | str | None = None, hidden: bool | None = None, width: int = 1280, height: int = 720,
                  port: int = 0, attach: bool = False):
         self.exe = Path(exe or os.environ.get("STUDIO_EXE", DEFAULT_EXE))
+        if hidden is None:   # STUDIO_VISIBLE=1: its window shown and its log printed (start.bat)
+            hidden = os.environ.get("STUDIO_VISIBLE") != "1"
         self.hidden, self.width, self.height, self.port, self.attach = hidden, width, height, port, attach
         self.process: subprocess.Popen | None = None
         self.ws = None
@@ -55,7 +57,8 @@ class Studio:
                 args.append("--hidden")
             if self.port:
                 args += ["--port", str(self.port)]
-            self.process = subprocess.Popen(args, cwd=self.exe.parent, stdout=subprocess.DEVNULL)
+            self.process = subprocess.Popen(args, cwd=self.exe.parent,
+                                            stdout=subprocess.DEVNULL if self.hidden else None)
 
         info = await self._wait_for_server(timeout)
         # Renders block the Studio, which then can't answer pings: no ping timeout.

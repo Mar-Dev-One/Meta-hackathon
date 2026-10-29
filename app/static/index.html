@@ -115,7 +115,7 @@
       <div id="drop" class="drop">Drop a product photo, or click<input id="photo" type="file" accept="image/png,image/jpeg,image/webp" hidden></div>
       <label class="field">Brief<textarea id="brief" placeholder="Luxury perfume ad, dark and moody, 15 seconds." required></textarea></label>
       <label class="field">What it is<input id="category" type="text" placeholder="perfume bottle"></label>
-      <div class="field">3D model <span class="meta">optional: for a product that isn't round</span>
+      <div class="field">3D model <span class="meta">optional: found automatically for a product that isn't round; pick one to choose it yourself</span>
         <div class="row">
           <button type="button" class="btn ghost" id="findModels">Find models online</button>
           <label class="btn ghost" style="cursor:pointer">Upload .glb<input id="modelFile" type="file" accept=".glb" hidden></label>
@@ -265,7 +265,7 @@ function open(id, speed = Number($("speed").value)) {
   const kinds = ["started", "queued", "brief", "analyse", "segmented", "read", "output", "saved", "model", "draft", "studio",
     "preview", "critique", "ad_critique", "second_opinion", "round", "revision", "revised", "revision_failed", "refined",
     "render", "rendered", "music", "finished", "failed", "resumed", "critique_draft", "ad_critique_draft", "resumed_rounds",
-    "model_download", "model_fitted"];
+    "scouted", "model_pick", "scout_failed", "model_download", "staged", "model_fitted"];
   for (const k of kinds) source.addEventListener(k, (m) => handle(JSON.parse(m.data)));
   source.onerror = () => { if (source.readyState === EventSource.CLOSED) loadRuns(); };
 }
@@ -309,7 +309,9 @@ const HANDLERS = {
   },
   finished: (e) => { setStatus(e.status); if (e.cost != null) $("cost").textContent = `$${e.cost.toFixed(3)} on Meta models · ${Math.round(e.seconds)} s`; },
   failed: (e) => setStatus("failed"),
+  model_pick: (e) => { if (e.sheet) profileImage(e.sheet, "models found"); },
   model_download: (e) => { $("modelCredit").textContent = `Downloading the 3D model from ${e.source}: ${e.name}…`; },
+  staged: (e) => { if (e.sheets) { show("profileCard"); e.sheets.forEach((f) => profileImage(f, f.includes("ups") ? "which way up" : "which side")); } },
   model_fitted: (e) => {
     show("profileCard");
     $("modelCredit").replaceChildren(document.createTextNode(
@@ -322,7 +324,11 @@ function logLine(e) {
     output: `${e.label} → ${e.file}`, model: `${e.model}${e.cached ? " (cached)" : ""}`, critique: `${e.shot} r${e.iteration} ${e.passed ? "pass" : "fail"} ${e.scores ? low(e.scores) : ""}`,
     ad_critique: `whole ad r${e.iteration} ${e.passed ? "pass" : "fail"}`, round: `round ${e.index}: ${e.passed ? "passed" : "not yet"}`,
     revision: e.summary, render: `${e.frames} frames ${e.width}×${e.height}`, rendered: `${e.seconds} s`, music: e.mood,
-    finished: `${e.status}, ${Math.round(e.seconds)} s`, failed: e.error, second_opinion: `${e.shot}: ${e.first?.low} then ${e.second?.low}, kept ${e.kept}` }[e.kind];
+    finished: `${e.status}, ${Math.round(e.seconds)} s`, failed: e.error, second_opinion: `${e.shot}: ${e.first?.low} then ${e.second?.low}, kept ${e.kept}`,
+    scouted: e.round ? `round: traced from the photo (${e.reason})` : `not round: searching ${e.queries.join(", ")} (${e.reason})`,
+    model_pick: e.name ? `${e.name} from ${e.source}: ${e.reason}` : `none fits, traced from the photo: ${e.reason}`,
+    scout_failed: `${e.error}; traced from the photo`, model_download: `${e.name} from ${e.source}`,
+    staged: e.by === "spark" ? `${e.up}, turned ${e.turn}°: ${e.up_reason} ${e.side_reason}` : `${e.up}, turned ${e.turn}° (by proportions: ${e.error})` }[e.kind];
   const line = el("div", {}, el("span", { text: `${String(Math.round(e.t)).padStart(4)}s ` }), el("b", { text: e.kind }), document.createTextNode(detail ? `  ${detail}` : ""));
   const box = $("log"); const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 4;
   box.append(line); if (atEnd) box.scrollTop = box.scrollHeight;

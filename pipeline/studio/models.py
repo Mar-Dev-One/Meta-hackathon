@@ -10,9 +10,10 @@ A product's model is kept in the Studio's units and pose: meters, Y up, its
 front towards +Z, its base centre at the origin. Then it's placed like the
 spun products: its base on the pedestal, at the origin.
 
-fit() makes a downloaded model the brand's product: stood the way up whose
-proportions match the product in its photo (models often lie on their side
-or back), scaled, and dressed in the brand's finish part by part (the top
+fit() makes a downloaded model the brand's product: stood the way it's
+told (pipeline.agents.stager: Muse Spark, looking at the photo), or else
+the way up whose proportions match the product in its photo (models often
+lie on their side or back), scaled, and dressed in the brand's finish part by part (the top
 piece is the cap; glass becomes real glass holding the product's liquid).
 """
 
@@ -103,12 +104,14 @@ def orient(source: Path | str, aspect: float) -> tuple[str, float]:
 
 
 def fit(source: Path | str, out: Path | str, height: float, aspect: float | None = None,
-        parts: dict[str, dict] | None = None) -> Path:
-    """A downloaded model as the brand's product: oriented to match the
-    photo's `aspect` (if given), normalized to `height`, and dressed in
-    `parts` ({"body": finish, "cap": finish}, Surface fields: colour, metallic,
-    roughness, transmission, attenuation, clear coat) if given."""
-    up, turn = orient(source, aspect) if aspect else ("+y", 0.0)
+        parts: dict[str, dict] | None = None, up: str | None = None, turn: float = 0.0) -> Path:
+    """A downloaded model as the brand's product: stood `up` and turned
+    `turn` degrees if given, else oriented to match the photo's `aspect` (if
+    given), normalized to `height`, and dressed in `parts` ({"body": finish,
+    "cap": finish}, Surface fields: colour, metallic, roughness, transmission,
+    attenuation, clear coat) if given."""
+    if not up:
+        up, turn = orient(source, aspect) if aspect else ("+y", 0.0)
     out = normalize(source, out, height, up=up, turn=turn)
     if parts:
         dress(out, out, parts)

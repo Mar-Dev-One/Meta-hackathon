@@ -24,6 +24,8 @@ from pipeline.studio import build, final_cut, models, preview
 from .analyst import analyse
 from .critic.loop import refine
 from .director.write import write
+from .scout import scout
+from .stager import stage
 
 
 # The ad's format: one frame, planned and judged in it, or both (the brief's
@@ -39,9 +41,9 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     (9:16) or "both": the director plans for the chosen frame, or, for both,
     the brief's (vertical if it says so) and the other is reframed from it.
     `model` is a 3D model file (.glb) of the product, for shapes that aren't
-    round (pipeline.catalog finds them; `credit` is its candidate's, kept in
-    the run as model_credit.json); without one the shape is traced from the
-    photo as a round product. Without the critic, the director's first
+    round (`credit` is its candidate's, kept in the run as model_credit.json);
+    without one, the scout looks at the photo: a round product is traced from
+    it, any other shape gets the closest model found online, if one fits. Without the critic, the director's first
     storyboard is built and a few frames previewed (frames/)."""
     if format not in FORMATS:
         raise ValueError(f"format must be one of {', '.join(FORMATS)}, not {format!r}")
@@ -51,7 +53,12 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     analysis = analyse(run, photo, category)
     box = analysis.seg.product.box
     aspect = (box[3] - box[1]) / max(box[2] - box[0], 1)   # the product's outline in the photo, height / width
-    profile = with_model(run, analysis.profile, model, credit, aspect) if model else analysis.profile
+    if not model:
+        model, credit = scout(run, photo, analysis.profile.category)
+    if model:
+        profile = await with_model(studio, run, analysis.profile, model, credit, photo, category, aspect)
+    else:
+        profile = analysis.profile
     sb = await write(brief, profile, studio=studio, run=run, aspect=FORMATS[format])
     if critic:
         sb, _ = await refine(studio, sb, profile, run)
@@ -64,16 +71,18 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     return await final_cut(studio, run, sb, Path(photo).stem, aspects=aspects, short=short)
 
 
-def with_model(run: Run, profile: BrandProfile, model: Path | str, credit: dict | None,
-               aspect: float | None = None) -> BrandProfile:
+async def with_model(studio, run: Run, profile: BrandProfile, model: Path | str, credit: dict | None,
+                     photo: Path | str, category: str = "product", aspect: float | None = None) -> BrandProfile:
     """The brand profile with `model` as its product (run's product.glb):
-    stood the way up that matches the product's `aspect` in its photo, fitted
-    to its real height, and dressed in the analyst's materials part by part,
-    in place of the traced shape and the label (a label can't be wrapped
-    onto any shape). Saved again as brand_profile.json; the model's credit
-    as model_credit.json."""
+    stood and turned the way Muse Spark sees the product in `photo` (the
+    stager; the photo's `aspect` if it can't answer), fitted to its real
+    height, and dressed in the analyst's materials part by part, in place of
+    the traced shape and the label (a label can't be wrapped onto any
+    shape). Saved again as brand_profile.json; the model's credit as
+    model_credit.json."""
+    up, turn = await stage(studio, run, model, photo, profile.height, category=category, aspect=aspect)
     parts = {m.name: m.surface() for m in profile.materials}
-    fitted = models.fit(model, run.path("product.glb"), height=profile.height, aspect=aspect, parts=parts)
+    fitted = models.fit(model, run.path("product.glb"), height=profile.height, parts=parts, up=up, turn=turn)
     height, width = models.size(fitted)
     profile = profile.model_copy(update={"model": str(fitted), "profile_parts": None, "template": None, "label": None})
     run.output("brand_profile", run.save_json("brand_profile.json", profile))
