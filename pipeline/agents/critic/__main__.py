@@ -18,6 +18,7 @@ from pipeline.runs import Run
 from pipeline.schemas import Storyboard
 from pipeline.studio import Studio, build
 
+from .cuts import measure_cuts
 from .judge import judge
 from .loop import refine, summary
 from .measure import measure, sheet
@@ -25,6 +26,8 @@ from .measure import measure, sheet
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("ads", nargs="*", help=f"which ads (default all): {', '.join(ADS)}")
 parser.add_argument("--judge", action="store_true", help="also score each shot with Muse Spark vision")
+parser.add_argument("--cuts", action="store_true", help="also measure every cut: the last frame of a shot against "
+                                                        "the first of the next")
 parser.add_argument("--refine", action="store_true", help="the critic loop: judge, revise, rebuild, up to 3 times")
 parser.add_argument("--broken", action="store_true", help="break the ad first: a shot slides the product out of "
                                                           "frame and the light is nearly off")
@@ -84,9 +87,19 @@ async def main() -> None:
                 sheet(shots).save(run.path("measure", "sheet.png"))
                 run.output("sheet", run.path("measure", "sheet.png"))
                 critiques = [judge(sb, s, provider=args.provider, run=run) if args.judge else None for s in shots]
+                cuts = await measure_cuts(studio, sb, run.folder("cuts")) if args.cuts else []
+                if cuts:
+                    run.output("cuts", run.save_json("cuts.json", [c.to_json() for c in cuts]))
             print(f"\n{name}  ({run.root})")
             for s, c in zip(shots, critiques):
                 show(s, c)
+            for c in cuts:
+                print(f"  cut {c.before}->{c.after} at {c.time:g}s: view {c.view[0]:.0f}->{c.view[1]:.0f} "
+                      f"({c.view_jump:+.0f}), lights x{c.set_light} colour {c.set_colour:.1f}, frame light "
+                      f"{c.light_jump:+.1f} colour {c.colour_jump:.1f}, product "
+                      f"{c.product_light:+.1f}, centre {c.centre_jump:.2f}, size x{c.size_ratio}")
+                for f in c.flags:
+                    print(f"    measured {f.severity:5} {f.problem}")
 
 
 asyncio.run(main())
