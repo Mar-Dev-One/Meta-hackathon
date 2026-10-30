@@ -57,9 +57,15 @@ CRAFT = """\
 - fill 0.45 wide, 0.6 medium, 0.9 close; a close-up (0.9+) is for the label or the cap.
 - Depth of field (`aperture`) keeps the product sharp and softens what's behind it: use the style's on most
   shots, wider (2-2.8) on close-ups and the hero to set the product apart, 0 on a wide shot whose set should read.
-- Glass (a see-through product) shows what's behind it: on a dark set, give the light a `glow` (about 2), a warm
-  pool on the wall behind, so the glass lights up in its liquid's colour. It's behind the product as seen from
-  the front: keep glass shots within about 35 degrees of azimuth 0, or the glass turns dark.
+- Glass (a see-through product) shows what's behind it: on a dark set, light it strongly (`intensity` 1.5-2)
+  and give it a `glow` (2-3), a warm pool on the wall behind, so the glass lights up in its liquid's colour. A
+  lighter backdrop doesn't help: the glass blends into it. The glow is behind the product as seen from the
+  front: keep glass shots within about 35 degrees of azimuth 0, or the glass turns dark.
+- Glass and metal reflect their surroundings: keep `environment.use_ibl` on.
+- Separate the product from the set: the backdrop clearly darker or lighter than the product (a white jar on a
+  mid or dark set, a dark product on a lighter one, or a rim-lit dark product on black with strong light).
+- Titles must read against what's behind them (the backdrop, and the pedestal for titles low in the frame):
+  light on dark, dark on light, a contrast ratio of at least 3.
 - The last shot is the hero: static, from the front (azimuth near 0), fill 0.4-0.5 (room for the name), with the brand
   name as a title over it. It lasts at least 2.5 s and the name appears at least 0.4 s into it.
 - Titles: the brand name in the brand's font from the brand profile (size 0.06-0.13), an optional tagline

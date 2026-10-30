@@ -33,6 +33,11 @@ HERO_AZIMUTH = 25         # degrees from the front
 TITLE_DELAY = 0.4         # the name appears at least this long after the hero starts
 TITLE_SEEN = 0.8          # ... and at least this long before the end
 MAX_TITLES = 2            # titles stay on once in, so this many are on screen together
+SEE_THROUGH = 0.5         # a material this transmissive is glass; this metallic, metal
+SEPARATION = 15           # the product's and the backdrop's lightness (L*, 0-100) at least this far apart
+DARK_SET = 25             # a backdrop darker than this (L*) is a dark set
+GLASS_LIGHT = 1.5         # glass on a dark set needs the lights at least this strong (and a glow)
+TITLE_CONTRAST = 3.0      # a title against what's behind it, as a contrast ratio
 TITLE_BANDS = ((0.0, 0.2), (0.72, 1.0))   # where a title's centre may be (above or below the product)
 TITLE_CLEAR = 0.02        # of the frame's height between a title's box and the product (centred, `fill` tall)
 PEDESTAL_WIDTH = (1.2, 7.0)   # a pedestal's width, in product widths: wider than it, not a dance floor
@@ -177,6 +182,58 @@ def problems(sb: Storyboard, profile: BrandProfile | None, seconds: float) -> li
     return out
 
 
+def _luminance(hex_colour: str) -> float:
+    """Relative luminance (0 black .. 1 white) of an sRGB "#RRGGBB"."""
+    channels = [int(hex_colour.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    r, g, b = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _lightness(hex_colour: str) -> float:
+    """Perceived lightness, L* (0 black .. 100 white)."""
+    y = _luminance(hex_colour)
+    return 116 * y ** (1 / 3) - 16 if y > 0.008856 else 903.3 * y
+
+
+def _contrast(a: str, b: str) -> float:
+    """The contrast ratio of two colours (1 .. 21; text reads from about 3)."""
+    hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def light_problems(sb: Storyboard, profile: BrandProfile | None) -> list[str]:
+    """Light that sells the material, as rules: what glass, metal and the
+    product's tone need from the set to read, and titles that can be read.
+    Rules of taste, unlike problems(): told to Spark every time, but a last
+    attempt with only these left is kept (with them as warnings), not failed."""
+    out = []
+    if profile is None:
+        return out
+    glass = any(m.transmission >= SEE_THROUGH for m in profile.materials)
+    metal = any(m.metallic >= SEE_THROUGH for m in profile.materials)
+    env, lighting, backdrop = sb.look.environment, sb.look.lighting, sb.look.backdrop.color
+    if (glass or metal) and not env.use_ibl:
+        out.append(f"the product is {'glass' if glass else 'metal'}, which shows what's around it: keep "
+                   f"look.environment.use_ibl on, or it renders black")
+    tone = next((s.hex for s in profile.palette if s.role == "product"), None)
+    if tone and abs(_lightness(tone) - _lightness(backdrop)) < SEPARATION:
+        out.append(f"the product ({tone}, lightness {_lightness(tone):.0f}) and the backdrop ({backdrop}, "
+                   f"{_lightness(backdrop):.0f}) are too close in tone: it melts into the set. Make the backdrop "
+                   f"clearly darker or lighter (at least {SEPARATION} apart, out of 100)")
+    if glass and _lightness(backdrop) < DARK_SET and (lighting.intensity < GLASS_LIGHT or not lighting.glow):
+        out.append(f"glass on a dark set reads black unless it's lit: set look.lighting.intensity to at least "
+                   f"{GLASS_LIGHT:g} and give it a glow (2-3); a lighter backdrop doesn't help, the glass blends into it")
+    pedestal = sb.look.pedestal.color if sb.look.pedestal else None
+    for t in sb.titles:
+        colour = t.color[:7]
+        behind = [backdrop] + ([pedestal] if pedestal and t.y >= TITLE_BANDS[1][0] else [])
+        worst = min(behind, key=lambda c: _contrast(colour, c))
+        if _contrast(colour, worst) < TITLE_CONTRAST:
+            out.append(f"title {t.text!r} ({colour}) is hard to read against {worst} behind it (contrast "
+                       f"{_contrast(colour, worst):.1f}, needs {TITLE_CONTRAST:g}): make it lighter or darker")
+    return out
+
+
 def shots_from(sb: Storyboard, t: float) -> list[Shot]:
     """The shots on screen from `t` seconds to the end (a title stays on)."""
     return [shot for start, shot in zip(sb.shot_starts(), sb.shots) if t < start + shot.duration] or sb.shots[-1:]
@@ -227,17 +284,21 @@ async def write(brief: str, profile: BrandProfile, *, studio=None, run=None, sec
     feedback, found = "", []
     for attempt in range(1, tries + 1):
         answer = spark.ask(prompt + feedback, schema=schema, system=SYSTEM)
+        sb, must = None, []
         try:
             plan = Plan.model_validate(answer.data)
             sb = assemble(plan, profile, brief, aspect)
         except ValidationError as e:
-            found = _errors(e)
+            found = must = _errors(e)
         else:
-            found = problems(sb, profile, seconds) + (await title_problems(studio, sb) if studio else [])
+            must = problems(sb, profile, seconds) + (await title_problems(studio, sb) if studio else [])
+            found = must + light_problems(sb, profile)
         if run:
             run.event("draft", attempt=attempt, problems=found, cached=answer.cached)
-        if not found:
+        if not found or (attempt == tries and not must):
             if run:
+                if found:   # only rules of taste left on the last try: kept, with them said
+                    run.event("draft_warnings", problems=found)
                 run.output("storyboard", run.save_json("storyboard.json", sb))
             return sb
         feedback = ("\n\n# Your previous answer\n\n" + answer.text +

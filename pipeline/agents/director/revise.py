@@ -21,7 +21,7 @@ from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
 
 from . import grammar
-from .write import DirectorError, _errors, _profile_text, problems, title_problems
+from .write import DirectorError, _errors, _profile_text, light_problems, problems, title_problems
 
 CHANGES = {"type": "object", "additionalProperties": True}
 
@@ -134,7 +134,7 @@ class _Editor:
         except ValidationError as e:
             return {"applied": False, "errors": _errors(e)}
         self.data = data
-        left = problems(sb, self.profile, self.seconds)
+        left = problems(sb, self.profile, self.seconds) + light_problems(sb, self.profile)
         return {"applied": True, "length": sb.duration, **({"still_to_fix": left} if left else {})}
 
     def handle(self, name: str, args: dict) -> dict:
@@ -213,13 +213,14 @@ async def revise(sb: Storyboard, fix: str, profile: BrandProfile | None, *, stud
                              profile=_profile_text(profile), grammar=grammar.load())
         result = spark.run_tools(text, tools=TOOLS, handle=editor.handle, system=SYSTEM, max_turns=10)
         revised = editor.storyboard()
-        found = problems(revised, profile, editor.seconds) + light_steps(sb, revised) + \
+        must = problems(revised, profile, editor.seconds) + light_steps(sb, revised) + \
             (await title_problems(studio, revised) if studio else [])
+        found = must + light_problems(revised, profile)
         if run:
             run.event("revision", round=round_, calls=[{"name": c["name"], "arguments": c["arguments"],
                                                         "applied": c["result"].get("applied")} for c in result.calls],
                       summary=result.text, problems=found)
-        if not found:
+        if not found or (round_ == rounds and not must):   # only rules of taste left at the end: kept
             changes = diff(before, revised.model_dump(by_alias=True, exclude_none=True))
             if run:
                 run.save_json("storyboard.json", revised)
