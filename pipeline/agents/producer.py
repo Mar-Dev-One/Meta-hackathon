@@ -94,11 +94,23 @@ async def live_ad(studio, run: Run, brief: str, profile: BrandProfile, name: str
     first = FORMATS[format] or ("9:16" if "vertical" in brief.lower() else "16:9")
     cut = await live.direct(studio, run, brief, profile, first)
     if critic:
+        # Each version reviewed is saved as a scene: a revision can make it worse, and the best is the one rendered.
+        best = None
         for round_ in range(LIVE_REVISIONS + 1):
             verdict = await live.review(studio, run, cut, brief, profile, round_)
+            scene = f"live_{run.root.name}_round{round_}"
+            await studio.call("scene.save", name=scene)
+            score = (min(verdict.scores.model_dump().values()), sum(verdict.scores.model_dump().values()))
+            if best is None or score > best[0]:
+                best = (score, round_, scene, cut)
             if verdict.passed or round_ == LIVE_REVISIONS:
                 break
             cut = await live.revise(studio, run, cut, verdict, brief, profile, round_ + 1)
+        _, kept, scene, best_cut = best
+        if best_cut is not cut:
+            await studio.call("scene.load", name=scene)
+            cut = best_cut
+        run.event("refined", best=kept, passed=verdict.passed if kept == round_ else False, rounds=round_ + 1)
     else:
         await live.preview(studio, run, cut)
     if not video:

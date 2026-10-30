@@ -89,8 +89,8 @@ def _work() -> None:
 
 
 async def _make(job: Job) -> None:
-    async with Studio() as studio:
-        with job.run:
+    with job.run:   # first, so a Studio that won't start is the run's "failed", with why
+        async with Studio() as studio:
             model, credit = job.model_file, None
             if job.model_pick:
                 job.run.event("model_download", source=job.model_pick.source, name=job.model_pick.name)
@@ -238,7 +238,9 @@ async def _stream(root: Path, speed: float, start: int):
     sent, began, last = start, time.monotonic(), time.monotonic()
     first_t = None
     while True:
-        lines = log.read_text(encoding="utf-8").splitlines()
+        text = log.read_text(encoding="utf-8")
+        # Only whole lines: the worker may be halfway through writing the last one.
+        lines = text[:text.rfind("\n") + 1].splitlines()
         for line in lines[sent:]:
             if not line.strip():
                 sent += 1

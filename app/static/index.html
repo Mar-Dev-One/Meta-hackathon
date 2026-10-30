@@ -270,7 +270,7 @@ function open(id, speed = Number($("speed").value)) {
     "preview", "critique", "ad_critique", "second_opinion", "round", "revision", "revised", "revision_failed", "refined",
     "render", "rendered", "music", "finished", "failed", "resumed", "critique_draft", "ad_critique_draft", "resumed_rounds",
     "scouted", "model_pick", "scout_failed", "model_download", "staged", "model_fitted",
-    "tool", "directed", "live_review", "render_retry"];
+    "tool", "directed", "live_review", "render_retry", "unfinished"];
   for (const k of kinds) source.addEventListener(k, (m) => handle(JSON.parse(m.data)));
   source.onerror = () => { if (source.readyState === EventSource.CLOSED) loadRuns(); };
 }
@@ -336,6 +336,7 @@ function logLine(e) {
     directed: `${e.session}: ${e.shots} shots, ${e.duration} s, mood ${e.mood}, ${e.calls} commands. ${e.summary}`,
     live_review: `round ${e.round}: ${e.passed ? "pass" : "fail"} ${low(e.scores)}; ${(e.issues || []).join(" · ")}`,
     render_retry: `${e.aspect}: ${e.error}; rendering again in a new Studio`,
+    unfinished: `${e.session}: ran out of turns before finish; the film is kept as it is, its cut read from its camera moves`,
     scouted: e.round ? `round: traced from the photo (${e.reason})` : `not round: searching ${(e.queries || []).join(", ")} (${e.reason})`,
     model_pick: e.name ? `${e.name} from ${e.source}: ${e.reason}` : `none fits, traced from the photo: ${e.reason}`,
     scout_failed: `${e.error}; traced from the photo`, model_download: `${e.name} from ${e.source}`,
