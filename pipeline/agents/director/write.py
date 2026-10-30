@@ -12,15 +12,17 @@ Whatever is wrong goes back to Spark with its answer, up to `tries` times.
 
 import json
 import re
+from pathlib import Path
 from typing import Literal
 
+from PIL import Image
 from pydantic import Field, ValidationError
 
 from pipeline.catalog.sets import surface_colour
 from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
 from pipeline.schemas.storyboard import Look, Shot, Strict, Title, Track
-from pipeline.studio.build import motion_keys, product_size
+from pipeline.studio.build import ASPECTS, build, motion_keys, product_size
 
 from . import grammar
 from .styles import STYLES
@@ -39,7 +41,8 @@ SEPARATION = 15           # the product's and the backdrop's lightness (L*, 0-10
 DARK_SET = 25             # a backdrop darker than this (L*) is a dark set
 GLASS_LIGHT = 1.5         # glass on a dark set needs the lights at least this strong (and a glow)
 TITLE_CONTRAST = 3.0      # a title against what's behind it, as a contrast ratio
-TITLE_BANDS = ((0.0, 0.2), (0.72, 1.0))   # where a title's centre may be (above or below the product)
+CHECKS = Path("cache/title_check")   # where the frames behind the titles are rendered to be measured
+TITLE_BANDS = ((0.0, 0.27), (0.72, 1.0))  # where a title's centre may be (above or below the product)
 TITLE_CLEAR = 0.02        # of the frame's height between a title's box and the product (centred, `fill` tall)
 PEDESTAL_WIDTH = (1.2, 7.0)   # a pedestal's width, in product widths: wider than it, not a dance floor
 PEDESTAL_HEIGHT = 1.5         # at most this many product heights tall, or it upstages the product
@@ -159,8 +162,9 @@ def problems(sb: Storyboard, profile: BrandProfile | None, seconds: float) -> li
         if t.font == "script" and t.text.isupper():
             out.append(f"title {t.text!r} is script in capitals: write it in mixed case, or use another font")
         if not any(lo <= t.y <= hi for lo, hi in TITLE_BANDS):
-            out.append(f"title {t.text!r} is centred at y {t.y:g}, over the product: put it at y 0.72-0.95 "
-                       f"(below) or 0.05-0.2 (above)")
+            (above_lo, above_hi), (below_lo, below_hi) = TITLE_BANDS
+            out.append(f"title {t.text!r} is centred at y {t.y:g}, over the product: put it at y "
+                       f"{max(above_lo, 0.05):g}-{above_hi:g} (above) or {below_lo:g}-{min(below_hi, 0.95):g} (below)")
     if sb.look.pedestal:
         height, width = product_size(sb.product)
         ped = sb.look.pedestal
@@ -219,9 +223,8 @@ def light_problems(sb: Storyboard, profile: BrandProfile | None) -> list[str]:
     metal = any(m.metallic >= SEE_THROUGH for m in profile.materials)
     env, lighting = sb.look.environment, sb.look.lighting
     # What the set reads as: a surface's own colour, the plain colour, or (no backdrop, the light
-    # environment behind) nothing these rules can judge.
-    backdrop, pedestal = (_set_colour(sb.look.backdrop) if sb.look.backdrop else None,
-                          _set_colour(sb.look.pedestal) if sb.look.pedestal else None)
+    # environment behind) nothing these rules can judge. Titles against the set: title_contrast_problems.
+    backdrop = _set_colour(sb.look.backdrop) if sb.look.backdrop else None
     if (glass or metal) and not env.use_ibl:
         out.append(f"the product is {'glass' if glass else 'metal'}, which shows what's around it: keep "
                    f"look.environment.use_ibl on, or it renders black")
@@ -235,15 +238,58 @@ def light_problems(sb: Storyboard, profile: BrandProfile | None) -> list[str]:
                    f"{GLASS_LIGHT:g} and give it a glow (2-3), or put a bright light environment behind it (backdrop "
                    f"null, show_skybox); a lighter backdrop doesn't help, the glass blends into it")
     for t in sb.titles:
-        colour = t.color[:7]
-        behind = [c for c in (backdrop, pedestal if t.y >= TITLE_BANDS[1][0] else None) if c]
-        if not behind:
-            continue
-        worst = min(behind, key=lambda c: _contrast(colour, c))
-        if _contrast(colour, worst) < TITLE_CONTRAST:
-            out.append(f"title {t.text!r} ({colour}) is hard to read against {worst} behind it (contrast "
-                       f"{_contrast(colour, worst):.1f}, needs {TITLE_CONTRAST:g}): make it lighter or darker")
+        on_pedestal = next((shot for shot in shots_from(sb, t.start) if _over_pedestal(sb, shot, t)), None)
+        if on_pedestal:
+            top, bottom = _pedestal_rows(sb, on_pedestal)
+            room = f"; or below it (y {bottom + 0.04:.2f} or lower)" if bottom < 0.9 else ""
+            out.append(f"title {t.text!r} sits on the pedestal's face in {on_pedestal.id}: there the pedestal covers "
+                       f"y {top:.2f}-{min(bottom, 1):.2f} of the frame. Put the title above the product (y "
+                       f"{max(TITLE_BANDS[0][0], 0.05):g}-{TITLE_BANDS[0][1]:g}){room}; or frame that shot wider "
+                       f"(lower fill) with a low slab so there's set below it")
     return out
+
+
+async def title_contrast_problems(studio, sb: Storyboard) -> list[str]:
+    """Titles hard to read against what's really behind them: the scene
+    built and rendered at each title's start (it's still invisible then),
+    and the picture under its box averaged, whatever the set is (a colour,
+    a surface, a light environment, a painting). Rules of taste."""
+    width, height = 640, round(640 / ASPECTS[sb.aspect])
+    await build(studio, sb)
+    frames = (await studio.call("shot.preview", times=[t.start for t in sb.titles], width=width, height=height,
+                                out_dir=str(CHECKS.resolve())))["frames"]
+    out = []
+    for t, frame in zip(sb.titles, frames):
+        box = (await studio.call("text.measure", text=t.text, font=t.font, size=t.size, anchor="center",
+                                 offset=[0, t.y - 0.5], tracking=t.tracking, width=width, height=height))["box"]
+        x, y, w, h = box
+        pixels = Image.open(frame["path"]).convert("RGB").crop((round(x * width), round(y * height),
+                                                                 round((x + w) * width), round((y + h) * height)))
+        behind = "#{:02X}{:02X}{:02X}".format(*pixels.resize((1, 1), Image.Resampling.BOX).getpixel((0, 0)))
+        colour = t.color[:7]
+        if _contrast(colour, behind) < TITLE_CONTRAST:
+            out.append(f"title {t.text!r} ({colour}) is hard to read against what's behind it, about {behind} "
+                       f"(contrast {_contrast(colour, behind):.1f}, needs {TITLE_CONTRAST:g}): make it lighter or darker, "
+                       f"or move it where the set is calmer")
+    return out
+
+
+def _over_pedestal(sb: Storyboard, shot: Shot, title: Title) -> bool:
+    """Whether the title's rows cross the pedestal's in the shot: the camera
+    centres the product, `fill` of the frame's height, so the pedestal runs
+    down from the product's base for `fill` times its height over the
+    product's (perspective aside)."""
+    if not sb.look.pedestal:
+        return False
+    top, bottom = _pedestal_rows(sb, shot)
+    return title.y - title.size / 2 < bottom and top < title.y + title.size / 2
+
+
+def _pedestal_rows(sb: Storyboard, shot: Shot) -> tuple[float, float]:
+    """The share of the frame's height (0 top) the pedestal covers in the shot."""
+    fill = shot.camera.max_fill()
+    top = 0.5 + fill / 2
+    return top, top + fill * sb.look.pedestal.height / product_size(sb.product)[0]
 
 
 def shots_from(sb: Storyboard, t: float) -> list[Shot]:
@@ -304,7 +350,8 @@ async def write(brief: str, profile: BrandProfile, *, studio=None, run=None, sec
             found = must = _errors(e)
         else:
             must = problems(sb, profile, seconds) + (await title_problems(studio, sb) if studio else [])
-            found = must + light_problems(sb, profile)
+            found = must + light_problems(sb, profile) + \
+                (await title_contrast_problems(studio, sb) if studio and not must else [])
         if run:
             run.event("draft", attempt=attempt, problems=found, cached=answer.cached)
         if not found or (attempt == tries and not must):

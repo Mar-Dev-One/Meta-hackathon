@@ -21,7 +21,8 @@ from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
 
 from . import grammar
-from .write import DirectorError, _errors, _profile_text, light_problems, problems, title_problems
+from .write import (DirectorError, _errors, _profile_text, light_problems, problems, title_contrast_problems,
+                    title_problems)
 
 CHANGES = {"type": "object", "additionalProperties": True}
 
@@ -215,7 +216,8 @@ async def revise(sb: Storyboard, fix: str, profile: BrandProfile | None, *, stud
         revised = editor.storyboard()
         must = problems(revised, profile, editor.seconds) + light_steps(sb, revised) + \
             (await title_problems(studio, revised) if studio else [])
-        found = must + light_problems(revised, profile)
+        found = must + light_problems(revised, profile) + \
+            (await title_contrast_problems(studio, revised) if studio and not must else [])
         if run:
             run.event("revision", round=round_, calls=[{"name": c["name"], "arguments": c["arguments"],
                                                         "applied": c["result"].get("applied")} for c in result.calls],

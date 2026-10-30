@@ -69,7 +69,10 @@ CRAFT = """\
 - The last shot is the hero: static, from the front (azimuth near 0), fill 0.4-0.5 (room for the name), with the brand
   name as a title over it. It lasts at least 2.5 s and the name appears at least 0.4 s into it.
 - Titles: the brand name in the brand's font from the brand profile (size 0.06-0.13), an optional tagline
-  (0.025-0.035) under it; placed under the product (y 0.8-0.93) so they don't cover it; at most 2 on screen.
+  (0.025-0.035) with it; at most 2 on screen. Place them where the frame is empty set, never over the product
+  or on the pedestal's face: above the product (y 0.08-0.25, the tagline under the name), or below the pedestal
+  when the hero is framed wide enough to leave set there. A pedestal runs down from the product's base for
+  `fill` times its height over the product's.
 - Script is for words in lower or mixed case ("Aurelle", "Skin, simply."), never all capitals; light
   titles on a dark set, dark on a light one.
 - Colours (backdrop, pedestal, titles) come from the brand's palette or sit well with it. The brand profile's
