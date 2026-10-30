@@ -325,7 +325,7 @@ function logLine(e) {
     ad_critique: `whole ad r${e.iteration} ${e.passed ? "pass" : "fail"}`, round: `round ${e.index}: ${e.passed ? "passed" : "not yet"}`,
     revision: e.summary, render: `${e.frames} frames ${e.width}×${e.height}`, rendered: `${e.seconds} s`, music: e.mood,
     finished: `${e.status}, ${Math.round(e.seconds)} s`, failed: e.error, second_opinion: `${e.shot}: ${e.first?.low} then ${e.second?.low}, kept ${e.kept}`,
-    scouted: e.round ? `round: traced from the photo (${e.reason})` : `not round: searching ${e.queries.join(", ")} (${e.reason})`,
+    scouted: e.round ? `round: traced from the photo (${e.reason})` : `not round: searching ${(e.queries || []).join(", ")} (${e.reason})`,
     model_pick: e.name ? `${e.name} from ${e.source}: ${e.reason}` : `none fits, traced from the photo: ${e.reason}`,
     scout_failed: `${e.error}; traced from the photo`, model_download: `${e.name} from ${e.source}`,
     staged: e.by === "spark" ? `${e.up}, turned ${e.turn}°: ${e.up_reason} ${e.side_reason}` : `${e.up}, turned ${e.turn}° (by proportions: ${e.error})` }[e.kind];

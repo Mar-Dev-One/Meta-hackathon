@@ -7,6 +7,9 @@
     r = spark.run_tools(brief, tools=TOOLS, handle=lambda name, args: studio_call(name, args))
     r.calls         # every tool call made, with its result
 
+A tool can show the model pictures (a render it made): handle() returns
+Seen(result, images), and the images follow that turn's results.
+
 `provider="baseten"` runs the same request on Muse Spark Open (Chat
 Completions on Baseten); tool calling is Meta API only for now.
 """
@@ -20,6 +23,13 @@ from pydantic import BaseModel, ValidationError
 
 from . import cache, client, config, usage
 from .client import ImageInput, MetaError
+
+
+@dataclass
+class Seen:
+    """A tool's result with images for the model to look at (run_tools)."""
+    result: Any
+    images: list[ImageInput]
 
 
 @dataclass
@@ -170,6 +180,7 @@ def run_tools(prompt: str, *, tools: list[dict], handle: Callable[[str, dict], A
 
         # Answer every call of this turn, then send the whole exchange back.
         history.extend({k: v for k, v in item.items() if k != "status"} for item in stored["output"])
+        seen: list[tuple[str, list[ImageInput]]] = []
         for call in turn_calls:
             try:
                 arguments = json.loads(call["arguments"] or "{}")
@@ -180,8 +191,15 @@ def run_tools(prompt: str, *, tools: list[dict], handle: Callable[[str, dict], A
                     result = handle(call["name"], arguments)
                 except Exception as e:   # noqa: BLE001 -- the model sees the error and can correct itself
                     result = {"error": str(e)}
+            if isinstance(result, Seen):
+                seen.append((call["name"], result.images))
+                result = result.result
             calls.append({"turn": turn, "name": call["name"], "arguments": arguments, "result": result})
             history.append({"type": "function_call_output", "call_id": call["call_id"],
                             "output": json.dumps(result, default=str)})
+        # Function outputs are text only: the pictures come as the user's next message.
+        for name, images in seen:
+            history.append({"type": "message", "role": "user", "content": _user_content(
+                f"The images from your {name} call, in the order of its results.", images, chat=False)})
 
     raise MetaError(model, f"still calling tools after {max_turns} turns ({len(calls)} calls)")
