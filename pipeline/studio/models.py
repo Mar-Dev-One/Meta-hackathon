@@ -13,8 +13,9 @@ spun products: its base on the pedestal, at the origin.
 fit() makes a downloaded model the brand's product: stood the way it's
 told (pipeline.agents.stager: Muse Spark, looking at the photo), or else
 the way up whose proportions match the product in its photo (models often
-lie on their side or back), scaled, and dressed in the brand's finish part by part (the top
-piece is the cap; glass becomes real glass holding the product's liquid).
+lie on their side or back), scaled, and dressed in the brand's finish part
+by part (the top piece is the cap; glass becomes real glass holding the
+product's liquid).
 """
 
 import hashlib
@@ -242,11 +243,22 @@ def install(studio, path: Path | str) -> str:
     """Copies the model into the Studio's assets (products/, next to the
     spun products) under a name from its content, so the same model is one
     file however often it's placed. Returns its asset key for place_model."""
-    path = Path(path)
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
-    key = f"products/model_{digest}{path.suffix.lower()}"
-    target = Path(studio.exe).parent / "assets" / key
+    key, target = _installed(studio, path)
     if not target.exists():
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(path, target)
     return key
+
+
+def uninstall(studio, path: Path | str) -> None:
+    """Removes the model's copy from the Studio's assets (one placed only
+    for a moment: the stager's views)."""
+    _installed(studio, path)[1].unlink(missing_ok=True)
+
+
+def _installed(studio, path: Path | str) -> tuple[str, Path]:
+    """The model's asset key and where its copy lives in the Studio's assets."""
+    path = Path(path)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+    key = f"products/model_{digest}{path.suffix.lower()}"
+    return key, Path(studio.exe).parent / "assets" / key

@@ -20,7 +20,11 @@ from pipeline.meta import spark
 from pipeline.meta.client import MetaError
 from pipeline.runs import Run
 from pipeline.schemas import Backdrop, CameraMove, Environment, Lighting, Look, Pedestal, Product, Shot, Storyboard
-from pipeline.studio import build, models
+from pipeline.studio import StudioError, build, models
+
+# What staging can run into: Spark not answering, the Studio refusing the
+# model, the model's file not loading (trimesh), a file not written.
+FAILURES = (MetaError, StudioError, ValueError, OSError)
 
 LETTERS = "ABCDEF"
 SIDES = (0.0, 90.0, 180.0, 270.0)   # the camera's azimuths for the sides sheet
@@ -42,9 +46,12 @@ async def _views(studio, model: Path, height: float, azimuths: tuple[float, ...]
                     shots=[Shot(id=f"s{i + 1}", intent="-", duration=1,
                                 camera=CameraMove(move="static", azimuth=a, elevation=ELEVATION, fill=0.7))
                            for i, a in enumerate(azimuths)])
-    await build(studio, sb)
-    result = await studio.call("shot.preview", times=[i + 0.5 for i in range(len(azimuths))],
-                               width=TILE, height=TILE, out_dir=str(out))
+    try:
+        await build(studio, sb)
+        result = await studio.call("shot.preview", times=[i + 0.5 for i in range(len(azimuths))],
+                                   width=TILE, height=TILE, out_dir=str(out))
+    finally:
+        models.uninstall(studio, model)   # only for these views: don't leave a copy in the Studio's assets
     return [Path(f["path"]) for f in result["frames"]]
 
 
@@ -121,23 +128,31 @@ def _ask(prompt: str, photo: Path, board: Path, schema: type[BaseModel]) -> Base
 async def stage(studio, run: Run | None, source: Path | str, photo: Path | str, height: float,
                 category: str = "product", aspect: float | None = None) -> tuple[str, float]:
     """(up, turn) for models.normalize: the way up and the turn Spark sees
-    matching the product in `photo`. If Spark can't answer, the guess from
-    the photo's proportions (models.orient, `aspect`), or as the file is."""
+    matching the product in `photo`. If the way up can't be chosen (Spark,
+    the Studio or the model failing), the guess from the photo's proportions
+    (models.orient, `aspect`), or as the file is; if only the side can't,
+    that way up, turned as the file is."""
     source, photo = Path(source), Path(photo)
     folder = run.folder("stage") if run else Path(source).parent / "stage"
     try:
         ups = await ups_sheet(studio, source, height, folder)
         first = _ask(UP_PROMPT.format(category=category), photo, ups, UpChoice)
         up = models.UPS[LETTERS.index(first.choice)]
-        sides = await sides_sheet(studio, source, height, up, folder)
-        second = _ask(SIDE_PROMPT.format(category=category), photo, sides, SideChoice)
-        turn = -SIDES[LETTERS.index(second.choice)] % 360   # the side seen from azimuth a, turned to face azimuth 0
-    except MetaError as e:
+    except FAILURES as e:
         up, turn = models.orient(source, aspect) if aspect else ("+y", 0.0)
         if run:
             run.event("staged", up=up, turn=turn, by="proportions", error=str(e))
         return up, turn
+    sheets, side_reason = [ups], None
+    try:
+        sides = await sides_sheet(studio, source, height, up, folder)
+        sheets.append(sides)
+        second = _ask(SIDE_PROMPT.format(category=category), photo, sides, SideChoice)
+        turn = -SIDES[LETTERS.index(second.choice)] % 360   # the side seen from azimuth a, turned to face azimuth 0
+        side_reason = second.reason
+    except FAILURES as e:
+        turn, side_reason = 0.0, f"(the side couldn't be chosen, so as the file is: {e})"
     if run:
-        run.event("staged", up=up, turn=turn, by="spark", up_reason=first.reason, side_reason=second.reason,
-                  sheets=[p.relative_to(run.root).as_posix() for p in (ups, sides)])
+        run.event("staged", up=up, turn=turn, by="spark", up_reason=first.reason, side_reason=side_reason,
+                  sheets=[p.relative_to(run.root).as_posix() for p in sheets])
     return up, turn

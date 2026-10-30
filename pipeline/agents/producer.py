@@ -43,8 +43,9 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     `model` is a 3D model file (.glb) of the product, for shapes that aren't
     round (`credit` is its candidate's, kept in the run as model_credit.json);
     without one, the scout looks at the photo: a round product is traced from
-    it, any other shape gets the closest model found online, if one fits. Without the critic, the director's first
-    storyboard is built and a few frames previewed (frames/)."""
+    it, any other shape gets the closest model found online, if one fits.
+    Without the critic, the director's first storyboard is built and a few
+    frames previewed (frames/)."""
     if format not in FORMATS:
         raise ValueError(f"format must be one of {', '.join(FORMATS)}, not {format!r}")
     run.watch(studio)
@@ -56,7 +57,8 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     if not model:
         model, credit = scout(run, photo, analysis.profile.category)
     if model:
-        profile = await with_model(studio, run, analysis.profile, model, credit, photo, category, aspect)
+        profile = await with_model(studio, run, analysis.profile, model, credit, photo, analysis.profile.category,
+                                   aspect)
     else:
         profile = analysis.profile
     sb = await write(brief, profile, studio=studio, run=run, aspect=FORMATS[format])

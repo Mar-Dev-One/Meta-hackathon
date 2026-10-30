@@ -156,6 +156,6 @@ def scout(run: Run, photo: Path | str, category: str = "product") -> tuple[Path 
             return None, None
         run.event("model_download", source=found.source, name=found.name)
         return catalog.download(found), found.to_json()
-    except (MetaError, CatalogError, ValueError) as e:
+    except (MetaError, CatalogError, ValueError, OSError) as e:   # OSError: requests' network errors too
         run.event("scout_failed", error=str(e))
         return None, None
