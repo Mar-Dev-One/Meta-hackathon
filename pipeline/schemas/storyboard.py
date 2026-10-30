@@ -227,6 +227,9 @@ class Shot(Strict):
     duration: float = Field(gt=0.2, le=30, description="seconds; shots run back to back from 0")
     camera: CameraMove
     motion: ProductMotion | None = Field(None, description="the product moving in this shot; null: it stands still")
+    transition: Literal["cut", "dip"] = Field("cut", description="how the ad comes into this shot from the one "
+                                                                 "before: cut (straight in) or dip (a brief fade "
+                                                                 "through black: a pause, a change of place or time)")
 
 
 class Title(Strict):

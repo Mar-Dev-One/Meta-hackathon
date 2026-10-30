@@ -41,6 +41,7 @@ The settings, as the Studio describes them:
 - `id`: s1, s2, ...
 - `intent`: what the shot is for, in a sentence: the critic judges it against this
 - `duration` (>0.2 .. 30): seconds; shots run back to back from 0
+- `transition` (cut | dip, default cut): how the ad comes into this shot from the one before: cut (straight in) or dip (a brief fade through black: a pause, a change of place or time)
 
 ## Product motion (`shots[].motion`)
 
@@ -115,6 +116,10 @@ Keys on any number field of an entity, eased between: for the lights (`light_*`)
 - Open strong: the product is on screen and readable within the first 2 seconds.
 - 3 to 6 shots for 15 seconds; no shot under 1.2 s or over 5 s (the style sets the pace).
 - Every shot moves differently from the one before (orbit, then dolly, then crane ...): cuts land on motion.
+  Cuts fall on the music's beats by themselves (shot lengths are nudged a little to meet them).
+- Most shots come in on a straight cut. A `dip` (a brief fade through black) is a breath: use one or two in a
+  slow, luxurious or calm ad, before the hero or where the film changes place, angle or time; none in a fast,
+  energetic one, where cuts are the rhythm.
 - Keep the side of the product steady across cuts: don't jump more than about 90 degrees of azimuth
   between consecutive shots, unless the cut is meant to surprise.
 - Bring the product to life: give one to three shots a `motion` (a drop to open, a turn to bring the label

@@ -1,11 +1,14 @@
 """The last pass over a rendered video, with ffmpeg: the whole ad faded from
-and to black. Titles aren't added here: the Studio draws them into the
-frames (text.*), where the critic can see them.
+and to black, and dipped to black at the cuts that ask for it. Titles aren't
+added here: the Studio draws them into the frames (text.*), where the
+critic can see them.
 """
 
 import json
 import subprocess
 from pathlib import Path
+
+DIP = 0.7   # seconds a dip to black takes, half out before its cut and half in after
 
 
 def probe(video: Path) -> dict:
@@ -18,14 +21,29 @@ def probe(video: Path) -> dict:
     return {"width": stream["width"], "height": stream["height"], "duration": float(info["format"]["duration"])}
 
 
+def dips(times: list[float], length: float = DIP) -> str | None:
+    """An ffmpeg `eq` filter that dips the picture to black at each of
+    `times`: its brightness multiplied by a factor that falls to 0 at the
+    cut and rises back over `length` (eq's contrast f with brightness
+    (f - 1) / 2 is the picture times f; saturation f takes the colour down
+    with it)."""
+    if not times:
+        return None
+    half = length / 2
+    factor = "*".join(f"min(1,abs(t-{t:.3f})/{half:.3f})" for t in times)
+    return f"eq=eval=frame:contrast='{factor}':brightness='({factor}-1)/2':saturation='{factor}'"
+
+
 def finish(video_in: Path, video_out: Path, fade_in: float = 0.5, fade_out: float = 0.8,
-           audio: Path | None = None) -> Path:
+           audio: Path | None = None, dip_at: list[float] = ()) -> Path:
     """Writes video_in faded in and out to video_out (H.264, yuv420p, CRF 16),
-    with `audio` (pipeline.encode.music) as its sound if given: cut to the
+    dipped to black at the times in `dip_at` (cuts that ask for it), with
+    `audio` (pipeline.encode.music) as its sound if given: cut to the
     picture, faded out with it (a little longer, so the sound outlasts the
-    image by a breath) and in over a few frames, AAC 192 kb/s."""
+    image by a breath) and in over a few frames, AAC 192 kb/s. The music
+    plays on through a dip."""
     duration = probe(video_in)["duration"]
-    filters = []
+    filters = [f for f in [dips(list(dip_at))] if f]
     if fade_in > 0:
         filters.append(f"fade=t=in:st=0:d={fade_in}")
     if fade_out > 0:

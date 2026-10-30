@@ -72,7 +72,9 @@ async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samp
     if music:
         sound = music_for(sb, run.path("final", "music.wav"))
         run.event("music", mood=mood_of(sb), file=str(sound.relative_to(run.root)))
-    video = finish(raw, run.path("final", f"{name}.mp4"), fade_in=fade_in, fade_out=fade_out, audio=sound)
+    dip_at = [start for start, shot in zip(sb.shot_starts(), sb.shots) if shot.transition == "dip" and start > 0]
+    video = finish(raw, run.path("final", f"{name}.mp4"), fade_in=fade_in, fade_out=fade_out, audio=sound,
+                   dip_at=dip_at)
     raw.unlink(missing_ok=True)
     run.output(label, video)
     return video
