@@ -42,6 +42,11 @@ class Environment(Strict):
                                                  "needs look.backdrop null (the backdrop's wall hides it)")
     sky_blur: float = Field(0.35, ge=0, le=1, description="how soft the background environment is: 0.2 recognisable, "
                                                           "0.35 a soft photographic blur, 0.6 only colour and light")
+    painted: str | None = Field(None, description="a background painted for this ad by Muse Image, from this "
+                                                  "description of a place, its light and colours (e.g. 'a sunlit "
+                                                  "limestone bathroom, palm leaf shadows, warm morning light'): shown "
+                                                  "behind the product, blurred by sky_blur, and lighting it, in place "
+                                                  "of `hdri` (and of the backdrop); for a place the library doesn't have")
     ambient_strength: float = Field(0.06, ge=0, le=4, description="0.05 dark and moody, 0.6 bright and airy")
     exposure: float = Field(1.0, gt=0, le=16)
     bloom: float = Field(0.08, ge=0, le=1, description="glow around bright highlights; 0.03 clean, 0.14 dreamy or neon")
@@ -93,7 +98,10 @@ class Look(Strict):
     @model_validator(mode="after")
     def _background_or_wall(self):
         """The light environment as the background needs no wall in front of
-        it: an omitted backdrop (the default) would hide it."""
+        it: an omitted backdrop (the default) would hide it. A painted
+        background is always the background."""
+        if self.environment.painted:
+            self.environment.show_skybox = True
         if self.environment.show_skybox:
             self.backdrop = None
         return self

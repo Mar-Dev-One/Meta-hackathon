@@ -83,6 +83,9 @@ CRAFT = """\
 - A real background: set look.backdrop to null and environment.show_skybox to true, and the light environment
   stands behind the product, softly blurred (sky_blur 0.3-0.4): a lifestyle shot rather than a studio one.
   Glass reads best this way: it shows the light behind it, clear and bright, where a dark wall turns it black.
+- A place the library doesn't have (a sunlit bathroom, a spa, a café terrace, a kitchen at dawn, a desk by a
+  window): describe it in environment.painted and Muse Image paints it for this ad, the brand's colours in its
+  light and materials. Describe a place and its light, never the product; keep it calm behind the product.
 - Start from the style that fits the brief and the brand, then adapt its colours to the palette."""
 
 

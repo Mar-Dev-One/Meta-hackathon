@@ -71,6 +71,7 @@ Presets: three_point, rim_dark (luxury, moody), high_key (clean, bright), top_so
 - `use_ibl` (default True): light and reflect with the light environment (keep on for glass and metal)
 - `show_skybox` (default False): show the light environment as the background, blurred by sky_blur; needs look.backdrop null (the backdrop's wall hides it)
 - `sky_blur` (0 .. 1, default 0.35): how soft the background environment is: 0.2 recognisable, 0.35 a soft photographic blur, 0.6 only colour and light
+- `painted`: a background painted for this ad by Muse Image, from this description of a place, its light and colours (e.g. 'a sunlit limestone bathroom, palm leaf shadows, warm morning light'): shown behind the product, blurred by sky_blur, and lighting it, in place of `hdri` (and of the backdrop); for a place the library doesn't have
 - `ambient_strength` (0 .. 4, default 0.06): 0.05 dark and moody, 0.6 bright and airy
 - `exposure` (>0 .. 16, default 1.0)
 - `bloom` (0 .. 1, default 0.08): glow around bright highlights; 0.03 clean, 0.14 dreamy or neon
@@ -150,6 +151,9 @@ Keys on any number field of an entity, eased between: for the lights (`light_*`)
 - A real background: set look.backdrop to null and environment.show_skybox to true, and the light environment
   stands behind the product, softly blurred (sky_blur 0.3-0.4): a lifestyle shot rather than a studio one.
   Glass reads best this way: it shows the light behind it, clear and bright, where a dark wall turns it black.
+- A place the library doesn't have (a sunlit bathroom, a spa, a café terrace, a kitchen at dawn, a desk by a
+  window): describe it in environment.painted and Muse Image paints it for this ad, the brand's colours in its
+  light and materials. Describe a place and its light, never the product; keep it calm behind the product.
 - Start from the style that fits the brief and the brand, then adapt its colours to the palette.
 
 ## Styles

@@ -5,10 +5,12 @@ commands. The hand-made ads and the director both build through this.
 """
 
 from pipeline.catalog.sets import LIGHTS, SURFACES, install_hdri, surface_texture
+from pipeline.meta import image
 from pipeline.schemas import Product, Storyboard
 
 from . import models
 from .client import Studio
+from .painted import install_picture
 
 PRODUCT = "product"   # the product entity every shot frames
 
@@ -22,6 +24,11 @@ TEMPLATE_SIZES = {"perfume": (0.12, 0.08), "bottle": (0.30, 0.075), "jar": (0.07
 MOTION_AMOUNT = {"turn": 45.0, "float": 0.08, "drop": 0.35, "tilt": 8.0}
 DROP_LANDS = 0.4
 EDGE = 1e-3   # a shot's last key sits this far before the cut, so the next shot's first key has its own time
+
+# A painted background (Environment.painted): what Muse Image is asked for around the director's place.
+PAINT = ("A photograph of {place}, as the background of a premium product photo: an empty place, nothing in the "
+         "foreground, no products, no people, no text or logos; eye level, a wide view, natural light and depth.")
+PAINT_SIZE = "1536x1024"
 
 
 def product_size(product: Product) -> tuple[float, float]:
@@ -60,7 +67,11 @@ async def build_scene(studio: Studio, sb: Storyboard) -> dict:
     look = sb.look
     await studio.call("studio.reset")
     environment = _clean(look.environment)
-    if environment["hdri"] in LIGHTS:   # a light environment by name: installed into the Studio's assets
+    painted = environment.pop("painted", None)
+    if painted:                          # Muse Image paints it; made a light environment (pipeline.studio.painted)
+        picture = image.generate(PAINT.format(place=painted), size=PAINT_SIZE)
+        environment["hdri"] = install_picture(studio, picture)
+    elif environment["hdri"] in LIGHTS:  # a light environment by name: installed into the Studio's assets
         environment["hdri"] = install_hdri(studio, environment["hdri"])
     await studio.call("environment.set", **environment)
     await studio.call("render.set", antialiasing="taa", clear_color=look.background)
