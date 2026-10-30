@@ -15,11 +15,14 @@ best kept.
     python -m pipeline.agents.producer Assets/photos/mira_jar.png "Face cream, calm and bright, 10 seconds." --category "cream jar" --format vertical
 """
 
+import re
+import time
 from pathlib import Path
 
+from pipeline.progress import Progress, learn, render_seconds
 from pipeline.runs import Run
 from pipeline.schemas import BrandProfile
-from pipeline.studio import build, final_cut, models, preview
+from pipeline.studio import build, final_cut, frame_size, models, preview
 
 from .analyst import analyse
 from .critic.loop import refine
@@ -61,38 +64,99 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     run.watch(studio)
     run.event("brief", text=brief, photo=Path(photo).name, category=category, format=format,
               model=Path(model).name if model else None, director=director)
+    progress = Progress(run, _plan(director, critic, video, format, bool(model), brief, short))
+    try:
+        videos = await _make(studio, run, progress, brief, photo, category, short, video, critic, format, model,
+                             credit, director)
+    except BaseException:
+        progress.close(done=False)
+        raise
+    progress.close()
+    return videos
+
+
+async def _make(studio, run: Run, progress: Progress, brief: str, photo: Path | str, category: str, short: int,
+                video: bool, critic: bool, format: str, model, credit, director: str) -> dict[str, Path] | None:
+    progress.start("analyse")
     analysis = analyse(run, photo, category)
     box = analysis.seg.product.box
     aspect = (box[3] - box[1]) / max(box[2] - box[0], 1)   # the product's outline in the photo, height / width
+    progress.start("model")
     if not model:
         model, credit = scout(run, photo, analysis.profile.category)
     if model:
         profile = await with_model(studio, run, analysis.profile, model, credit, photo, analysis.profile.category,
                                    aspect)
     else:
+        progress.skip("model")   # round: traced from the photo, no model to find
         profile = analysis.profile
     if director == "live":
-        return await live_ad(studio, run, brief, profile, Path(photo).stem, format, critic, video, short)
+        return await live_ad(studio, run, brief, profile, Path(photo).stem, format, critic, video, short,
+                             progress=progress)
+    progress.start("plan")
     sb = await write(brief, profile, studio=studio, run=run, aspect=FORMATS[format])
+    aspects = (sb.aspect,) + (tuple(a for a in ("16:9", "9:16") if a != sb.aspect) if format == "both" else ())
+    frames, (width, height) = round(sb.duration * sb.fps), frame_size(sb.aspect, short)
+    if video:
+        progress.estimate("render", len(aspects) * render_seconds(frames, width, height, director))
     if critic:
+        progress.start("critic")
         sb, _ = await refine(studio, sb, profile, run)
     else:
+        progress.start("preview")
         await build(studio, sb)
         await preview(studio, run, sb)
     if not video:
         return None
-    aspects = (sb.aspect,) + (tuple(a for a in ("16:9", "9:16") if a != sb.aspect) if format == "both" else ())
-    return await final_cut(studio, run, sb, Path(photo).stem, aspects=aspects, short=short)
+    progress.start("render", label=f"Rendering {' and '.join(aspects)}")
+    began = time.monotonic()
+    videos = await final_cut(studio, run, sb, Path(photo).stem, aspects=aspects, short=short)
+    learn(time.monotonic() - began, frames * len(aspects), width, height, director)
+    return videos
+
+
+def _plan(director: str, critic: bool, video: bool, format: str, model: bool, brief: str,
+          short: int) -> list[tuple[str, str, float]]:
+    """The run's steps and about how long each takes (Progress): a render's
+    length from the brief's ("15 seconds"), until the film is planned."""
+    said = re.search(r"(\d+(?:\.\d+)?)\s*(?:s\b|sec|second)", brief.lower())
+    width, height = frame_size("16:9", short)
+    render = render_seconds(round(float(said.group(1)) * 30) if said else 450, width, height, director)
+    steps = [("analyse", "Reading the photo", 20),
+             ("model", "Fitting the 3D model" if model else "Looking for a 3D model", 60 if model else 100)]
+    if director == "live":
+        steps.append(("direct", "Spark is making the film in the Studio", 480))
+        steps.append(("review", "Reviewing and revising", 600) if critic else ("preview", "Previewing", 15))
+        if video:
+            steps.append(("render", "Rendering", render))
+            if format == "both":
+                steps += [("adapt", "Spark is re-shooting for the other format", 240), ("render_2", "Rendering", render)]
+    else:
+        steps.append(("plan", "Spark is planning the storyboard", 40))
+        steps.append(("critic", "Critic loop", 700) if critic else ("preview", "Previewing", 15))
+        if video:
+            steps.append(("render", "Rendering", render * (2 if format == "both" else 1)))
+    return steps
 
 
 async def live_ad(studio, run: Run, brief: str, profile: BrandProfile, name: str, format: str = "both",
-                  critic: bool = False, video: bool = True, short: int = 1080) -> dict[str, Path] | None:
+                  critic: bool = False, video: bool = True, short: int = 1080, *,
+                  progress: Progress) -> dict[str, Path] | None:
     """The film made by Spark in the Studio (director/live.py): made, then
     reviewed and revised until the review passes (at most LIVE_REVISIONS
     times) with the critic on, rendered, and for "both" re-shot by Spark
-    for the other frame and rendered again."""
+    for the other frame and rendered again; each step told to `progress`
+    (make_ad's plan)."""
     first = FORMATS[format] or ("9:16" if "vertical" in brief.lower() else "16:9")
+    progress.start("direct")
     cut = await live.direct(studio, run, brief, profile, first)
+    width, height = frame_size(first, short)
+    frames = round(cut.duration * live.FPS)
+    if video:
+        for key in ("render", "render_2"):
+            if key in progress.steps:
+                progress.estimate(key, render_seconds(frames, width, height, "live"))
+    progress.start("review" if critic else "preview")
     if critic:
         # Each version reviewed is saved as a scene: a revision can make it worse, and the best is the one rendered.
         best = None
@@ -115,10 +179,16 @@ async def live_ad(studio, run: Run, brief: str, profile: BrandProfile, name: str
         await live.preview(studio, run, cut)
     if not video:
         return None
+    progress.start("render", label=f"Rendering {first}")
+    began = time.monotonic()
     videos = {first: await live.render_cut(studio, run, cut, name, short=short)}
+    learn(time.monotonic() - began, frames, width, height, "live")
     if format == "both":
         other = "9:16" if first == "16:9" else "16:9"
+        progress.start("adapt", label=f"Spark is re-shooting for {other}")
         adapted = await live.adapt(studio, run, cut, other, brief, profile)
+        progress.start("render_2", seconds=render_seconds(round(adapted.duration * live.FPS), height, width, "live"),
+                       label=f"Rendering {other}")
         videos[other] = await live.render_cut(studio, run, adapted, name, short=short)
     return videos
 

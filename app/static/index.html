@@ -40,6 +40,12 @@
   .pill { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); color: var(--dim); }
   .pill.done, .pill.pass { color: var(--pass); border-color: #2f5e43; }
   .pill.running, .pill.queued { color: var(--accent); border-color: #6b5631; }
+  .progress { margin: 12px 0 6px; }
+  .progress .bar { height: 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  #progressFill { height: 100%; width: 0; background: var(--accent); transition: width .6s ease; }
+  .progress.done #progressFill { background: var(--pass); }
+  .progress.failed #progressFill { background: var(--fail); }
+  .progress .meta { margin-top: 6px; }
   .pill.failed, .pill.stopped, .pill.fail { color: var(--fail); border-color: #6a3434; }
   .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .head .brief { font-size: 20px; max-width: 70ch; }
@@ -164,6 +170,10 @@
         <div class="brief" id="briefText"></div>
         <div class="row"><span id="status" class="pill"></span><span id="cost" class="meta"></span></div>
       </div>
+      <div id="progress" class="progress hidden">
+        <div class="bar"><div id="progressFill"></div></div>
+        <div class="meta" id="progressText"></div>
+      </div>
       <div class="meta" id="runId"></div>
     </section>
 
@@ -249,7 +259,9 @@ async function loadRuns() {
 
 // --- Opening a run -------------------------------------------------------------
 function reset() {
-  state = { rounds: {}, shots: [], ad: {}, cost: 0, studio: 0, events: 0, selected: null, videos: new Set() };
+  state = { rounds: {}, shots: [], ad: {}, cost: 0, studio: 0, events: 0, selected: null, videos: new Set(),
+            progressLogged: -Infinity, progressStep: null };
+  show("progress", false); $("progress").classList.remove("done", "failed"); $("progressFill").style.width = "0";
   for (const id of ["profileImgs", "swatches", "brandKv", "strip", "timebar", "scores", "sheets", "frames", "videos", "log", "issues"]) $(id).replaceChildren();
   for (const id of ["profileCard", "storyCard", "criticCard", "previewCard", "finalCard", "issues"]) show(id, false);
   $("titles").textContent = ""; $("cost").textContent = ""; $("criticMeta").textContent = "";
@@ -270,7 +282,7 @@ function open(id, speed = Number($("speed").value)) {
     "preview", "critique", "ad_critique", "second_opinion", "round", "revision", "revised", "revision_failed", "refined",
     "render", "rendered", "music", "finished", "failed", "resumed", "critique_draft", "ad_critique_draft", "resumed_rounds",
     "scouted", "model_pick", "scout_failed", "model_download", "staged", "model_fitted",
-    "tool", "directed", "live_review", "render_retry", "unfinished"];
+    "tool", "directed", "live_review", "render_retry", "unfinished", "progress"];
   for (const k of kinds) source.addEventListener(k, (m) => handle(JSON.parse(m.data)));
   source.onerror = () => { if (source.readyState === EventSource.CLOSED) loadRuns(); };
 }
@@ -282,9 +294,34 @@ function handle(e) {
   state.events++;
   if (e.kind === "studio") { state.studio++; $("logMeta").textContent = `${state.studio} Studio commands`; return; }
   if (e.kind === "model") { state.cost += e.cost || 0; $("cost").textContent = `$${state.cost.toFixed(3)} on Meta models`; }
+  if (e.kind === "progress") {   // the bar on every tick; a log line every LOG_EVERY seconds, or when the step changes
+    showProgress(e);
+    if (e.t - state.progressLogged < LOG_EVERY && e.step === state.progressStep) return;
+    state.progressLogged = e.t; state.progressStep = e.step;
+  }
   if (!["critique_draft", "ad_critique_draft", "saved"].includes(e.kind)) logLine(e);
   const on = HANDLERS[e.kind];
-  if (on) on(e);
+  if (on) { try { on(e); } catch (err) { console.error(e.kind, err); } }
+}
+
+// --- Progress ------------------------------------------------------------------
+const LOG_EVERY = 15;   // seconds between progress lines in the log (the bar moves every 5)
+
+function duration(seconds) {
+  seconds = Math.max(0, Math.round(seconds));
+  return seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)} min ${String(seconds % 60).padStart(2, "0")} s`;
+}
+
+function progressText(e) {
+  const pct = Math.round(e.fraction * 100);
+  return e.left > 0 ? `${e.step} · step ${e.number} of ${e.steps} · ${pct}% · about ${duration(e.left)} left · ${duration(e.elapsed)} so far`
+                    : `${e.step} · 100% · ${duration(e.elapsed)}`;
+}
+
+function showProgress(e) {
+  show("progress");
+  $("progressFill").style.width = `${Math.round(e.fraction * 100)}%`;
+  $("progressText").textContent = progressText(e);
 }
 
 const HANDLERS = {
@@ -312,7 +349,12 @@ const HANDLERS = {
     $("criticMeta").textContent = `round ${e.best} kept${e.passed ? ", every shot and the ad passing" : " (the best; not every shot passed)"}`;
     document.querySelectorAll(`tr[data-round="${e.best}"] th`).forEach((th) => th.style.color = "var(--accent)");
   },
-  finished: (e) => { setStatus(e.status); if (e.cost != null) $("cost").textContent = `$${e.cost.toFixed(3)} on Meta models · ${Math.round(e.seconds)} s`; },
+  finished: (e) => {
+    setStatus(e.status);
+    $("progress").classList.add(e.status === "done" ? "done" : "failed");
+    if (e.status === "done") $("progressFill").style.width = "100%";
+    else $("progressText").textContent = `${e.status} after ${duration(e.seconds)}`;
+    if (e.cost != null) $("cost").textContent = `$${e.cost.toFixed(3)} on Meta models · ${Math.round(e.seconds)} s`; },
   failed: (e) => setStatus("failed"),
   model_pick: (e) => { if (e.sheet) profileImage(e.sheet, "models found"); },
   directed: (e) => { show("criticCard"); $("criticMeta").textContent = `${e.session}: ${e.summary} (${e.shots} shots, ${e.duration} s, ${e.calls} commands)`; },
@@ -326,21 +368,33 @@ const HANDLERS = {
   },
 };
 
+// Each event kind's detail in the log: a function, so only that event's own line is built
+// (an eager table evaluated every entry for every event, and one bad entry broke them all).
+const DETAILS = {
+  brief: (e) => e.text, analyse: (e) => e.photo, read: (e) => e.brand,
+  draft: (e) => `attempt ${e.attempt}${e.problems?.length ? `, ${e.problems.length} problems` : ""}`,
+  output: (e) => `${e.label} → ${e.file}`, model: (e) => `${e.model}${e.cached ? " (cached)" : ""}`,
+  critique: (e) => `${e.shot} r${e.iteration} ${e.passed ? "pass" : "fail"} ${e.scores ? low(e.scores) : ""}`,
+  ad_critique: (e) => `whole ad r${e.iteration} ${e.passed ? "pass" : "fail"}`,
+  round: (e) => `round ${e.index}: ${e.passed ? "passed" : "not yet"}`,
+  revision: (e) => e.summary, render: (e) => `${e.frames} frames ${e.width}×${e.height}`, rendered: (e) => `${e.seconds} s`,
+  music: (e) => e.mood, finished: (e) => `${e.status}, ${Math.round(e.seconds)} s`, failed: (e) => e.error,
+  second_opinion: (e) => `${e.shot}: ${e.first?.low} then ${e.second?.low}, kept ${e.kept}`,
+  tool: (e) => `${e.session}: ${e.command}${e.error ? "  ✗ " + e.error : ""}`,
+  directed: (e) => `${e.session}: ${e.shots} shots, ${e.duration} s, mood ${e.mood}, ${e.calls} commands. ${e.summary}`,
+  live_review: (e) => `round ${e.round}: ${e.passed ? "pass" : "fail"} ${e.scores ? low(e.scores) : ""}; ${(e.issues || []).join(" · ")}`,
+  render_retry: (e) => `${e.aspect}: ${e.error}; rendering again in a new Studio`,
+  unfinished: (e) => `${e.session}: ran out of turns before finish; the film is kept as it is, its cut read from its camera moves`,
+  scouted: (e) => e.round ? `round: traced from the photo (${e.reason})` : `not round: searching ${(e.queries || []).join(", ")} (${e.reason})`,
+  model_pick: (e) => e.name ? `${e.name} from ${e.source}: ${e.reason}` : `none fits, traced from the photo: ${e.reason}`,
+  scout_failed: (e) => `${e.error}; traced from the photo`, model_download: (e) => `${e.name} from ${e.source}`,
+  staged: (e) => e.by === "spark" ? `${e.up}, turned ${e.turn}°: ${e.up_reason} ${e.side_reason}` : `${e.up}, turned ${e.turn}° (by proportions: ${e.error})`,
+  progress: (e) => progressText(e),
+};
+
 function logLine(e) {
-  const detail = { brief: e.text, analyse: e.photo, read: e.brand, draft: `attempt ${e.attempt}${e.problems?.length ? `, ${e.problems.length} problems` : ""}`,
-    output: `${e.label} → ${e.file}`, model: `${e.model}${e.cached ? " (cached)" : ""}`, critique: `${e.shot} r${e.iteration} ${e.passed ? "pass" : "fail"} ${e.scores ? low(e.scores) : ""}`,
-    ad_critique: `whole ad r${e.iteration} ${e.passed ? "pass" : "fail"}`, round: `round ${e.index}: ${e.passed ? "passed" : "not yet"}`,
-    revision: e.summary, render: `${e.frames} frames ${e.width}×${e.height}`, rendered: `${e.seconds} s`, music: e.mood,
-    finished: `${e.status}, ${Math.round(e.seconds)} s`, failed: e.error, second_opinion: `${e.shot}: ${e.first?.low} then ${e.second?.low}, kept ${e.kept}`,
-    tool: `${e.session}: ${e.command}${e.error ? "  ✗ " + e.error : ""}`,
-    directed: `${e.session}: ${e.shots} shots, ${e.duration} s, mood ${e.mood}, ${e.calls} commands. ${e.summary}`,
-    live_review: `round ${e.round}: ${e.passed ? "pass" : "fail"} ${low(e.scores)}; ${(e.issues || []).join(" · ")}`,
-    render_retry: `${e.aspect}: ${e.error}; rendering again in a new Studio`,
-    unfinished: `${e.session}: ran out of turns before finish; the film is kept as it is, its cut read from its camera moves`,
-    scouted: e.round ? `round: traced from the photo (${e.reason})` : `not round: searching ${(e.queries || []).join(", ")} (${e.reason})`,
-    model_pick: e.name ? `${e.name} from ${e.source}: ${e.reason}` : `none fits, traced from the photo: ${e.reason}`,
-    scout_failed: `${e.error}; traced from the photo`, model_download: `${e.name} from ${e.source}`,
-    staged: e.by === "spark" ? `${e.up}, turned ${e.turn}°: ${e.up_reason} ${e.side_reason}` : `${e.up}, turned ${e.turn}° (by proportions: ${e.error})` }[e.kind];
+  let detail = "";
+  try { detail = DETAILS[e.kind]?.(e) ?? ""; } catch (err) { detail = `(couldn't show: ${err.message})`; }
   const line = el("div", {}, el("span", { text: `${String(Math.round(e.t)).padStart(4)}s ` }), el("b", { text: e.kind }), document.createTextNode(detail ? `  ${detail}` : ""));
   const box = $("log"); const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 4;
   box.append(line); if (atEnd) box.scrollTop = box.scrollHeight;
