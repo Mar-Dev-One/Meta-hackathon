@@ -299,9 +299,10 @@ def track_for(mood: str) -> Path | None:
 
 
 def music_for(sb: Storyboard, out: Path, mood: str | None = None) -> Path:
-    """The storyboard's music as a WAV at `out`, as long as the ad: a track
-    from Assets/music when there's one for its mood, else synthesized."""
-    return music(mood or mood_of(sb), sb.duration, sb.shot_starts()[-1], out)
+    """The storyboard's music as a WAV at `out`, as long as the ad (its end
+    card too): a track from Assets/music when there's one for its mood, else
+    synthesized."""
+    return music(mood or mood_of(sb), sb.length, sb.shot_starts()[-1], out)
 
 
 def music(mood: str, seconds: float, hero: float, out: Path) -> Path:

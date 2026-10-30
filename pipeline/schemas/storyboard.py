@@ -265,6 +265,17 @@ class Track(Strict):
         return self
 
 
+class EndCard(Strict):
+    """The ad's last seconds: the film dissolves into a still card, the
+    product as photographed, the brand's name and a line under it."""
+    seconds: float = Field(2.5, ge=1.5, le=4, description="how long it adds after the last shot (its dissolve "
+                                                            "begins a little before the film ends)")
+    name: str = Field(description="the brand's name as it should read")
+    tagline: str | None = Field(None, max_length=60, description="a short line under the name, or null")
+    background: str = Field(pattern=HEX, description="the card's colour: from the brand's palette, calm and solid")
+    font: Font = Field(description="the name's font, as the titles'")
+
+
 # --- The storyboard -------------------------------------------------------------------------------
 
 class Storyboard(Strict):
@@ -278,10 +289,19 @@ class Storyboard(Strict):
     shots: list[Shot] = Field(min_length=1, max_length=12)
     titles: list[Title] = Field(default_factory=list, max_length=6)
     tracks: list[Track] = Field(default_factory=list)
+    end_card: EndCard | None = None
+    packshot: str | None = Field(None, description="the product cut out of its photo, for the end card (from the "
+                                                   "brand profile)")
 
     @property
     def duration(self) -> float:
+        """The film's length: its shots, back to back (the end card follows)."""
         return round(sum(s.duration for s in self.shots), 3)
+
+    @property
+    def length(self) -> float:
+        """The whole ad's: the film and the end card after it."""
+        return round(self.duration + (self.end_card.seconds if self.end_card else 0.0), 3)
 
     def shot_starts(self) -> list[float]:
         starts, t = [], 0.0

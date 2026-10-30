@@ -72,6 +72,8 @@ class BrandProfile(Strict):
     do_not: list[str] = Field(default_factory=list, description="things every shot must avoid, e.g. 'bright saturated colours'")
     label: Label | None = Field(None, description="the label cut from the photo and unrolled, and where it wraps")
     logo_image: str | None = Field(None, description="path to the logo cut from the photo")
+    packshot: str | None = Field(None, description="path to the product cut out of its photo (a PNG, transparent "
+                                                   "around it), for the end card")
     photos: list[str] = Field(default_factory=list, description="the photos it was read from")
 
     def product(self) -> Product:

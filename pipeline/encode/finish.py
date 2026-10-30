@@ -8,7 +8,8 @@ import json
 import subprocess
 from pathlib import Path
 
-DIP = 0.7   # seconds a dip to black takes, half out before its cut and half in after
+DIP = 0.7        # seconds a dip to black takes, half out before its cut and half in after
+DISSOLVE = 0.8   # seconds the film takes to dissolve into the end card, before the film's end
 
 
 def probe(video: Path) -> dict:
@@ -35,30 +36,42 @@ def dips(times: list[float], length: float = DIP) -> str | None:
 
 
 def finish(video_in: Path, video_out: Path, fade_in: float = 0.5, fade_out: float = 0.8,
-           audio: Path | None = None, dip_at: list[float] = ()) -> Path:
+           audio: Path | None = None, dip_at: list[float] = (), end_card: Path | None = None,
+           card_seconds: float = 0.0, fps: int = 30) -> Path:
     """Writes video_in faded in and out to video_out (H.264, yuv420p, CRF 16),
-    dipped to black at the times in `dip_at` (cuts that ask for it), with
-    `audio` (pipeline.encode.music) as its sound if given: cut to the
-    picture, faded out with it (a little longer, so the sound outlasts the
-    image by a breath) and in over a few frames, AAC 192 kb/s. The music
-    plays on through a dip."""
-    duration = probe(video_in)["duration"]
-    filters = [f for f in [dips(list(dip_at))] if f]
+    dipped to black at the times in `dip_at` (cuts that ask for it), ending
+    on `end_card` (a still, `card_seconds` long after the film, dissolved
+    into over DISSOLVE seconds before the film ends), with `audio`
+    (pipeline.encode.music) as its sound if given: cut to the picture, faded
+    out with it (a little longer, so the sound outlasts the image by a
+    breath) and in over a few frames, AAC 192 kb/s. The music plays on
+    through a dip and under the card."""
+    film = probe(video_in)["duration"]
+    card = card_seconds if end_card else 0.0
+    duration = film + card
+    inputs = ["-i", str(video_in)]
+    chain = [f"[0:v]fps={fps},setsar=1,format=yuv420p" + "".join(f",{f}" for f in [dips(list(dip_at))] if f) + "[film]"]
+    picture = "film"
+    if end_card:
+        inputs += ["-loop", "1", "-framerate", str(fps), "-t", f"{card + DISSOLVE:.3f}", "-i", str(end_card)]
+        chain += [f"[1:v]fps={fps},setsar=1,format=yuv420p[card]",
+                  f"[film][card]xfade=transition=fade:duration={DISSOLVE}:offset={film - DISSOLVE:.3f}[joined]"]
+        picture = "joined"
+    fades = []
     if fade_in > 0:
-        filters.append(f"fade=t=in:st=0:d={fade_in}")
+        fades.append(f"fade=t=in:st=0:d={fade_in}")
     if fade_out > 0:
-        filters.append(f"fade=t=out:st={max(duration - fade_out, 0)}:d={fade_out}")
-
-    command = ["ffmpeg", "-y", "-v", "error", "-i", str(video_in)]
+        fades.append(f"fade=t=out:st={max(duration - fade_out, 0):.3f}:d={fade_out}")
+    chain.append(f"[{picture}]" + (",".join(fades) or "null") + "[out]")
+    maps = ["-map", "[out]"]
     if audio:
-        command += ["-i", str(audio)]
-    if filters:
-        command += ["-vf", ",".join(filters)]
-    if audio:
+        inputs += ["-i", str(audio)]
         sound_out = min(1.5 * fade_out, duration)
-        command += ["-af", f"afade=t=in:st=0:d=0.08,afade=t=out:st={duration - sound_out:.3f}:d={sound_out:.3f}",
-                    "-map", "0:v:0", "-map", "1:a:0", "-t", f"{duration:.3f}", "-c:a", "aac", "-b:a", "192k"]
-    command += ["-c:v", "libx264", "-preset", "medium", "-crf", "16", "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart", str(video_out)]
+        chain.append(f"[{2 if end_card else 1}:a]afade=t=in:st=0:d=0.08,"
+                     f"afade=t=out:st={duration - sound_out:.3f}:d={sound_out:.3f}[sound]")
+        maps += ["-map", "[sound]", "-c:a", "aac", "-b:a", "192k"]
+    command = ["ffmpeg", "-y", "-v", "error", *inputs, "-filter_complex", ";".join(chain), *maps,
+               "-t", f"{duration:.3f}", "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-pix_fmt", "yuv420p",
+               "-movflags", "+faststart", str(video_out)]
     subprocess.run(command, check=True)
     return video_out

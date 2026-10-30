@@ -15,8 +15,8 @@ from pathlib import Path
 from annotated_types import Ge, Gt, Le, Lt
 from pydantic import BaseModel
 
-from pipeline.schemas.storyboard import (Backdrop, CameraMove, Environment, Lighting, Look, Pedestal, ProductMotion,
-                                         Shot, Title)
+from pipeline.schemas.storyboard import (Backdrop, CameraMove, EndCard, Environment, Lighting, Look, Pedestal,
+                                         ProductMotion, Shot, Title)
 
 from .styles import STYLES
 
@@ -77,6 +77,9 @@ CRAFT = """\
   or on the pedestal's face: above the product (y 0.08-0.25, the tagline under the name), or below the pedestal
   when the hero is framed wide enough to leave set there. A pedestal runs down from the product's base for
   `fill` times its height over the product's.
+- End on an end card (2-3 s) unless the brief is very short: the brand's name as its titles have it, the tagline
+  if there is one, on a solid colour from the palette that suits the film's last frame (dark after a dark film,
+  light after a light one). Plan the shots for the ad's length minus the card.
 - Script is for words in lower or mixed case ("Aurelle", "Skin, simply."), never all capitals; light
   titles on a dark set, dark on a light one.
 - Colours (backdrop, pedestal, titles) come from the brand's palette or sit well with it. The brand profile's
@@ -200,6 +203,11 @@ def write(commands: dict) -> str:
             f"Drawn by the Studio over the picture. Fonts: {_arg(commands, 'text.create', 'font')['description']}.",
             "Each fades in at `start` while rising a little and its letters drawing together.", "",
             *_fields(Title),
+            "", "## End card (`end_card`)", "",
+            "A still the film dissolves into after the last shot: the product as photographed, the name under it, a "
+            "short line under that, on a plain colour (text light or dark to suit). It counts in the ad's length: "
+            "the shots and the card together make it.", "",
+            *_fields(EndCard),
             "", "## Other animation (`tracks[]`)", "",
             "Keys on any number field of an entity, eased between: for the lights (`light_*`), e.g. one rising or "
             "dimming at a cut. For the product moving, use the shots' `motion`, not a track.",

@@ -22,7 +22,7 @@ from pipeline.catalog.sets import surface_colour
 from pipeline.encode.music import cut_to_beat
 from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
-from pipeline.schemas.storyboard import Look, Shot, Strict, Title, Track
+from pipeline.schemas.storyboard import EndCard, Look, Shot, Strict, Title, Track
 from pipeline.studio.build import ASPECTS, build, motion_keys, product_size
 
 from . import grammar
@@ -60,6 +60,7 @@ class Plan(Strict):
     shots: list[Shot] = Field(min_length=2, max_length=12)
     titles: list[Title] = Field(max_length=MAX_TITLES)
     tracks: list[Track] = Field(default_factory=list, description="other animation, e.g. a light rising at a cut")
+    end_card: EndCard | None = Field(None, description="the still the ad ends on, after the last shot; null: none")
 
 
 SYSTEM = ("You are the director of a studio that makes short 3D product adverts. You plan an ad as shots for a "
@@ -135,7 +136,8 @@ def on_beat(sb: Storyboard) -> Storyboard:
 
 def assemble(plan: Plan, profile: BrandProfile, brief: str, aspect: str) -> Storyboard:
     data = plan.model_dump(by_alias=True, exclude_none=True)
-    data.update(brief=brief, aspect=aspect, product=profile.product().model_dump(by_alias=True))
+    data.update(brief=brief, aspect=aspect, product=profile.product().model_dump(by_alias=True),
+                packshot=profile.packshot)
     return Storyboard.model_validate(data)
 
 
@@ -143,8 +145,10 @@ def problems(sb: Storyboard, profile: BrandProfile | None, seconds: float) -> li
     """The craft rules in code: what's wrong with the storyboard, each said
     so it can be fixed."""
     out = []
-    if abs(sb.duration - seconds) > 0.5:
-        out.append(f"the shots add up to {sb.duration:g} s, but the ad is {seconds:g} s: change their durations")
+    if abs(sb.length - seconds) > 0.5:
+        card = f" and the end card's {sb.end_card.seconds:g} s" if sb.end_card else ""
+        out.append(f"the shots ({sb.duration:g} s){card} add up to {sb.length:g} s, but the ad is {seconds:g} s: "
+                   f"change their durations")
     for shot in sb.shots:
         if not SHOT_MIN <= shot.duration <= SHOT_MAX:
             out.append(f"shot {shot.id} lasts {shot.duration:g} s: keep shots between {SHOT_MIN:g} and {SHOT_MAX:g} s")

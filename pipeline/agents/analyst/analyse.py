@@ -53,6 +53,7 @@ def analyse(run: Run, photo: Path | str, category: str = "product") -> Analysis:
     seg = segment(kept, category)
     run.event("segmented", **{r.name: list(r.box) for r in [seg.product, *seg.parts.values()]})
     overlay(seg).save(run.path("masks.png"))
+    packshot(seg).save(run.path("packshot.png"))
 
     swatches = palette(seg)
     reading = read(seg, swatches, category)
@@ -71,9 +72,17 @@ def analyse(run: Run, photo: Path | str, category: str = "product") -> Analysis:
     profile = BrandProfile(
         brand=reading.brand, product_name=reading.product_name, category=reading.category, template=None,
         height=reading.height, profile_parts=traced.parts, materials=reading.materials, palette=swatches,
-        typography=reading.typography, mood=reading.mood, do_not=reading.do_not, label=label, photos=[str(kept)])
+        typography=reading.typography, mood=reading.mood, do_not=reading.do_not, label=label, photos=[str(kept)],
+        packshot=str(run.root / "packshot.png"))
     run.output("brand_profile", run.save_json("brand_profile.json", profile))
     return Analysis(profile, seg, swatches, reading, traced, cut)
+
+
+def packshot(seg) -> Image.Image:
+    """The product as photographed, cut out: transparent around it, cropped to it."""
+    cut = seg.image.convert("RGBA")
+    cut.putalpha(seg.product.mask)
+    return cut.crop(seg.product.mask.getbbox())
 
 
 # --- Seeing it --------------------------------------------------------------------------------
