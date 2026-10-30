@@ -119,6 +119,61 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                          tagline_font="sans", tagline_color="#9C7A7E"),
         shot_seconds=(3, 4), moves=["orbit", "dolly", "static"], aperture=2.8,
         notes="blush set, soft light from above with a little glow; slow drifting orbit; script name"),
+
+    # Real places (the set library, pipeline/catalog/sets.py): a surface to stand on and a light
+    # environment softly blurred behind, instead of a studio wall. Glass reads clear and bright in them.
+    Style(
+        name="marble_luxury", use_for="perfume, jewellery, watches, premium skincare: luxurious, timeless, refined",
+        look=Look(environment=Environment(hdri="studio_warm", show_skybox=True, sky_blur=0.45, ambient_strength=0.2,
+                                          bloom=0.06),
+                  backdrop=None, pedestal=Pedestal(width=0.34, height=0.03, surface="cream_marble"),
+                  lighting=Lighting(preset="three_point", warmth=0.2, intensity=1.2)),
+        title=TitleStyle(font="serif", color="#2E241C", size=0.075, tracking=0.25,
+                         tagline_font="sans", tagline_color="#5A4632"),
+        shot_seconds=(3, 4), moves=["dolly", "orbit", "static"], aperture=2.8,
+        notes="a polished marble slab in a warm, softly blurred room; clear even light that makes glass sparkle; "
+              "slow, close moves; dark serif"),
+    Style(
+        name="golden_outdoors", use_for="oils, natural cosmetics, drinks, sun care, food: natural, warm, honest, fresh",
+        look=Look(environment=Environment(hdri="golden_hour", show_skybox=True, sky_blur=0.35, ambient_strength=0.25),
+                  backdrop=None, pedestal=Pedestal(width=0.36, height=0.05, surface="stone"),
+                  lighting=Lighting(preset="top_soft", warmth=0.5, intensity=1.3)),
+        title=TitleStyle(font="serif", color="#FFF6E5", size=0.08, tracking=0.15,
+                         tagline_font="sans", tagline_color="#FFF6E5"),
+        shot_seconds=(3, 3.5), moves=["crane", "dolly", "orbit", "static"], aperture=2.8,
+        notes="a natural stone in an open field at sunrise, blurred behind; warm light from above; gentle crane; "
+              "cream serif"),
+    Style(
+        name="evening_fireplace", use_for="fragrance, spirits, candles, chocolate, cosy home: intimate, warm, rich",
+        look=Look(environment=Environment(hdri="fireplace", show_skybox=True, sky_blur=0.5, ambient_strength=0.15,
+                                          exposure=0.65, bloom=0.1),
+                  backdrop=None, pedestal=Pedestal(width=0.34, height=0.04, surface="dark_wood"),
+                  lighting=Lighting(preset="rim_dark", warmth=0.5, intensity=1.4)),
+        title=TitleStyle(font="serif", color="#F6E7C8", size=0.075, tracking=0.22,
+                         tagline_font="sans", tagline_color="#E2B979"),
+        shot_seconds=(3, 4), moves=["orbit", "dolly", "static"], aperture=2.0,
+        notes="dark wood before a glowing fire, deeply blurred; warm rims; slow and close, shallow focus; cream serif"),
+    Style(
+        name="city_nights", use_for="tech, sneakers, drinks, streetwear, nightlife: urban, bold, energetic, modern",
+        look=Look(environment=Environment(hdri="city_night", show_skybox=True, sky_blur=0.35, ambient_strength=0.1,
+                                          bloom=0.12, tonemap="aces"),
+                  backdrop=None, pedestal=Pedestal(width=0.32, height=0.04, surface="granite"),
+                  lighting=Lighting(preset="split", warmth=-0.3, intensity=1.5)),
+        title=TitleStyle(font="sans_bold", color="#FFFFFF", size=0.08, tracking=0.12,
+                         tagline_font="sans", tagline_color="#9FD3FF"),
+        shot_seconds=(1.8, 2.5), moves=["truck", "orbit", "dolly", "static"], ease="out", aperture=2.8,
+        notes="a granite slab against blurred city lights at night; hard cool side light, bloom; quick precise moves; "
+              "bold white sans"),
+    Style(
+        name="summer_beach", use_for="sun care, drinks, swimwear, summer launches: sunny, fresh, carefree",
+        look=Look(environment=Environment(hdri="daylight", show_skybox=True, sky_blur=0.3, ambient_strength=0.35,
+                                          tonemap="neutral"),
+                  backdrop=None, pedestal=Pedestal(width=0.4, height=0.03, surface="sand"),
+                  lighting=Lighting(preset="high_key", warmth=0.3, intensity=1.1)),
+        title=TitleStyle(font="sans_bold", color="#FFFFFF", size=0.09, tracking=0.08,
+                         tagline_font="sans", tagline_color="#FFFFFF"),
+        shot_seconds=(2, 3), moves=["crane", "orbit", "dolly", "static"], aperture=4,
+        notes="fine sand under a clear blue sky, softly blurred; bright sunny light; lively moves; bold white sans"),
 ]}
 
 

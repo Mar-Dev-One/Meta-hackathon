@@ -85,9 +85,18 @@ class Look(Strict):
     background: list[float] = Field(default=[0.004, 0.004, 0.006], min_length=3, max_length=3,
                                     description="linear RGB where nothing is drawn (behind the backdrop's edges)")
     backdrop: Backdrop | None = Field(default_factory=Backdrop, description="the floor curving up into a wall behind; "
-                                      "null: none, the light environment is the background (set environment.show_skybox)")
+                                      "null: none, the light environment is the background (set environment.show_skybox, "
+                                      "which removes the backdrop by itself)")
     pedestal: Pedestal | None = Field(default_factory=Pedestal, description="null: the product stands on the floor")
     lighting: Lighting
+
+    @model_validator(mode="after")
+    def _background_or_wall(self):
+        """The light environment as the background needs no wall in front of
+        it: an omitted backdrop (the default) would hide it."""
+        if self.environment.show_skybox:
+            self.backdrop = None
+        return self
 
 
 # --- The product -------------------------------------------------------------------------------
