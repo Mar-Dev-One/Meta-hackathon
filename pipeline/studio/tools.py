@@ -75,6 +75,7 @@ class Bridge:
         self.tools = definitions(commands) + [definition for definition, _ in self.extra.values()]
         self.on_call = on_call   # told of every command run: (command, args, result or {"error"})
         self.previews, self.preview_count = previews, 0
+        self.calls: list[dict] = []   # every command run, {"command", "args", "result"}: kept if Spark runs out of turns
         self.loop: asyncio.AbstractEventLoop | None = None
 
     @classmethod
@@ -102,6 +103,7 @@ class Bridge:
             raise spark.Stop(str(e)) from e
         except Exception as e:   # noqa: BLE001 -- an extra tool's own failure: logged, and Spark told
             result = {"error": f"{type(e).__name__}: {e}"}
+        self.calls.append({"command": command, "args": args, "result": result})
         if self.on_call:
             self.on_call(command, args, result)
         if command == "shot.preview" and "frames" in result:
@@ -110,9 +112,12 @@ class Bridge:
         return result
 
     async def run(self, prompt: str, *, system: str | None = None, images: list = (), max_turns: int = 40,
-                  cache_ok: bool = True) -> spark.SparkResult:
+                  cache_ok: bool = True, reminders: dict[int, str] | None = None,
+                  last_tools: list[str] | None = None) -> spark.SparkResult:
         """Spark working with the Studio's commands until it answers without
-        calling any (or `max_turns` runs out: MetaError)."""
+        calling any (or `max_turns` runs out: MetaError); `reminders` and
+        `last_tools` as spark.run_tools takes them."""
         self.loop = asyncio.get_running_loop()
         return await asyncio.to_thread(spark.run_tools, prompt, tools=self.tools, handle=self.handle,
-                                       images=list(images), system=system, max_turns=max_turns, cache_ok=cache_ok)
+                                       images=list(images), system=system, max_turns=max_turns, cache_ok=cache_ok,
+                                       reminders=reminders, last_tools=last_tools)

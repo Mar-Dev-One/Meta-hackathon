@@ -257,10 +257,16 @@ def track_for(mood: str) -> Path | None:
 def music_for(sb: Storyboard, out: Path, mood: str | None = None) -> Path:
     """The storyboard's music as a WAV at `out`, as long as the ad: a track
     from Assets/music when there's one for its mood, else synthesized."""
-    mood = mood or mood_of(sb)
+    return music(mood or mood_of(sb), sb.duration, sb.shot_starts()[-1], out)
+
+
+def music(mood: str, seconds: float, hero: float, out: Path) -> Path:
+    """Music in `mood` as a WAV at `out`, `seconds` long, lifting at `hero`
+    (the last shot's start): a track from Assets/music when there's one for
+    the mood, else synthesized."""
     track = track_for(mood)
     if track:
-        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(track), "-t", f"{sb.duration:.3f}",
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(track), "-t", f"{seconds:.3f}",
                         "-ar", str(RATE), "-ac", "2", str(out)], check=True)
         return out
-    return write_wav(compose(mood, sb.duration, sb.shot_starts()[-1]), out)
+    return write_wav(compose(mood, seconds, hero), out)

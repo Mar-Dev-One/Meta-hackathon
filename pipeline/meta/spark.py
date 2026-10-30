@@ -148,20 +148,29 @@ def ask(prompt: str, *, images: list[ImageInput] = (), schema: type[BaseModel] |
 
 def run_tools(prompt: str, *, tools: list[dict], handle: Callable[[str, dict], Any], images: list[ImageInput] = (),
               system: str | None = None, model: str | None = None, max_turns: int = 8,
-              cache_ok: bool = True) -> SparkResult:
+              cache_ok: bool = True, reminders: dict[int, str] | None = None,
+              last_tools: list[str] | None = None) -> SparkResult:
     """Lets Muse Spark call `tools` (Responses-format function definitions)
     until it answers without calling any, or `max_turns` runs out. Each call
     goes to handle(name, arguments); its return value (JSON-able) goes back
     to the model. Every turn is cached by the conversation so far, so a rerun
     replays the same calls without paying for them -- but handle() still runs,
-    so its side effects (building a scene) happen again."""
+    so its side effects (building a scene) happen again. `reminders` are
+    {turns left: message}, told to the model when that many turns are left
+    (a budget it can't see otherwise); on the last turn only the tools named
+    in `last_tools` are offered, if given (finish what you're doing)."""
     model = model or config.SPARK
     history: list[dict] = [{"type": "message", "role": "user", "content": _user_content(prompt, list(images), chat=False)}]
     calls: list[dict] = []
     all_cached = True
 
     for turn in range(max_turns):
-        key = cache.request_key("spark.tools", {"model": model, "system": system, "tools": tools,
+        left = max_turns - turn
+        if reminders and left in reminders and turn:
+            history.append({"type": "message", "role": "user",
+                            "content": [{"type": "input_text", "text": reminders[left]}]})
+        offered = [t for t in tools if t["name"] in last_tools] if last_tools and left == 1 else tools
+        key = cache.request_key("spark.tools", {"model": model, "system": system, "tools": offered,
                                                 "images": client.image_keys(list(images)),
                                                 "history": history[1:], "prompt": prompt})
         began = time.perf_counter()
@@ -170,7 +179,7 @@ def run_tools(prompt: str, *, tools: list[dict], handle: Callable[[str, dict], A
             all_cached = False
             extra = {"instructions": system} if system else {}
             response = client.call(model, lambda: client.meta().responses.create(model=model, input=history,
-                                                                                 tools=tools, **extra))
+                                                                                 tools=offered, **extra))
             # The whole output (reasoning included) goes back with the next
             # turn, as the model produced it.
             stored = {"text": response.output_text,

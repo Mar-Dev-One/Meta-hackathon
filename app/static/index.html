@@ -122,13 +122,17 @@
         </div>
         <div id="modelChosen"></div>
       </div>
+      <label class="field">Director<select id="director">
+        <option value="live">Live: Muse Spark builds the whole film in the Studio</option>
+        <option value="storyboard">Storyboard: Spark plans, code builds, the measured critic judges</option>
+      </select></label>
       <label class="field">Format<select id="format">
         <option value="both">Both: horizontal and vertical</option>
         <option value="horizontal">Horizontal 16:9 (YouTube, web)</option>
         <option value="vertical">Vertical 9:16 (Reels, TikTok, Stories)</option>
       </select></label>
       <div class="row">
-        <label class="toggle"><input id="critic" type="checkbox" checked> critic loop</label>
+        <label class="toggle"><input id="critic" type="checkbox"> critic loop</label>
         <label class="toggle"><input id="video" type="checkbox" checked> video</label>
       </div>
       <button class="btn" id="go" type="submit">Make the ad</button>
@@ -265,7 +269,8 @@ function open(id, speed = Number($("speed").value)) {
   const kinds = ["started", "queued", "brief", "analyse", "segmented", "read", "output", "saved", "model", "draft", "studio",
     "preview", "critique", "ad_critique", "second_opinion", "round", "revision", "revised", "revision_failed", "refined",
     "render", "rendered", "music", "finished", "failed", "resumed", "critique_draft", "ad_critique_draft", "resumed_rounds",
-    "scouted", "model_pick", "scout_failed", "model_download", "staged", "model_fitted"];
+    "scouted", "model_pick", "scout_failed", "model_download", "staged", "model_fitted",
+    "tool", "directed", "live_review", "render_retry"];
   for (const k of kinds) source.addEventListener(k, (m) => handle(JSON.parse(m.data)));
   source.onerror = () => { if (source.readyState === EventSource.CLOSED) loadRuns(); };
 }
@@ -310,6 +315,8 @@ const HANDLERS = {
   finished: (e) => { setStatus(e.status); if (e.cost != null) $("cost").textContent = `$${e.cost.toFixed(3)} on Meta models · ${Math.round(e.seconds)} s`; },
   failed: (e) => setStatus("failed"),
   model_pick: (e) => { if (e.sheet) profileImage(e.sheet, "models found"); },
+  directed: (e) => { show("criticCard"); $("criticMeta").textContent = `${e.session}: ${e.summary} (${e.shots} shots, ${e.duration} s, ${e.calls} commands)`; },
+  live_review: (e) => { show("criticCard"); cell(e.round, "film", e.passed, low(e.scores)); roundDone({ index: e.round, passed: e.passed }); },
   model_download: (e) => { $("modelCredit").textContent = `Downloading the 3D model from ${e.source}: ${e.name}…`; },
   staged: (e) => { if (e.sheets) { show("profileCard"); e.sheets.forEach((f) => profileImage(f, f.includes("ups") ? "which way up" : "which side")); } },
   model_fitted: (e) => {
@@ -325,6 +332,10 @@ function logLine(e) {
     ad_critique: `whole ad r${e.iteration} ${e.passed ? "pass" : "fail"}`, round: `round ${e.index}: ${e.passed ? "passed" : "not yet"}`,
     revision: e.summary, render: `${e.frames} frames ${e.width}×${e.height}`, rendered: `${e.seconds} s`, music: e.mood,
     finished: `${e.status}, ${Math.round(e.seconds)} s`, failed: e.error, second_opinion: `${e.shot}: ${e.first?.low} then ${e.second?.low}, kept ${e.kept}`,
+    tool: `${e.session}: ${e.command}${e.error ? "  ✗ " + e.error : ""}`,
+    directed: `${e.session}: ${e.shots} shots, ${e.duration} s, mood ${e.mood}, ${e.calls} commands. ${e.summary}`,
+    live_review: `round ${e.round}: ${e.passed ? "pass" : "fail"} ${low(e.scores)}; ${(e.issues || []).join(" · ")}`,
+    render_retry: `${e.aspect}: ${e.error}; rendering again in a new Studio`,
     scouted: e.round ? `round: traced from the photo (${e.reason})` : `not round: searching ${(e.queries || []).join(", ")} (${e.reason})`,
     model_pick: e.name ? `${e.name} from ${e.source}: ${e.reason}` : `none fits, traced from the photo: ${e.reason}`,
     scout_failed: `${e.error}; traced from the photo`, model_download: `${e.name} from ${e.source}`,
@@ -527,6 +538,7 @@ $("form").onsubmit = async (e) => {
   data.append("critic", $("critic").checked);
   data.append("video", $("video").checked);
   data.append("format", $("format").value);
+  data.append("director", $("director").value);
   if (modelPick) data.append("model_pick", JSON.stringify(modelPick));
   else if ($("modelFile").files[0]) data.append("model_file", $("modelFile").files[0]);
   $("go").disabled = true; $("formMsg").textContent = "Starting…";

@@ -8,8 +8,10 @@ happens, open any run that's already done.
 
     GET  /                           the page: start an ad, watch it, open any run
     POST /runs                       a photo (file) and a brief: queues an ad (pipeline.agents.producer);
-                                     format = horizontal, vertical or both (default); optionally a 3D model of
-                                     the product: model_pick (a search result's JSON) or model_file (a .glb)
+                                     format = horizontal, vertical or both (default); director = live
+                                     (default: Spark makes the film with every Studio command) or storyboard;
+                                     optionally a 3D model of the product: model_pick (a search result's
+                                     JSON) or model_file (a .glb)
     GET  /models/search?q=           3D models of a product online, ones we may use (pipeline.catalog)
     GET  /runs                       every run, newest first: status, brief, outputs
     GET  /runs/{id}                  one run: its summary (run.json) and outputs
@@ -37,7 +39,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from pipeline import catalog
-from pipeline.agents.producer import FORMATS, make_ad
+from pipeline.agents.producer import DIRECTORS, FORMATS, make_ad
 from pipeline.catalog.common import Candidate
 from pipeline.runs import RUNS, Run, all_runs, events
 from pipeline.studio import Studio
@@ -61,6 +63,7 @@ class Job:
     video: bool
     size: int
     format: str
+    director: str = "live"
     model_pick: Candidate | None = None   # a search result, downloaded by the worker
     model_file: Path | None = None        # an uploaded model
 
@@ -93,7 +96,8 @@ async def _make(job: Job) -> None:
                 job.run.event("model_download", source=job.model_pick.source, name=job.model_pick.name)
                 model, credit = catalog.download(job.model_pick), job.model_pick.to_json()
             await make_ad(studio, job.run, job.brief, job.photo, job.category, job.size, video=job.video,
-                          critic=job.critic, format=job.format, model=model, credit=credit)
+                          critic=job.critic, format=job.format, model=model, credit=credit,
+                          director=job.director)
 
 
 threading.Thread(target=_work, name="producer", daemon=True).start()
@@ -169,8 +173,8 @@ def _pick(text: str) -> Candidate:
 
 @app.post("/runs", status_code=202)
 async def start(photo: UploadFile = File(...), brief: str = Form(...), category: str = Form("product"),
-                critic: bool = Form(True), video: bool = Form(True), size: int = Form(1080),
-                format: str = Form("both"), model_pick: str = Form(""),
+                critic: bool = Form(False), video: bool = Form(True), size: int = Form(1080),
+                format: str = Form("both"), director: str = Form("live"), model_pick: str = Form(""),
                 model_file: UploadFile | None = File(None)) -> dict:
     """Queues an ad: the photo and brief in, a run id back to follow."""
     name = Path(photo.filename or "photo.png").name
@@ -180,6 +184,8 @@ async def start(photo: UploadFile = File(...), brief: str = Form(...), category:
         raise HTTPException(422, "the brief is empty")
     if format not in FORMATS:
         raise HTTPException(422, f"the format must be one of {', '.join(FORMATS)}")
+    if director not in DIRECTORS:
+        raise HTTPException(422, f"the director must be one of {', '.join(DIRECTORS)}")
     pick = _pick(model_pick) if model_pick.strip() else None
     model_name = Path(model_file.filename or "").name if model_file and model_file.filename else ""
     if model_name and Path(model_name).suffix.lower() not in MODEL_TYPES:
@@ -196,8 +202,8 @@ async def start(photo: UploadFile = File(...), brief: str = Form(...), category:
     rid = run.root.name
     waiting.append(rid)
     run.event("queued", position=len(waiting), brief=brief, category=category, critic=critic, video=video,
-              format=format, model=pick.name if pick else model_name or None)
-    jobs.put(Job(run, upload, brief.strip(), category, critic, video, size, format, pick, model_upload))
+              format=format, director=director, model=pick.name if pick else model_name or None)
+    jobs.put(Job(run, upload, brief.strip(), category, critic, video, size, format, director, pick, model_upload))
     return {"id": rid, "status": "queued", "position": len(waiting), "events": f"/runs/{rid}/events"}
 
 

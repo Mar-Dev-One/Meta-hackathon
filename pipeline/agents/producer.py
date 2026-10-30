@@ -5,11 +5,11 @@ one run (runs/<time>-ad-<photo>/).
         videos = await make_ad(studio, run, "Luxury perfume ad, dark and moody, 15 seconds.", photo)
 
 The brand analyst reads the photo (brand_profile.json, masks, label), the
-director plans the ad (storyboard.json), the critic loop judges and revises
-it until every shot and the whole ad pass (rounds/, critiques/; at most 3
-revisions, the best kept), and the video is rendered and finished (final/),
-with music: horizontal (16:9), vertical (9:16), or both from the same
-storyboard (the default).
+director makes the ad in one go (the live director by default: Spark in
+the Studio), and the video is rendered and finished (final/), with music:
+horizontal (16:9), vertical (9:16), or both (the default). With the critic
+loop on (critic=True, --critic), it's judged and revised first, and the
+best kept.
 
     python -m pipeline.agents.producer Assets/photos/aurelle_perfume.png "Luxury perfume ad, dark and moody, 15 seconds." --category "perfume bottle"
     python -m pipeline.agents.producer Assets/photos/mira_jar.png "Face cream, calm and bright, 10 seconds." --category "cream jar" --format vertical
@@ -23,6 +23,7 @@ from pipeline.studio import build, final_cut, models, preview
 
 from .analyst import analyse
 from .critic.loop import refine
+from .director import live
 from .director.write import write
 from .scout import scout
 from .stager import stage
@@ -32,10 +33,16 @@ from .stager import stage
 # frame planned and judged, the other reframed from it).
 FORMATS = {"horizontal": "16:9", "vertical": "9:16", "both": None}
 
+# Who makes the film: "live", Muse Spark in the Studio with every command
+# (director/live.py), or "storyboard", Spark filling in a storyboard that
+# code builds (director/write.py), judged by the measured critic.
+DIRECTORS = ("live", "storyboard")
+LIVE_REVISIONS = 2   # the live director's reviews that can send the film back, at most
+
 
 async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str = "product", short: int = 1080,
-                  video: bool = True, critic: bool = True, format: str = "both", model: Path | str | None = None,
-                  credit: dict | None = None) -> dict[str, Path] | None:
+                  video: bool = True, critic: bool = False, format: str = "both", model: Path | str | None = None,
+                  credit: dict | None = None, director: str = "live") -> dict[str, Path] | None:
     """The ad for `brief` with the product in `photo`: its videos by aspect
     (None with video=False). `format` is "horizontal" (16:9), "vertical"
     (9:16) or "both": the director plans for the chosen frame, or, for both,
@@ -45,12 +52,15 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     without one, the scout looks at the photo: a round product is traced from
     it, any other shape gets the closest model found online, if one fits.
     Without the critic, the director's first storyboard is built and a few
-    frames previewed (frames/)."""
+    frames previewed (frames/). `director` is "live" (Spark makes the film
+    in the Studio with every command; live_ad) or "storyboard"."""
     if format not in FORMATS:
         raise ValueError(f"format must be one of {', '.join(FORMATS)}, not {format!r}")
+    if director not in DIRECTORS:
+        raise ValueError(f"director must be one of {', '.join(DIRECTORS)}, not {director!r}")
     run.watch(studio)
     run.event("brief", text=brief, photo=Path(photo).name, category=category, format=format,
-              model=Path(model).name if model else None)
+              model=Path(model).name if model else None, director=director)
     analysis = analyse(run, photo, category)
     box = analysis.seg.product.box
     aspect = (box[3] - box[1]) / max(box[2] - box[0], 1)   # the product's outline in the photo, height / width
@@ -61,6 +71,8 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
                                    aspect)
     else:
         profile = analysis.profile
+    if director == "live":
+        return await live_ad(studio, run, brief, profile, Path(photo).stem, format, critic, video, short)
     sb = await write(brief, profile, studio=studio, run=run, aspect=FORMATS[format])
     if critic:
         sb, _ = await refine(studio, sb, profile, run)
@@ -71,6 +83,32 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
         return None
     aspects = (sb.aspect,) + (tuple(a for a in ("16:9", "9:16") if a != sb.aspect) if format == "both" else ())
     return await final_cut(studio, run, sb, Path(photo).stem, aspects=aspects, short=short)
+
+
+async def live_ad(studio, run: Run, brief: str, profile: BrandProfile, name: str, format: str = "both",
+                  critic: bool = False, video: bool = True, short: int = 1080) -> dict[str, Path] | None:
+    """The film made by Spark in the Studio (director/live.py): made, then
+    reviewed and revised until the review passes (at most LIVE_REVISIONS
+    times) with the critic on, rendered, and for "both" re-shot by Spark
+    for the other frame and rendered again."""
+    first = FORMATS[format] or ("9:16" if "vertical" in brief.lower() else "16:9")
+    cut = await live.direct(studio, run, brief, profile, first)
+    if critic:
+        for round_ in range(LIVE_REVISIONS + 1):
+            verdict = await live.review(studio, run, cut, brief, profile, round_)
+            if verdict.passed or round_ == LIVE_REVISIONS:
+                break
+            cut = await live.revise(studio, run, cut, verdict, brief, profile, round_ + 1)
+    else:
+        await live.preview(studio, run, cut)
+    if not video:
+        return None
+    videos = {first: await live.render_cut(studio, run, cut, name, short=short)}
+    if format == "both":
+        other = "9:16" if first == "16:9" else "16:9"
+        adapted = await live.adapt(studio, run, cut, other, brief, profile)
+        videos[other] = await live.render_cut(studio, run, adapted, name, short=short)
+    return videos
 
 
 async def with_model(studio, run: Run, profile: BrandProfile, model: Path | str, credit: dict | None,
@@ -110,10 +148,13 @@ if __name__ == "__main__":
     parser.add_argument("--category", default="product", help='what the product is, e.g. "perfume bottle"')
     parser.add_argument("--size", type=int, default=1080, help="the video's shorter side in pixels")
     parser.add_argument("--preview", action="store_true", help="no video: stop once the storyboard is final")
-    parser.add_argument("--no-critic", action="store_true", help="render the director's first storyboard as it is")
+    parser.add_argument("--critic", action="store_true",
+                        help="judge and revise the ad before rendering it (off: made in one go)")
     parser.add_argument("--format", choices=list(FORMATS), default="both",
                         help="horizontal (16:9), vertical (9:16) or both (default)")
     parser.add_argument("--model", help="a 3D model file (.glb) of the product, for shapes that aren't round")
+    parser.add_argument("--director", choices=DIRECTORS, default="live",
+                        help="live: Spark makes the film in the Studio (default); storyboard: the storyboard director")
     args = parser.parse_args()
 
     async def main() -> None:
@@ -121,8 +162,8 @@ if __name__ == "__main__":
         async with Studio() as studio:
             with Run.create(f"ad-{Path(args.photo).stem}") as run:
                 videos = await make_ad(studio, run, args.brief, args.photo, args.category, args.size,
-                                       video=not args.preview, critic=not args.no_critic, format=args.format,
-                                       model=args.model)
+                                       video=not args.preview, critic=args.critic, format=args.format,
+                                       model=args.model, director=args.director)
         summary = json.loads((run.root / "run.json").read_text(encoding="utf-8"))
         made = "\n".join(str(v) for v in videos.values()) if videos else str(run.root)
         print(f"{made}\n{time.time() - began:.0f} s, {summary['model_calls']} model calls "
