@@ -36,16 +36,17 @@ from .stager import stage
 # frame planned and judged, the other reframed from it).
 FORMATS = {"horizontal": "16:9", "vertical": "9:16", "both": None}
 
-# Who makes the film: "live", Muse Spark in the Studio with every command
-# (director/live.py), or "storyboard", Spark filling in a storyboard that
-# code builds (director/write.py), judged by the measured critic.
-DIRECTORS = ("live", "storyboard")
+# Who makes the film: "storyboard" (the default), Spark filling in a
+# storyboard that code checks and builds (director/write.py), judged by the
+# measured critic; or "live", Muse Spark in the Studio with every command
+# (director/live.py).
+DIRECTORS = ("storyboard", "live")
 LIVE_REVISIONS = 2   # the live director's reviews that can send the film back, at most
 
 
 async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str = "product", short: int = 1080,
                   video: bool = True, critic: bool = False, format: str = "both", model: Path | str | None = None,
-                  credit: dict | None = None, director: str = "live") -> dict[str, Path] | None:
+                  credit: dict | None = None, director: str = "storyboard") -> dict[str, Path] | None:
     """The ad for `brief` with the product in `photo`: its videos by aspect
     (None with video=False). `format` is "horizontal" (16:9), "vertical"
     (9:16) or "both": the director plans for the chosen frame, or, for both,
@@ -235,8 +236,8 @@ if __name__ == "__main__":
     parser.add_argument("--format", choices=list(FORMATS), default="both",
                         help="horizontal (16:9), vertical (9:16) or both (default)")
     parser.add_argument("--model", help="a 3D model file (.glb) of the product, for shapes that aren't round")
-    parser.add_argument("--director", choices=DIRECTORS, default="live",
-                        help="live: Spark makes the film in the Studio (default); storyboard: the storyboard director")
+    parser.add_argument("--director", choices=DIRECTORS, default="storyboard",
+                        help="storyboard: Spark plans, code builds (default); live: Spark makes the film in the Studio")
     args = parser.parse_args()
 
     async def main() -> None:

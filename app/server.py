@@ -8,8 +8,9 @@ happens, open any run that's already done.
 
     GET  /                           the page: start an ad, watch it, open any run
     POST /runs                       a photo (file) and a brief: queues an ad (pipeline.agents.producer);
-                                     format = horizontal, vertical or both (default); director = live
-                                     (default: Spark makes the film with every Studio command) or storyboard;
+                                     format = horizontal, vertical or both (default); director = storyboard
+                                     (default: Spark plans, code builds) or live (Spark makes the film with
+                                     every Studio command);
                                      optionally a 3D model of the product: model_pick (a search result's
                                      JSON) or model_file (a .glb)
     GET  /models/search?q=           3D models of a product online, ones we may use (pipeline.catalog)
@@ -63,7 +64,7 @@ class Job:
     video: bool
     size: int
     format: str
-    director: str = "live"
+    director: str = "storyboard"
     model_pick: Candidate | None = None   # a search result, downloaded by the worker
     model_file: Path | None = None        # an uploaded model
 
@@ -174,7 +175,7 @@ def _pick(text: str) -> Candidate:
 @app.post("/runs", status_code=202)
 async def start(photo: UploadFile = File(...), brief: str = Form(...), category: str = Form("product"),
                 critic: bool = Form(False), video: bool = Form(True), size: int = Form(1080),
-                format: str = Form("both"), director: str = Form("live"), model_pick: str = Form(""),
+                format: str = Form("both"), director: str = Form("storyboard"), model_pick: str = Form(""),
                 model_file: UploadFile | None = File(None)) -> dict:
     """Queues an ad: the photo and brief in, a run id back to follow."""
     name = Path(photo.filename or "photo.png").name
