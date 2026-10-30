@@ -21,6 +21,7 @@ or replays it with its timing (for the demo).
 import json
 import shutil
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -42,6 +43,7 @@ class Run:
         self.outputs: dict[str, str] = {}
         self._usage_from = len(usage.calls())
         self._watched: list = []
+        self._writing = threading.Lock()
 
     # --- Making and opening ---------------------------------------------------------
 
@@ -110,8 +112,11 @@ class Run:
         """Appends one event to log.jsonl and returns it."""
         entry = {"t": round(time.time() - self.started, 3), "time": datetime.now().isoformat(timespec="milliseconds"),
                  "kind": kind, **data}
-        with (self.root / "log.jsonl").open("a", encoding="utf-8") as log:
-            log.write(json.dumps(entry, default=str) + "\n")
+        line = json.dumps(entry, default=str) + "\n"
+        # One writer at a time: events come from other threads too (progress ticks, the live director's
+        # tools), and on Windows two appends at once can overwrite each other's start.
+        with self._writing, (self.root / "log.jsonl").open("a", encoding="utf-8") as log:
+            log.write(line)
         return entry
 
     def save_json(self, name: str, data: Any) -> Path:
