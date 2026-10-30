@@ -179,11 +179,25 @@ class CameraMove(Strict):
         return self.fill
 
 
+class ProductMotion(Strict):
+    """The product moving during a shot (it's back at rest at the next cut)."""
+    move: Literal["turn", "float", "drop", "tilt"] = Field(
+        description="turn: turns on its own axis and settles facing front by the end (shows the label coming "
+                    "round); float: rises gently, weightless, through the shot; drop: falls onto its stand in "
+                    "the shot's first 40%, then holds still; tilt: leans gently towards the camera and back")
+    amount: float | None = Field(None, ge=-720, le=720,
+                                 description="turn: degrees it turns (default 45; 360 a full spin; negative the other "
+                                             "way); tilt: degrees it leans (default 8); float: how far it rises and "
+                                             "drop: how far above it starts, as a share of its height (defaults "
+                                             "0.08 and 0.35)")
+
+
 class Shot(Strict):
     id: str = Field(description="s1, s2, ...")
     intent: str = Field(description="what the shot is for, in a sentence: the critic judges it against this")
     duration: float = Field(gt=0.2, le=30, description="seconds; shots run back to back from 0")
     camera: CameraMove
+    motion: ProductMotion | None = Field(None, description="the product moving in this shot; null: it stands still")
 
 
 class Title(Strict):
@@ -204,7 +218,7 @@ class Key(Strict):
 
 
 class Track(Strict):
-    """Anything else animated: e.g. the product turning (Transform rotation_deg)."""
+    """Anything else animated: e.g. a light rising at a cut (the product's own moves are Shot.motion)."""
     entity: str
     component: str
     field: str

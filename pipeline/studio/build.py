@@ -13,6 +13,26 @@ PRODUCT = "product"   # the product entity every shot frames
 
 ASPECTS = {"16:9": 16 / 9, "9:16": 9 / 16, "1:1": 1.0}
 
+# Templates' real sizes (height, width) in meters, as product.create makes them (Products.c).
+TEMPLATE_SIZES = {"perfume": (0.12, 0.08), "bottle": (0.30, 0.075), "jar": (0.07, 0.09), "can": (0.122, 0.066),
+                  "dropper": (0.11, 0.04)}
+
+# Product motion (Shot.motion): each move's default amount, and when a drop has landed (of its shot).
+MOTION_AMOUNT = {"turn": 45.0, "float": 0.08, "drop": 0.35, "tilt": 8.0}
+DROP_LANDS = 0.4
+EDGE = 1e-3   # a shot's last key sits this far before the cut, so the next shot's first key has its own time
+
+
+def product_size(product: Product) -> tuple[float, float]:
+    """The product's height and width in meters, as the Studio builds it."""
+    if product.model:
+        return models.size(product.model)
+    if product.profile_parts:
+        points = [pt for part in product.profile_parts for pt in part.profile]
+        return max(y for _, y in points), 2 * max(r for r, _ in points)
+    height, width = TEMPLATE_SIZES[product.template]
+    return product.height or height, product.width or width
+
 
 def _clean(model) -> dict:
     """A model as command arguments: aliases ("from"), no unset values."""
@@ -111,5 +131,46 @@ async def build(studio: Studio, sb: Storyboard) -> float:
                                     {"t": sb.look.lighting.fade_in, "value": intensity}])
     for track in sb.tracks:
         await studio.call("timeline.set_track", **_clean(track))
+    await add_motion(studio, sb)
     await add_titles(studio, sb)
     return sb.duration
+
+
+def motion_keys(sb: Storyboard) -> dict[str, list[dict]]:
+    """The product's Transform keys for its shots' motion, by field
+    ("position", "rotation_deg"): each shot moves from its own start and the
+    product is back at rest at the next cut (a step key just before it);
+    shots without motion hold it at rest. Only fields some shot moves."""
+    top = sb.look.pedestal.height if sb.look.pedestal else 0.0
+    height = product_size(sb.product)[0]
+    rest = {"position": [0.0, top, 0.0], "rotation_deg": [0.0, 0.0, 0.0]}
+    keys: dict[str, list[dict]] = {"position": [], "rotation_deg": []}
+    for start, shot in zip(sb.shot_starts(), sb.shots):
+        end = start + shot.duration - EDGE
+        m = shot.motion
+        amount = (m.amount if m.amount is not None else MOTION_AMOUNT[m.move]) if m else 0.0
+        moves = {}
+        if m and m.move == "turn":     # from `amount` degrees round back to facing front
+            moves["rotation_deg"] = [(start, [0.0, -amount, 0.0], "out"), (end, [0.0, 0.0, 0.0], "step")]
+        elif m and m.move == "tilt":   # leans towards the camera (+Z) and back
+            moves["rotation_deg"] = [(start, [0.0, 0.0, 0.0], "in_out"),
+                                     ((start + end) / 2, [amount, 0.0, 0.0], "in_out"), (end, [0.0, 0.0, 0.0], "step")]
+        elif m and m.move == "float":  # rises, eased, through the shot
+            moves["position"] = [(start, [0.0, top, 0.0], "in_out"), (end, [0.0, top + amount * height, 0.0], "step")]
+        elif m and m.move == "drop":   # falls, accelerating, and lands
+            moves["position"] = [(start, [0.0, top + amount * height, 0.0], "in"),
+                                 (start + DROP_LANDS * shot.duration, [0.0, top, 0.0], "step")]
+        for field in keys:
+            keys[field] += [{"t": round(t, 4), "value": v, "ease": e} for t, v, e in moves.get(field, [])] \
+                or [{"t": round(start, 4), "value": rest[field], "ease": "step"}]
+    return {field: k for field, k in keys.items() if any(k_["value"] != rest[field] for k_ in k)}
+
+
+async def add_motion(studio: Studio, sb: Storyboard) -> None:
+    """The shots' product motion (Shot.motion), as tracks on the product's
+    Transform; a field the storyboard's own tracks already animate is left
+    to them."""
+    taken = {t.field for t in sb.tracks if t.entity == PRODUCT and t.component == "Transform"}
+    for field, keys in motion_keys(sb).items():
+        if field not in taken:
+            await studio.call("timeline.set_track", entity=PRODUCT, component="Transform", field=field, keys=keys)

@@ -15,7 +15,8 @@ from pathlib import Path
 from annotated_types import Ge, Gt, Le, Lt
 from pydantic import BaseModel
 
-from pipeline.schemas.storyboard import Backdrop, CameraMove, Environment, Lighting, Look, Pedestal, Shot, Title
+from pipeline.schemas.storyboard import (Backdrop, CameraMove, Environment, Lighting, Look, Pedestal, ProductMotion,
+                                         Shot, Title)
 
 from .styles import STYLES
 
@@ -48,6 +49,10 @@ CRAFT = """\
 - Every shot moves differently from the one before (orbit, then dolly, then crane ...): cuts land on motion.
 - Keep the side of the product steady across cuts: don't jump more than about 90 degrees of azimuth
   between consecutive shots, unless the cut is meant to surprise.
+- Bring the product to life: give one to three shots a `motion` (a drop to open, a turn to bring the label
+  round, a float for something light or dreamy). A moving product against a calm camera reads best: pair a
+  motion with a static, slow dolly or slow crane, not with a fast orbit. Keep the hero's motion gentle (a
+  turn that settles facing front, or none) so the name lands on a still product.
 - Low camera (elevation 2-8) feels heroic and premium; high (20-40) feels calm and overseeing.
 - fill 0.45 wide, 0.6 medium, 0.9 close; a close-up (0.9+) is for the label or the cap.
 - Depth of field (`aperture`) keeps the product sharp and softens what's behind it: use the style's on most
@@ -154,7 +159,10 @@ def write(commands: dict) -> str:
     out += ["", "The settings, as the Studio describes them:", ""]
     out += [f"- `{a['name']}`: {a['description']}" for a in move["args"]
             if a["name"] not in ("move", "subject", "duration", "start", "camera", "aspect")]
-    out += ["", "## Shots (`shots[]`)", "", *_fields(Shot, skip=("camera",)),
+    out += ["", "## Shots (`shots[]`)", "", *_fields(Shot, skip=("camera", "motion")),
+            "", "## Product motion (`shots[].motion`)", "",
+            "The product itself moving during a shot, while the camera does its move; it's back at rest at the next "
+            "cut. Null (the default) keeps it still.", "", *_fields(ProductMotion),
             "", "## Light (`look.lighting`)", "",
             f"Presets: {_arg(commands, 'lighting.preset', 'name')['description']}.", "", *_fields(Lighting),
             "", "## The set (`look`)", "", *_fields(Look, skip=("environment", "backdrop", "pedestal", "lighting")),
@@ -166,10 +174,8 @@ def write(commands: dict) -> str:
             "Each fades in at `start` while rising a little and its letters drawing together.", "",
             *_fields(Title),
             "", "## Other animation (`tracks[]`)", "",
-            "Keys on any number field of an entity, eased between. The useful one: the product spinning, "
-            "`{\"entity\": \"product\", \"component\": \"Transform\", \"field\": \"rotation_deg\", \"keys\": "
-            "[{\"t\": 0, \"value\": [0, -300, 0], \"ease\": \"out\"}, {\"t\": 6, \"value\": [0, 0, 0]}]}` "
-            "(it settles facing front; y is degrees round).",
+            "Keys on any number field of an entity, eased between: for the lights (`light_*`), e.g. one rising or "
+            "dimming at a cut. For the product moving, use the shots' `motion`, not a track.",
             "", "## Ad craft", "", CRAFT,
             "", "## Styles", "",
             "Starting points: take the one that fits, then adapt its colours to the brand's palette.", ""]

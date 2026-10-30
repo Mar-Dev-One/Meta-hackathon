@@ -37,7 +37,7 @@ from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Critique, Issue, Scores, Storyboard
 from pipeline.schemas.storyboard import Strict
 
-from pipeline.studio.build import ASPECTS
+from pipeline.studio.build import ASPECTS, DROP_LANDS
 
 from .measure import CROP, REVEALING, SIDE_CROP, ShotMeasure, storyboard_colours
 
@@ -154,6 +154,17 @@ def intended(sb: Storyboard, index: int) -> list[str]:
         arrived = start + REVEALING * shot.duration
         out.append(f"The move is a reveal: the camera's aim pans onto the product from {shot.camera.from_ or 'above'}, "
                    f"so until about {arrived:g} s it's meant to be off frame or cut. Judge its framing after that.")
+    motion = shot.motion
+    if motion and motion.move == "drop":
+        landed = start + DROP_LANDS * shot.duration
+        out.append(f"The product drops into place (motion: drop): until about {landed:g} s it's above its stand and may "
+                   f"be cut at the top or still falling. Judge its framing after it lands.")
+    elif motion and motion.move == "turn":
+        out.append("The product turns on its own axis and settles facing front by the shot's end (motion: turn): its "
+                   "label coming round from the side is the move, not a fault.")
+    elif motion:
+        out.append(f"The product {'rises gently' if motion.move == 'float' else 'leans towards the camera and back'} "
+                   f"through the shot (motion: {motion.move}): its small change of place in the frame is the move.")
     fade = sb.look.lighting.fade_in
     if fade and start < fade:
         out.append(f"The lights fade up from dark over the ad's first {fade:g} s (look.lighting.fade_in): until then a "

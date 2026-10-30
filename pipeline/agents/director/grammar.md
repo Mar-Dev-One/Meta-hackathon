@@ -21,7 +21,7 @@ Writes a shot's camera move as keys: the camera keeps the subject framed and aim
 The settings, as the Studio describes them:
 
 - `ease`: linear, in, out or in_out (default)
-- `fill`: how much of the frame's height the subject fills, as seen from the camera's elevation, 0.05 to 5 (default 0.6); up to 0.97 it's whole in the frame, over that it's cropped
+- `fill`: how much of the frame's height the subject fills, as seen from the camera's elevation, 0.05 to 5 (default 0.6); up to 0.97 it's whole in the frame, over that it's cropped; in a narrow frame a wide subject is held by the width, and over 0.7 its sides crop
 - `azimuth`: degrees around the subject: 0 = front (+Z), 90 = its right (+X) (default 0)
 - `elevation`: degrees above the subject, -85 to 85 (default 10)
 - `fov_degrees`: vertical field of view (default 30)
@@ -31,7 +31,7 @@ The settings, as the Studio describes them:
 - `to_fill`: dolly: the framing it ends on (default fill)
 - `from_elevation`: crane: start (default elevation - 15)
 - `to_elevation`: crane: end (default elevation + 25)
-- `travel`: truck: meters moved to the right, negative for left (default the subject's width)
+- `travel`: truck: meters moved to the right, negative for left (default: most of the room beside the subject in the frame, so it stays whole)
 - `from`: reveal: where the aim starts, above (default), below, left or right
 - `from_fov`: zoom: start lens (default fov_degrees * 1.5)
 - `to_fov`: zoom: end lens (default fov_degrees)
@@ -41,6 +41,13 @@ The settings, as the Studio describes them:
 - `id`: s1, s2, ...
 - `intent`: what the shot is for, in a sentence: the critic judges it against this
 - `duration` (>0.2 .. 30): seconds; shots run back to back from 0
+
+## Product motion (`shots[].motion`)
+
+The product itself moving during a shot, while the camera does its move; it's back at rest at the next cut. Null (the default) keeps it still.
+
+- `move` (turn | float | drop | tilt): turn: turns on its own axis and settles facing front by the end (shows the label coming round); float: rises gently, weightless, through the shot; drop: falls onto its stand in the shot's first 40%, then holds still; tilt: leans gently towards the camera and back
+- `amount` (-720 .. 720): turn: degrees it turns (default 45; 360 a full spin; negative the other way); tilt: degrees it leans (default 8); float: how far it rises and drop: how far above it starts, as a share of its height (defaults 0.08 and 0.35)
 
 ## Light (`look.lighting`)
 
@@ -96,7 +103,7 @@ Each fades in at `start` while rising a little and its letters drawing together.
 
 ## Other animation (`tracks[]`)
 
-Keys on any number field of an entity, eased between. The useful one: the product spinning, `{"entity": "product", "component": "Transform", "field": "rotation_deg", "keys": [{"t": 0, "value": [0, -300, 0], "ease": "out"}, {"t": 6, "value": [0, 0, 0]}]}` (it settles facing front; y is degrees round).
+Keys on any number field of an entity, eased between: for the lights (`light_*`), e.g. one rising or dimming at a cut. For the product moving, use the shots' `motion`, not a track.
 
 ## Ad craft
 
@@ -105,6 +112,10 @@ Keys on any number field of an entity, eased between. The useful one: the produc
 - Every shot moves differently from the one before (orbit, then dolly, then crane ...): cuts land on motion.
 - Keep the side of the product steady across cuts: don't jump more than about 90 degrees of azimuth
   between consecutive shots, unless the cut is meant to surprise.
+- Bring the product to life: give one to three shots a `motion` (a drop to open, a turn to bring the label
+  round, a float for something light or dreamy). A moving product against a calm camera reads best: pair a
+  motion with a static, slow dolly or slow crane, not with a fast orbit. Keep the hero's motion gentle (a
+  turn that settles facing front, or none) so the name lands on a still product.
 - Low camera (elevation 2-8) feels heroic and premium; high (20-40) feels calm and overseeing.
 - fill 0.45 wide, 0.6 medium, 0.9 close; a close-up (0.9+) is for the label or the cap.
 - Depth of field (`aperture`) keeps the product sharp and softens what's behind it: use the style's on most

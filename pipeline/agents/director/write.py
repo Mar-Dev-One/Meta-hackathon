@@ -18,8 +18,8 @@ from pydantic import Field, ValidationError
 
 from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
-from pipeline.schemas.storyboard import Look, Product, Shot, Strict, Title, Track
-from pipeline.studio import models
+from pipeline.schemas.storyboard import Look, Shot, Strict, Title, Track
+from pipeline.studio.build import motion_keys, product_size
 
 from . import grammar
 from .styles import STYLES
@@ -38,10 +38,6 @@ TITLE_CLEAR = 0.02        # of the frame's height between a title's box and the 
 PEDESTAL_WIDTH = (1.2, 7.0)   # a pedestal's width, in product widths: wider than it, not a dance floor
 PEDESTAL_HEIGHT = 1.5         # at most this many product heights tall, or it upstages the product
 
-# Templates' real sizes (height, width) in meters, as product.create makes them (Products.c).
-TEMPLATE_SIZES = {"perfume": (0.12, 0.08), "bottle": (0.30, 0.075), "jar": (0.07, 0.09), "can": (0.122, 0.066),
-                  "dropper": (0.11, 0.04)}
-
 
 class DirectorError(Exception):
     """No valid storyboard after every try; the last problems are in the message."""
@@ -53,7 +49,7 @@ class Plan(Strict):
     look: Look
     shots: list[Shot] = Field(min_length=2, max_length=12)
     titles: list[Title] = Field(max_length=MAX_TITLES)
-    tracks: list[Track] = Field(default_factory=list, description="other animation, e.g. the product spinning")
+    tracks: list[Track] = Field(default_factory=list, description="other animation, e.g. a light rising at a cut")
 
 
 SYSTEM = ("You are the director of a studio that makes short 3D product adverts. You plan an ad as shots for a "
@@ -100,17 +96,6 @@ def aspect_in(brief: str) -> str:
     if any(w in text for w in ("square", "1:1")):
         return "1:1"
     return "16:9"
-
-
-def product_size(product: Product) -> tuple[float, float]:
-    """The product's height and width in meters, as the Studio builds it."""
-    if product.model:
-        return models.size(product.model)
-    if product.profile_parts:
-        points = [pt for part in product.profile_parts for pt in part.profile]
-        return max(y for _, y in points), 2 * max(r for r, _ in points)
-    height, width = TEMPLATE_SIZES[product.template]
-    return product.height or height, product.width or width
 
 
 def _profile_text(p: BrandProfile | None) -> str:
@@ -180,9 +165,13 @@ def problems(sb: Storyboard, profile: BrandProfile | None, seconds: float) -> li
                        f"{lo * width * 100:.0f}-{hi * width * 100:.0f} cm wide and at most "
                        f"{PEDESTAL_HEIGHT * height * 100:.0f} cm tall (about {2.5 * width * 100:.0f} x "
                        f"{0.6 * height * 100:.0f} cm suits most), or set it to null")
+    moved = set(motion_keys(sb))
     for track in sb.tracks:
         if track.entity != "product" and not track.entity.startswith("light_"):
             out.append(f"a track animates {track.entity!r}: tracks may only animate the product or the lights")
+        if track.entity == "product" and track.component == "Transform" and track.field in moved:
+            out.append(f"a track and the shots' motion both move the product's {track.field}: use the shots' "
+                       f"motion and remove the track")
         if any(k.t > sb.duration for k in track.keys):
             out.append(f"a track on {track.entity} has keys after the end ({sb.duration:g} s)")
     return out

@@ -36,7 +36,7 @@ from PIL import Image, ImageDraw
 
 from pipeline.agents.analyst.palette import _clusters, to_lab
 from pipeline.schemas import Storyboard
-from pipeline.studio.build import PRODUCT
+from pipeline.studio.build import DROP_LANDS, PRODUCT
 from pipeline.studio.render import frame_size
 
 MOMENTS = (0.1, 0.5, 0.9)   # where in each shot it looks, as shares of the shot
@@ -328,8 +328,11 @@ async def measure(studio, sb: Storyboard, out_dir: Path, short: int = 540, sampl
     shown, paths, alone, empty = await _passes(studio, times, width, height, out_dir, samples)
     colours = colours or storyboard_colours(sb)
     last = sb.shots[-1].id
+    # Until a reveal's aim arrives, or a dropping product lands, it may be out of frame or cut on purpose.
     reveals = {shot.id: start + REVEALING * shot.duration for start, shot in zip(sb.shot_starts(), sb.shots)
                if shot.camera.move == "reveal"}
+    reveals |= {shot.id: max(reveals.get(shot.id, 0.0), start + DROP_LANDS * shot.duration)
+                for start, shot in zip(sb.shot_starts(), sb.shots) if shot.motion and shot.motion.move == "drop"}
     crops = {shot.id for shot in sb.shots if shot.camera.max_fill() > CROP}
     side_crops = {shot.id for shot in sb.shots if shot.camera.max_fill() > SIDE_CROP}
 
