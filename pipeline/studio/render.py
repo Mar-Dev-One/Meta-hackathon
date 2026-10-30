@@ -8,7 +8,9 @@ through this.
     videos = await final_cut(studio, run, sb, "aurelle")   # final/aurelle_16x9.mp4 and final/aurelle_9x16.mp4
 
 Sizes follow the storyboard's frame: `short` is its shorter side, so 1080
-gives 1920x1080, 1080x1920 or 1080x1080.
+gives 1920x1080, 1080x1920 or 1080x1080. A render that takes far longer
+than it should (RENDER_LIMIT) means the Studio hung: it's stopped, and
+final_cut starts a new one and tries that aspect once more.
 """
 
 import time
@@ -19,6 +21,11 @@ from pipeline.encode.music import mood_of, music_for
 from pipeline.schemas import Storyboard
 
 from .build import build
+from .client import StudioTimeout
+
+# A render's time limit: SETUP seconds plus PER_FRAME a frame. A 1080p frame
+# takes about 0.4 s on a laptop GPU, so this is several times the usual time.
+RENDER_SETUP, RENDER_PER_FRAME = 120, 2.0
 
 ASPECT_SIZES = {"16:9": (16, 9), "9:16": (9, 16), "1:1": (1, 1)}
 
@@ -58,8 +65,8 @@ async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samp
     frames = round(sb.duration * sb.fps)
     run.event("render", frames=frames, width=width, height=height, samples=samples)
     began = time.time()
-    result = await studio.call("shot.render", video=str(raw), end=sb.duration - 1e-3, fps=sb.fps, width=width,
-                               height=height, samples=samples)
+    result = await studio.call("shot.render", _timeout=RENDER_SETUP + RENDER_PER_FRAME * frames, video=str(raw),
+                               end=sb.duration - 1e-3, fps=sb.fps, width=width, height=height, samples=samples)
     run.event("rendered", frames=result["frames"], seconds=round(time.time() - began, 1))
     sound = None
     if music:
@@ -86,6 +93,13 @@ async def final_cut(studio, run, sb: Storyboard, name: str, aspects: tuple[str, 
         framed = await reframe(studio, sb, aspect)
         run.save_json(f"storyboard_{tag}.json", framed)
         await build(studio, framed)
-        videos[aspect] = await render(studio, run, framed, f"{name}_{tag}", short=short, samples=samples,
-                                      label=f"video_{tag}")
+        try:
+            videos[aspect] = await render(studio, run, framed, f"{name}_{tag}", short=short, samples=samples,
+                                          label=f"video_{tag}")
+        except StudioTimeout as e:   # hung: once more, in a new Studio
+            run.event("render_retry", aspect=aspect, error=str(e))
+            await studio.restart()
+            await build(studio, framed)
+            videos[aspect] = await render(studio, run, framed, f"{name}_{tag}", short=short, samples=samples,
+                                          label=f"video_{tag}")
     return videos

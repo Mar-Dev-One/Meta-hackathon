@@ -20,12 +20,13 @@ from pathlib import Path
 
 from pipeline.runs import Run
 from pipeline.schemas import BrandProfile
-from pipeline.studio import PRODUCT, build
-from pipeline.studio.build import ASPECTS
+from pipeline.studio import PRODUCT, StudioError
+from pipeline.studio.build import ASPECTS, create_product, place_product_model
 from pipeline.studio.tools import Bridge
 
 MOODS = ("dark", "calm", "energetic", "warm")   # the music (pipeline.encode.music)
 PREVIEW_SHORT = 360                             # previews' shorter side in pixels
+MAKERS = ("product.create", "place_model", "entity.create", "backdrop.create", "entity.update")   # name an entity
 
 
 @dataclass
@@ -53,8 +54,10 @@ How the studio works:
 - commands.list and components.describe tell you every command and every field; entity.get and
   scene.describe show what's there. Colours in components are linear RGB 0-1; in product, backdrop
   and text commands they're "#RRGGBB".
-- make_product puts the brand's product in the scene as the entity "product", at its real size.
-  Keep that name: the product is what the film is about, and it's measured by that name.
+- make_product is the only way to put the brand's product in the scene: its real shape and label
+  (or its real 3D model), at its real size, as the entity "product". Never build the product
+  yourself with product.create or place_model (those are for other objects: props, a vase, a
+  stone), and keep the name "product" for it alone: the film is about it, and it's measured by it.
 - The timeline is the film: time 0 is its first frame. camera.move writes a shot's camera keys in
   its own time range (start, duration), so moves placed end to end are cuts; pass the frame's
   aspect to it. Or place your own camera (camera.set) and animate its Transform with
@@ -97,14 +100,15 @@ def _tools(studio, profile: BrandProfile, finished: dict) -> dict:
         if any(e.get("name") == PRODUCT for e in (await studio.call("scene.describe")).get("entities", [])):
             await studio.call("entity.destroy", entity=PRODUCT)
         if product.model:
-            await build.place_product_model(studio, product, top)
+            await place_product_model(studio, product, top)
         else:
-            await build.create_product(studio, product, top)
+            await create_product(studio, product, top)
         position = args.get("position") or [0, 0, 0]
         if args.get("on_top_of"):
             await studio.call("entity.place", entity=PRODUCT, relative_to={"entity": args["on_top_of"], "side": "on_top"})
         elif position[0] or position[2]:
             await studio.call("entity.place", entity=PRODUCT, position=position)
+        finished["made"] = True
         return await studio.call("entity.get", entity=PRODUCT)
 
     async def finish(args: dict) -> dict:
@@ -117,6 +121,12 @@ def _tools(studio, profile: BrandProfile, finished: dict) -> dict:
                 problems.append(f"shots must be back to back: one ends at {a['end']}, the next starts at {b['start']}")
         if shots and shots[0]["start"] != 0:
             problems.append("the first shot must start at 0")
+        try:
+            await studio.call("entity.get", entity=PRODUCT)
+        except StudioError:
+            finished.pop("made", None)   # reset or cleared away since
+        if not finished.get("made"):
+            problems.append("the brand's product isn't in the film: put it in with make_product")
         if args.get("mood") not in MOODS:
             problems.append(f"mood must be one of {', '.join(MOODS)}")
         if problems:
@@ -147,6 +157,14 @@ def _tools(studio, profile: BrandProfile, finished: dict) -> dict:
     }
 
 
+def _refuse(command: str, args: dict) -> str | None:
+    """Turns down any command but make_product making an entity called "product"."""
+    if command in MAKERS and args.get("name") == PRODUCT:
+        return (f"{command} can't make the entity \"{PRODUCT}\": the brand's product comes only from make_product "
+                "(its real shape and label, or its real model). Give other objects other names.")
+    return None
+
+
 async def direct(studio, run: Run, brief: str, profile: BrandProfile, aspect: str = "16:9",
                  max_turns: int = 60) -> Cut:
     """The film made in `studio` by Spark, and its cut (live.json in the run;
@@ -158,9 +176,9 @@ async def direct(studio, run: Run, brief: str, profile: BrandProfile, aspect: st
         run.event("tool", command=command, args=args, error=error)
 
     bridge = await Bridge.open(studio, on_call=logged, extra=_tools(studio, profile, finished),
-                               previews=run.folder("live", "previews"))
+                               previews=run.folder("live", "previews"), refuse=_refuse)
     result = await bridge.run(_prompt(brief, profile, aspect), system=SYSTEM, max_turns=max_turns)
-    if not finished:
+    if "shots" not in finished:
         raise RuntimeError(f"the director stopped without calling finish: {result.text[:300]}")
     cut = Cut(shots=finished["shots"], mood=finished["mood"], summary=finished["summary"], aspect=aspect,
               calls=[{k: c[k] for k in ("name", "arguments")} for c in result.calls])

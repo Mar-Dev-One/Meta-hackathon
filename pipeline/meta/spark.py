@@ -8,7 +8,9 @@
     r.calls         # every tool call made, with its result
 
 A tool can show the model pictures (a render it made): handle() returns
-Seen(result, images), and the images follow that turn's results.
+Seen(result, images), and the images follow that turn's results. A tool's
+error goes back to the model to correct, except Stop, which ends the run
+(nothing the model does can fix it: the Studio is gone).
 
 `provider="baseten"` runs the same request on Muse Spark Open (Chat
 Completions on Baseten); tool calling is Meta API only for now.
@@ -23,6 +25,10 @@ from pydantic import BaseModel, ValidationError
 
 from . import cache, client, config, usage
 from .client import ImageInput, MetaError
+
+
+class Stop(Exception):
+    """Raised by a tool's handler: the conversation can't go on (run_tools re-raises it)."""
 
 
 @dataclass
@@ -189,6 +195,8 @@ def run_tools(prompt: str, *, tools: list[dict], handle: Callable[[str, dict], A
             else:
                 try:
                     result = handle(call["name"], arguments)
+                except Stop:
+                    raise
                 except Exception as e:   # noqa: BLE001 -- the model sees the error and can correct itself
                     result = {"error": str(e)}
             if isinstance(result, Seen):

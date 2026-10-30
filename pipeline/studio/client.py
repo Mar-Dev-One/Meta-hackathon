@@ -27,6 +27,10 @@ class StudioError(Exception):
         self.method, self.code, self.message = method, code, message
 
 
+class StudioTimeout(TimeoutError):
+    """The Studio didn't answer a command in time (hung); it was stopped."""
+
+
 class Studio:
     """Starts a Studio (or attaches to a running one) and runs commands on it."""
 
@@ -79,16 +83,26 @@ class Studio:
             await asyncio.sleep(0.1)
         raise TimeoutError(f"no {self.server_json} after {timeout:.0f}s")
 
-    async def call(self, method: str, **params) -> dict:
-        """Runs one command; its result, or StudioError."""
+    async def call(self, method: str, _timeout: float | None = None, **params) -> dict:
+        """Runs one command; its result, or StudioError. With `_timeout`
+        (seconds), a Studio that hasn't answered by then is taken to have
+        hung: it's stopped and StudioTimeout raised (restart() starts a new one)."""
         self._next_id += 1
         request_id = self._next_id
         began = time.monotonic()
         await self.ws.send(json.dumps({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}))
-        while True:
-            reply = json.loads(await self.ws.recv())
-            if reply.get("id") == request_id:
-                break   # anything else is a notification (scene.changed), not our reply
+
+        async def answer() -> dict:
+            while True:
+                reply = json.loads(await self.ws.recv())
+                if reply.get("id") == request_id:
+                    return reply   # anything else is a notification (scene.changed), not our reply
+
+        try:
+            reply = await asyncio.wait_for(answer(), _timeout)
+        except asyncio.TimeoutError:
+            await self.close()
+            raise StudioTimeout(f"{method}: no answer after {_timeout:.0f} s; the Studio was stopped") from None
         error = None
         if "error" in reply:
             e = reply["error"]
@@ -99,9 +113,17 @@ class Studio:
             raise error
         return reply.get("result") or {}
 
+    async def restart(self) -> "Studio":
+        """A new Studio in place of this one (after a StudioTimeout): an empty stage."""
+        await self.close()
+        return await self.start()
+
     async def close(self) -> None:
         if self.ws:
-            await self.ws.close()
+            try:
+                await asyncio.wait_for(self.ws.close(), 5)   # a hung Studio never answers the close
+            except (asyncio.TimeoutError, websockets.ConnectionClosed):
+                pass
             self.ws = None
         if self.process:
             self.process.terminate()
