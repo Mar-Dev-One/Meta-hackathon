@@ -245,6 +245,50 @@ def write_wav(samples: np.ndarray, path: Path) -> Path:
     return path
 
 
+def cut_to_beat(sb: Storyboard, shortest: float, longest: float, hero_shortest: float,
+                mood: str | None = None) -> Storyboard:
+    """The storyboard with its cuts moved onto the music's beats (the
+    nearest beat each, within a beat; the hero's onto a bar line when one is
+    that close), so the picture cuts with the music; its length the same,
+    every shot still `shortest`-`longest` seconds (the hero at least
+    `hero_shortest`). What happens inside a shot (titles, light keys) moves
+    with it. Unchanged when the music is a track from Assets/music: its
+    beats aren't known."""
+    mood = mood or mood_of(sb)
+    if track_for(mood):
+        return sb
+    beat = 60.0 / SETTINGS[mood]["bpm"]
+    bar = 4 * beat
+    starts, total = sb.shot_starts(), sb.duration
+    new = [0.0]
+    def nearest(s: float, step: float) -> list[float]:
+        return sorted((round(np.floor(s / step) * step, 3), round(np.ceil(s / step) * step, 3)), key=lambda t: abs(t - s))
+
+    for i, s in enumerate(starts[1:], 1):
+        hero = i == len(starts) - 1
+        options = (nearest(s, bar) if hero else []) + nearest(s, beat)   # the hero: a bar line first
+        fits = [t for t in options if abs(t - s) <= beat and shortest <= t - new[-1] <= longest
+                and (not hero or total - t >= hero_shortest)]
+        new.append(fits[0] if fits else s)   # no beat fits: the cut stays where it was
+    moved = [n - o for n, o in zip(new, starts)]
+
+    def shift(t: float) -> float:
+        i = max(k for k, s in enumerate(starts) if s <= t + 1e-9)
+        return round(min(max(t + moved[i], 0.0), total), 3)
+
+    data = sb.model_dump(by_alias=True, exclude_none=True)
+    for shot, a, b in zip(data["shots"], new, new[1:] + [total]):
+        shot["duration"] = round(b - a, 3)
+    for title in data.get("titles", []):
+        title["start"] = shift(title["start"])
+    for track in data.get("tracks", []):
+        keys = {}
+        for key in track["keys"]:
+            keys[shift(key["t"])] = key | {"t": shift(key["t"])}   # one key per time, the later one kept
+        track["keys"] = sorted(keys.values(), key=lambda k: k["t"])
+    return Storyboard.model_validate(data)
+
+
 def track_for(mood: str) -> Path | None:
     """A music file for the mood in Assets/music, if there is one."""
     for kind in TRACK_TYPES:

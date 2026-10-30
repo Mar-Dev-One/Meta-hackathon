@@ -19,6 +19,7 @@ from PIL import Image
 from pydantic import Field, ValidationError
 
 from pipeline.catalog.sets import surface_colour
+from pipeline.encode.music import cut_to_beat
 from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
 from pipeline.schemas.storyboard import Look, Shot, Strict, Title, Track
@@ -124,6 +125,12 @@ def _styles_text() -> str:
     return "\n".join(json.dumps({"name": s.name, "use_for": s.use_for, "look": s.look.model_dump(exclude_none=True),
                                  "title": s.title.model_dump(), "shot_seconds": s.shot_seconds, "moves": s.moves,
                                  "ease": s.ease, "aperture": s.aperture}, separators=(",", ":")) for s in STYLES.values())
+
+
+def on_beat(sb: Storyboard) -> Storyboard:
+    """The storyboard cut on the music's beats (pipeline.encode.music),
+    within the craft rules' shot lengths."""
+    return cut_to_beat(sb, SHOT_MIN, SHOT_MAX, HERO_MIN)
 
 
 def assemble(plan: Plan, profile: BrandProfile, brief: str, aspect: str) -> Storyboard:
@@ -345,7 +352,7 @@ async def write(brief: str, profile: BrandProfile, *, studio=None, run=None, sec
         sb, must = None, []
         try:
             plan = Plan.model_validate(answer.data)
-            sb = assemble(plan, profile, brief, aspect)
+            sb = on_beat(assemble(plan, profile, brief, aspect))
         except ValidationError as e:
             found = must = _errors(e)
         else:
