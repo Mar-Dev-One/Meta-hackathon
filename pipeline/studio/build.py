@@ -4,6 +4,7 @@ commands. The hand-made ads and the director both build through this.
     length = await build(studio, storyboard)    # then shot.preview / shot.render up to `length`
 """
 
+from pipeline.catalog.sets import LIGHTS, SURFACES, install_hdri, surface_texture
 from pipeline.schemas import Product, Storyboard
 
 from . import models
@@ -39,18 +40,36 @@ def _clean(model) -> dict:
     return model.model_dump(by_alias=True, exclude_none=True)
 
 
+def _surfaced(model) -> dict:
+    """A backdrop or pedestal as backdrop.create's arguments: a library
+    surface becomes its texture (white, so the texture's own colours show),
+    tiled and as rough as the material is."""
+    args = _clean(model)
+    surface = args.pop("surface", None)
+    if surface:
+        _, roughness, tile, _ = SURFACES[surface]
+        args.update(texture=str(surface_texture(surface).resolve()), texture_tile=tile, roughness=roughness,
+                    color="#FFFFFF")
+    return args
+
+
 async def build_scene(studio: Studio, sb: Storyboard) -> dict:
-    """Environment, backdrop, pedestal, product and lights. Returns the
+    """Environment, backdrop, pedestal, product and lights (the light
+    environment and surfaces from the set library, by name). Returns the
     lights' intensities by entity."""
     look = sb.look
     await studio.call("studio.reset")
-    await studio.call("environment.set", **_clean(look.environment))
+    environment = _clean(look.environment)
+    if environment["hdri"] in LIGHTS:   # a light environment by name: installed into the Studio's assets
+        environment["hdri"] = install_hdri(studio, environment["hdri"])
+    await studio.call("environment.set", **environment)
     await studio.call("render.set", antialiasing="taa", clear_color=look.background)
 
-    await studio.call("backdrop.create", kind="cyclorama", **_clean(look.backdrop))
+    if look.backdrop:
+        await studio.call("backdrop.create", kind="cyclorama", **_surfaced(look.backdrop))
     top = 0.0
     if look.pedestal:
-        await studio.call("backdrop.create", kind="pedestal", **_clean(look.pedestal))
+        await studio.call("backdrop.create", kind="pedestal", **_surfaced(look.pedestal))
         top = look.pedestal.height
 
     product = sb.product

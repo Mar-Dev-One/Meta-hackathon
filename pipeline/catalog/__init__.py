@@ -17,6 +17,9 @@ model's colours makes a derivative, and the ads may be commercial, so
 non-commercial and no-derivatives licences are out. Models with more faces
 than MAX_FACES are skipped (too slow for a laptop GPU). Downloads are cached
 in cache/models/, so a model is fetched once.
+
+sets.py is the set library beside them: surfaces and light environments
+(Poly Haven, CC0) for the pedestal, the backdrop and the light.
 """
 
 from concurrent.futures import ThreadPoolExecutor

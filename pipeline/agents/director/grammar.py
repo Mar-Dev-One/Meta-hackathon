@@ -75,6 +75,14 @@ CRAFT = """\
 - Colours (backdrop, pedestal, titles) come from the brand's palette or sit well with it. The brand profile's
   "do not"s are its usual taste: follow them unless the brief asks otherwise, in which case the brief wins.
 - The set is sized for the product: a pedestal 1.2-7 times its width and at most 1.5 times its height.
+- Choose a set that tells the brand's story, not a default: a surface for the product to stand on (a low,
+  wide pedestal of one is a slab: cream_marble for luxury, dark_wood for crafted warmth, sand for summer,
+  stone for the outdoors, red_velvet for evening) and a light environment that suits the mood (studio for
+  clean product shots, fireplace for intimate warmth, golden_hour for natural products, city_night for bold
+  nightlife). Plain colours are still right for a minimal brand.
+- A real background: set look.backdrop to null and environment.show_skybox to true, and the light environment
+  stands behind the product, softly blurred (sky_blur 0.3-0.4): a lifestyle shot rather than a studio one.
+  Glass reads best this way: it shows the light behind it, clear and bright, where a dark wall turns it black.
 - Start from the style that fits the brief and the brand, then adapt its colours to the palette."""
 
 
@@ -172,8 +180,9 @@ def write(commands: dict) -> str:
             "", "## Light (`look.lighting`)", "",
             f"Presets: {_arg(commands, 'lighting.preset', 'name')['description']}.", "", *_fields(Lighting),
             "", "## The set (`look`)", "", *_fields(Look, skip=("environment", "backdrop", "pedestal", "lighting")),
-            "", "`look.environment`:", "", *_fields(Environment, skip=("hdri",)),
-            "", "`look.backdrop` (a cyclorama: a floor curving up into a wall):", "", *_fields(Backdrop, skip=("texture",)),
+            "", "`look.environment`:", "", *_fields(Environment),
+            "", "`look.backdrop` (a cyclorama: a floor curving up into a wall; or null: the light environment is the "
+            "background):", "", *_fields(Backdrop, skip=("texture",)),
             "", "`look.pedestal` (or null: the product stands on the floor):", "", *_fields(Pedestal),
             "", "## Titles (`titles[]`)", "",
             f"Drawn by the Studio over the picture. Fonts: {_arg(commands, 'text.create', 'font')['description']}.",

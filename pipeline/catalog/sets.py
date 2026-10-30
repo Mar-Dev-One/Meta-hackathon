@@ -4,7 +4,7 @@ can stand behind it as a blurred background. All from Poly Haven
 (polyhaven.com), CC0: free for any use, no credit needed. Each is fetched
 the first time it's used and kept in cache/sets/.
 
-    texture = surface_texture("marble")          # a .jpg to give backdrop.create's `texture`
+    texture = surface_texture("cream_marble")    # a .jpg to give backdrop.create's `texture`
     key = install_hdri(studio, "golden_hour")    # "hdri/<id>_2k.hdr", for environment.set's `hdri`
 
 The names are what the director chooses from (the Storyboard schema lists
@@ -12,11 +12,11 @@ them); the ids are Poly Haven's.
 """
 
 import shutil
+from functools import cache
 from pathlib import Path
 
-from pipeline.catalog.common import fetch
+from .common import fetch
 
-API = "https://api.polyhaven.com"
 FILES = "https://dl.polyhaven.org/file/ph-assets"
 CACHE = Path("cache/sets")
 
@@ -55,6 +55,15 @@ def surface_texture(name: str) -> Path:
     if not path.exists():
         fetch(f"{FILES}/Textures/jpg/2k/{pid}/{pid}_diff_2k.jpg", path)
     return path
+
+
+@cache
+def surface_colour(name: str) -> str:
+    """The surface's average colour, "#RRGGBB" (what it reads as from afar)."""
+    from PIL import Image
+
+    image = Image.open(surface_texture(name)).convert("RGB").resize((1, 1), Image.Resampling.BOX)
+    return "#{:02X}{:02X}{:02X}".format(*image.getpixel((0, 0)))
 
 
 def hdri_file(name: str) -> Path:

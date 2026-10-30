@@ -16,6 +16,7 @@ from typing import Literal
 
 from pydantic import Field, ValidationError
 
+from pipeline.catalog.sets import surface_colour
 from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
 from pipeline.schemas.storyboard import Look, Shot, Strict, Title, Track
@@ -201,6 +202,11 @@ def _contrast(a: str, b: str) -> float:
     return (hi + 0.05) / (lo + 0.05)
 
 
+def _set_colour(part) -> str:
+    """A backdrop's or pedestal's colour as seen: its surface's, or its own."""
+    return surface_colour(part.surface) if part.surface else part.color
+
+
 def light_problems(sb: Storyboard, profile: BrandProfile | None) -> list[str]:
     """Light that sells the material, as rules: what glass, metal and the
     product's tone need from the set to read, and titles that can be read.
@@ -211,22 +217,28 @@ def light_problems(sb: Storyboard, profile: BrandProfile | None) -> list[str]:
         return out
     glass = any(m.transmission >= SEE_THROUGH for m in profile.materials)
     metal = any(m.metallic >= SEE_THROUGH for m in profile.materials)
-    env, lighting, backdrop = sb.look.environment, sb.look.lighting, sb.look.backdrop.color
+    env, lighting = sb.look.environment, sb.look.lighting
+    # What the set reads as: a surface's own colour, the plain colour, or (no backdrop, the light
+    # environment behind) nothing these rules can judge.
+    backdrop, pedestal = (_set_colour(sb.look.backdrop) if sb.look.backdrop else None,
+                          _set_colour(sb.look.pedestal) if sb.look.pedestal else None)
     if (glass or metal) and not env.use_ibl:
         out.append(f"the product is {'glass' if glass else 'metal'}, which shows what's around it: keep "
                    f"look.environment.use_ibl on, or it renders black")
     tone = next((s.hex for s in profile.palette if s.role == "product"), None)
-    if tone and abs(_lightness(tone) - _lightness(backdrop)) < SEPARATION:
+    if tone and backdrop and abs(_lightness(tone) - _lightness(backdrop)) < SEPARATION:
         out.append(f"the product ({tone}, lightness {_lightness(tone):.0f}) and the backdrop ({backdrop}, "
                    f"{_lightness(backdrop):.0f}) are too close in tone: it melts into the set. Make the backdrop "
-                   f"clearly darker or lighter (at least {SEPARATION} apart, out of 100)")
-    if glass and _lightness(backdrop) < DARK_SET and (lighting.intensity < GLASS_LIGHT or not lighting.glow):
+                   f"clearly darker or lighter (at least {SEPARATION} apart, out of 100), or another surface")
+    if glass and backdrop and _lightness(backdrop) < DARK_SET and (lighting.intensity < GLASS_LIGHT or not lighting.glow):
         out.append(f"glass on a dark set reads black unless it's lit: set look.lighting.intensity to at least "
-                   f"{GLASS_LIGHT:g} and give it a glow (2-3); a lighter backdrop doesn't help, the glass blends into it")
-    pedestal = sb.look.pedestal.color if sb.look.pedestal else None
+                   f"{GLASS_LIGHT:g} and give it a glow (2-3), or put a bright light environment behind it (backdrop "
+                   f"null, show_skybox); a lighter backdrop doesn't help, the glass blends into it")
     for t in sb.titles:
         colour = t.color[:7]
-        behind = [backdrop] + ([pedestal] if pedestal and t.y >= TITLE_BANDS[1][0] else [])
+        behind = [c for c in (backdrop, pedestal if t.y >= TITLE_BANDS[1][0] else None) if c]
+        if not behind:
+            continue
         worst = min(behind, key=lambda c: _contrast(colour, c))
         if _contrast(colour, worst) < TITLE_CONTRAST:
             out.append(f"title {t.text!r} ({colour}) is hard to read against {worst} behind it (contrast "

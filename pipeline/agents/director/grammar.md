@@ -67,18 +67,21 @@ Presets: three_point, rim_dark (luxury, moody), high_key (clean, bright), top_so
 
 `look.environment`:
 
-- `use_ibl` (default True): light and reflect with the HDRI
-- `show_skybox` (default False): show the HDRI as the background (usually off: the backdrop is the background)
+- `hdri` (default studio): the light environment around the product: it lights it, shows in its reflections (glass and metal read by it) and, with show_skybox, is the background. By name: studio: a small photo studio: soft, neutral light (the default); studio_bright: a large bright photo studio: clean, even, high key; studio_warm: a studio with warm brown walls: cosy, crafted; fireplace: a room lit by a fire: warm, intimate, evening; golden_hour: open land at sunrise: golden, natural, hopeful; sunset_sky: a blazing orange sunset sky: dramatic, bold; daylight: a clear blue sky with soft clouds: fresh, outdoors; city_night: a city's lights at night: urban, energetic, nightlife (or an HDRI's path under the Studio's assets)
+- `use_ibl` (default True): light and reflect with the light environment (keep on for glass and metal)
+- `show_skybox` (default False): show the light environment as the background, blurred by sky_blur; needs look.backdrop null (the backdrop's wall hides it)
+- `sky_blur` (0 .. 1, default 0.35): how soft the background environment is: 0.2 recognisable, 0.35 a soft photographic blur, 0.6 only colour and light
 - `ambient_strength` (0 .. 4, default 0.06): 0.05 dark and moody, 0.6 bright and airy
 - `exposure` (>0 .. 16, default 1.0)
 - `bloom` (0 .. 1, default 0.08): glow around bright highlights; 0.03 clean, 0.14 dreamy or neon
 - `tonemap` (agx | aces | neutral, default agx): agx: soft filmic; aces: contrasty; neutral: colours as authored (bright, clean looks)
 - `ssao` (default True)
 
-`look.backdrop` (a cyclorama: a floor curving up into a wall):
+`look.backdrop` (a cyclorama: a floor curving up into a wall; or null: the light environment is the background):
 
 - `color` (default #0A0A0C): the cyclorama's colour (sRGB)
 - `roughness` (0 .. 1, default 0.6)
+- `surface` (cream_marble | granite | terrazzo | dark_wood | light_wood | concrete | stone | sand | plaster | blue_linen | red_velvet): null: plain `color`. Or a real material for it from the set library (its colour comes from the material; `color` is unused): cream_marble: warm cream marble with soft veins, polished: luxury, timeless; granite: dark grey speckled granite: luxury, masculine, tech; terrazzo: terrazzo, flecks in warm stone: modern, playful, design; dark_wood: dark reddish-brown wood: warm, crafted, premium; light_wood: light warm wood veneer: natural, Scandinavian, calm; concrete: smooth grey-brown concrete: urban, minimal, raw; stone: rough brown natural rock: outdoors, rugged, organic; sand: fine pale beach sand: summer, sun care, coastal; plaster: warm beige plaster: soft, natural, skincare (a wall); blue_linen: soft blue linen cloth: fresh, calm, home; red_velvet: deep red velvet: luxury, evening, romance
 
 `look.pedestal` (or null: the product stands on the floor):
 
@@ -86,6 +89,7 @@ Presets: three_point, rim_dark (luxury, moody), high_key (clean, bright), top_so
 - `height` (>0.01 .. 2, default 0.2): meters; the product stands on it
 - `color` (default #0E0E10)
 - `roughness` (0 .. 1, default 0.85): keep high (0.8+) under rim lights, or its top glares
+- `surface` (cream_marble | granite | terrazzo | dark_wood | light_wood | concrete | stone | sand | plaster | blue_linen | red_velvet): null: plain `color`. Or a material (see look.backdrop.surface); a low wide pedestal of one is a slab to stand the product on
 
 ## Titles (`titles[]`)
 
@@ -138,6 +142,14 @@ Keys on any number field of an entity, eased between: for the lights (`light_*`)
 - Colours (backdrop, pedestal, titles) come from the brand's palette or sit well with it. The brand profile's
   "do not"s are its usual taste: follow them unless the brief asks otherwise, in which case the brief wins.
 - The set is sized for the product: a pedestal 1.2-7 times its width and at most 1.5 times its height.
+- Choose a set that tells the brand's story, not a default: a surface for the product to stand on (a low,
+  wide pedestal of one is a slab: cream_marble for luxury, dark_wood for crafted warmth, sand for summer,
+  stone for the outdoors, red_velvet for evening) and a light environment that suits the mood (studio for
+  clean product shots, fireplace for intimate warmth, golden_hour for natural products, city_night for bold
+  nightlife). Plain colours are still right for a minimal brand.
+- A real background: set look.backdrop to null and environment.show_skybox to true, and the light environment
+  stands behind the product, softly blurred (sky_blur 0.3-0.4): a lifestyle shot rather than a studio one.
+  Glass reads best this way: it shows the light behind it, clear and bright, where a dark wall turns it black.
 - Start from the style that fits the brief and the brand, then adapt its colours to the palette.
 
 ## Styles

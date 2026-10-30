@@ -12,7 +12,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from pipeline.catalog.sets import LIGHTS, SURFACES
+
 HEX = r"^#[0-9A-Fa-f]{6}$"
+Surface_ = Literal[tuple(SURFACES)]
+SURFACE_NOTE = "a real material for it from the set library (its colour comes from the material; `color` is unused): " + \
+               "; ".join(f"{name}: {about}" for name, (_, _, _, about) in SURFACES.items())
+LIGHT_NOTE = "; ".join(f"{name}: {about}" for name, (_, about) in LIGHTS.items())
 HEX_ALPHA = r"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
 
 Ease = Literal["linear", "in", "out", "in_out"]
@@ -27,13 +33,15 @@ class Strict(BaseModel):
 # --- The look --------------------------------------------------------------------------------
 
 class Environment(Strict):
-    hdri: str = Field("hdri/studio_small_09_2k.hdr", description="HDRI under the Studio's assets, for reflections "
-                                                                 "and ambient light: hdri/studio_small_09_2k.hdr (a "
-                                                                 "photo studio's softboxes: clean highlights on glass "
-                                                                 "and metal) or hdri/citrus_orchard_road_puresky_4k.hdr "
-                                                                 "(an open sky)")
-    use_ibl: bool = Field(True, description="light and reflect with the HDRI")
-    show_skybox: bool = Field(False, description="show the HDRI as the background (usually off: the backdrop is the background)")
+    hdri: str = Field("studio", description="the light environment around the product: it lights it, shows in its "
+                                            "reflections (glass and metal read by it) and, with show_skybox, is the "
+                                            "background. By name: " + LIGHT_NOTE + " (or an HDRI's path under the "
+                                            "Studio's assets)")
+    use_ibl: bool = Field(True, description="light and reflect with the light environment (keep on for glass and metal)")
+    show_skybox: bool = Field(False, description="show the light environment as the background, blurred by sky_blur; "
+                                                 "needs look.backdrop null (the backdrop's wall hides it)")
+    sky_blur: float = Field(0.35, ge=0, le=1, description="how soft the background environment is: 0.2 recognisable, "
+                                                          "0.35 a soft photographic blur, 0.6 only colour and light")
     ambient_strength: float = Field(0.06, ge=0, le=4, description="0.05 dark and moody, 0.6 bright and airy")
     exposure: float = Field(1.0, gt=0, le=16)
     bloom: float = Field(0.08, ge=0, le=1, description="glow around bright highlights; 0.03 clean, 0.14 dreamy or neon")
@@ -44,6 +52,7 @@ class Environment(Strict):
 class Backdrop(Strict):
     color: str = Field("#0A0A0C", pattern=HEX, description="the cyclorama's colour (sRGB)")
     roughness: float = Field(0.6, ge=0, le=1)
+    surface: Surface_ | None = Field(None, description="null: plain `color`. Or " + SURFACE_NOTE)
     texture: str | None = Field(None, description="an image to cover it with (a path), e.g. from Muse Image")
 
 
@@ -52,6 +61,8 @@ class Pedestal(Strict):
     height: float = Field(0.2, gt=0.01, le=2, description="meters; the product stands on it")
     color: str = Field("#0E0E10", pattern=HEX)
     roughness: float = Field(0.85, ge=0, le=1, description="keep high (0.8+) under rim lights, or its top glares")
+    surface: Surface_ | None = Field(None, description="null: plain `color`. Or a material (see look.backdrop.surface); "
+                                                       "a low wide pedestal of one is a slab to stand the product on")
 
 
 class Lighting(Strict):
@@ -73,7 +84,8 @@ class Look(Strict):
     environment: Environment = Field(default_factory=Environment)
     background: list[float] = Field(default=[0.004, 0.004, 0.006], min_length=3, max_length=3,
                                     description="linear RGB where nothing is drawn (behind the backdrop's edges)")
-    backdrop: Backdrop = Field(default_factory=Backdrop)
+    backdrop: Backdrop | None = Field(default_factory=Backdrop, description="the floor curving up into a wall behind; "
+                                      "null: none, the light environment is the background (set environment.show_skybox)")
     pedestal: Pedestal | None = Field(default_factory=Pedestal, description="null: the product stands on the floor")
     lighting: Lighting
 
