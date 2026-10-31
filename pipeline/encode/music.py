@@ -14,7 +14,10 @@ original and needs no licence:
     warm        electric-piano chords with tremolo, a soft shaker      (natural, organic, glowing)
 
 Bars are laid from the start; a rising swell lands on the first beat of the
-hero shot (the last one), and everything settles into the final chord.
+hero shot (the last one), and everything settles into the final chord. The
+mix: the pads and bass pumped by the kick (energetic), everything in a
+synthesized stereo room (a convolution reverb), warmed by soft saturation,
+and brought to one loudness (LOUDNESS, BS.1770), so every mood plays as loud.
 """
 
 import subprocess
@@ -22,12 +25,15 @@ import wave
 from pathlib import Path
 
 import numpy as np
+from scipy.signal import fftconvolve, lfilter
 
 from pipeline.schemas import Storyboard
 
 RATE = 48000
 MUSIC_DIR = Path(__file__).resolve().parents[2] / "Assets" / "music"
 TRACK_TYPES = (".wav", ".mp3", ".m4a", ".flac")
+LOUDNESS = -16.0   # LUFS: a music bed for the web, under the picture
+PEAK = -1.0        # dB: the highest sample after the soft limit
 
 # The style library's names and the words a brief's style uses, by mood.
 MOODS = {
@@ -81,13 +87,12 @@ def _lowpass(x: np.ndarray, cutoff: float) -> np.ndarray:
     """One-pole low-pass (soft, warm), run twice for 12 dB per octave."""
     a = np.exp(-2 * np.pi * cutoff / RATE)
     for _ in range(2):
-        y = np.empty_like(x)
-        acc = 0.0
-        for i, v in enumerate(x):   # fine at these lengths (a few seconds per voice)
-            acc = (1 - a) * v + a * acc
-            y[i] = acc
-        x = y
+        x = lfilter([1 - a], [1, -a], x)
     return x
+
+
+def _highpass(x: np.ndarray, cutoff: float) -> np.ndarray:
+    return x - _lowpass(x, cutoff)
 
 
 def pad(notes: list[int], seconds: float, brightness: float = 900.0) -> np.ndarray:
@@ -135,6 +140,20 @@ def hat(seconds: float = 0.08, seed: int = 0) -> np.ndarray:
     return np.diff(noise, prepend=0) * np.exp(-60 * t)
 
 
+def open_hat(seconds: float = 0.3, seed: int = 0) -> np.ndarray:
+    t = _t(seconds)
+    return _highpass(np.random.default_rng(seed).uniform(-1, 1, len(t)), 6000) * np.exp(-12 * t)
+
+
+def clap(seconds: float = 0.25, seed: int = 0) -> np.ndarray:
+    """Band-passed noise in three quick bursts and a tail, over a short tone: a clap-snare."""
+    t = _t(seconds)
+    noise = _highpass(_lowpass(np.random.default_rng(seed).uniform(-1, 1, len(t)), 3500), 900)
+    bursts = sum(np.exp(-200 * np.clip(t - d, 0, None)) * (t >= d) for d in (0.0, 0.011, 0.022))
+    body = np.sin(2 * np.pi * 190 * t) * np.exp(-30 * t)
+    return 1.6 * noise * (bursts + 0.6 * np.exp(-18 * t)) + 0.35 * body
+
+
 def shaker(seconds: float = 0.12, seed: int = 0) -> np.ndarray:
     t = _t(seconds)
     return np.random.default_rng(seed).uniform(-1, 1, len(t)) * np.sin(np.pi * t / seconds) ** 2
@@ -177,6 +196,55 @@ def _echo(x: np.ndarray, delay: float, feedback: float, mix: float) -> np.ndarra
     return x + mix * wet
 
 
+def _room(seconds: float, seed: int) -> np.ndarray:
+    """A room's impulse response: noise dying away over `seconds`, its highs
+    sooner (as a real room's do), after a short gap (the first reflections)."""
+    t = _t(seconds)
+    noise = np.random.default_rng(seed).normal(0, 1, len(t))
+    tail = 0.6 * noise * np.exp(-6.9 * t / seconds) + 0.4 * _lowpass(noise, 3000) * np.exp(-4 * t / seconds)
+    tail[:int(0.012 * RATE)] = 0
+    return tail / np.sqrt((tail ** 2).sum())
+
+
+def _reverb(x: np.ndarray, seconds: float, mix: float) -> np.ndarray:
+    """`x` (mono) in a stereo room: two different rooms' tails, one per side, under the dry sound (n x 2)."""
+    rooms = [fftconvolve(x, _room(seconds, seed))[:len(x)] for seed in (1, 2)]
+    return np.stack([x + mix * r for r in rooms], axis=1)
+
+
+def _pump(n: int, hits: list[float], beat: float, depth: float) -> np.ndarray:
+    """A gain that ducks at each kick and swells back within the beat: the sidechain pump."""
+    gain = np.ones(n)
+    length = int(0.8 * beat * RATE)
+    shape = 1 - depth * (1 - np.sin(np.linspace(0, np.pi / 2, length)) ** 2)
+    for at in hits:
+        i = int(at * RATE)
+        k = min(length, n - i)
+        if k > 0:
+            gain[i:i + k] = np.minimum(gain[i:i + k], shape[:k])
+    return gain
+
+
+def loudness(stereo: np.ndarray) -> float:
+    """Integrated loudness in LUFS (BS.1770's K-weighting at 48 kHz; no gating: a bed has no silences)."""
+    y = lfilter([1.53512485958697, -2.69169618940638, 1.19839281085285], [1, -1.69065929318241, 0.73248077421585],
+                stereo, axis=0)
+    y = lfilter([1.0, -2.0, 1.0], [1, -1.99004745483398, 0.99007225036621], y, axis=0)
+    return -0.691 + 10 * np.log10(max((y ** 2).mean(0).sum(), 1e-12))
+
+
+def master(stereo: np.ndarray) -> np.ndarray:
+    """Warmed by soft saturation, at LOUDNESS, its peaks held under PEAK by a soft limit."""
+    x = np.tanh(1.5 * stereo / (np.abs(stereo).max() or 1.0)) / np.tanh(1.5)
+    ceiling = 10 ** (PEAK / 20)
+    knee = 0.7 * ceiling   # above it, peaks bend smoothly towards the ceiling
+    for _ in range(4):     # the limit lowers loudness a little: settle on the target
+        x = x * 10 ** ((LOUDNESS - loudness(x)) / 20)
+        over = np.abs(x) > knee
+        x = np.where(over, np.sign(x) * (knee + (ceiling - knee) * np.tanh((np.abs(x) - knee) / (ceiling - knee))), x)
+    return x
+
+
 # --- The bed ------------------------------------------------------------------------------
 
 
@@ -189,6 +257,8 @@ def compose(mood: str, seconds: float, hero: float) -> np.ndarray:
     total = seconds + 1.0   # a tail, cut by the fade
     track = np.zeros(int(total * RATE))
     side = np.zeros_like(track)          # what's spread out to the sides (the pads), for width
+    low = np.zeros_like(track)           # the bass: pumped with the pads, kept dry
+    kicks = []
     bars = int(np.ceil(total / bar))
     # The hero lands on a downbeat: the last bar line at or after its start, if close; else its start.
     landing = hero if (np.ceil(hero / bar) * bar - hero) > beat else np.ceil(hero / bar) * bar
@@ -211,9 +281,17 @@ def compose(mood: str, seconds: float, hero: float) -> np.ndarray:
                 _place(track, pluck(chord[k % len(chord)] + 12, beat), start + k * beat / 2, 0.22)
         elif mood == "energetic":
             for k in range(4):
-                _place(track, kick(), start + k * beat, 0.6)
-                _place(track, hat(seed=b * 4 + k), start + k * beat + beat / 2, 0.25)
-                _place(track, bass(root - 12, beat / 2 * 0.9), start + k * beat + beat / 2, 0.35)
+                at = start + k * beat
+                if landing - beat / 2 < at + beat and at < landing:   # a breath before the hit
+                    continue
+                _place(track, kick(), at, 0.6)
+                kicks.append(at)
+                _place(track, hat(seed=b * 4 + k), at + beat / 2, 0.2)
+                _place(low, bass(root - 12, beat / 2 * 0.9), at + beat / 2, 0.35)
+                if k % 2:
+                    _place(track, clap(seed=b * 4 + k), at, 0.3)
+                if k == 3:
+                    _place(track, open_hat(seed=b), at + beat / 2, 0.12)
             for k in (0, 1.5, 3):          # off-kilter chord stabs
                 _place(side, pad(chord, beat * 0.45, 2500) * 2.2, start + k * beat, 0.35)
         else:  # warm
@@ -227,11 +305,13 @@ def compose(mood: str, seconds: float, hero: float) -> np.ndarray:
     _place(track, kick(0.6), landing, 0.5)                         # the hit on the hero
     _place(side, pad(s["chords"][0], 3.0, 1800), landing, 0.35)    # the home chord, held
 
-    side = _echo(side, 0.75 * beat, 0.35, 0.4)
-    gap = int(0.012 * RATE)   # the sides 12 ms later on the right: width without phase trouble in mono
-    stereo = np.stack([track + side, track + np.concatenate([np.zeros(gap), side[:-gap]])], axis=1)
-    peak = np.abs(stereo).max() or 1.0
-    return stereo / peak * 10 ** (-3 / 20)
+    if kicks:   # the pads and bass breathe with the kick
+        pump = _pump(len(track), kicks + [landing], beat, 0.6)
+        side, low = side * pump, low * pump
+    side = _echo(side, 0.75 * beat, 0.3, 0.25)
+    room = {"dark": 2.8, "calm": 2.2, "energetic": 1.2, "warm": 1.6}[mood]
+    stereo = _reverb(side, room, 0.5) + _reverb(track, room, 0.15) + low[:, None]
+    return master(stereo)
 
 
 def write_wav(samples: np.ndarray, path: Path) -> Path:
