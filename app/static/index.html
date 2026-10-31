@@ -281,7 +281,7 @@ function open(id, speed = Number($("speed").value)) {
   const kinds = ["started", "queued", "brief", "analyse", "segmented", "read", "output", "saved", "model", "draft", "studio",
     "preview", "critique", "ad_critique", "second_opinion", "round", "revision", "revised", "revision_failed", "refined",
     "render", "rendered", "music", "finished", "failed", "resumed", "critique_draft", "ad_critique_draft", "resumed_rounds",
-    "scouted", "model_pick", "scout_failed", "model_download", "staged", "model_fitted",
+    "scouted", "model_pick", "scout_failed", "model_download", "staged", "model_fitted", "recoloured",
     "tool", "directed", "live_review", "render_retry", "unfinished", "progress", "balanced", "draft_warnings"];
   for (const k of kinds) source.addEventListener(k, (m) => handle(JSON.parse(m.data)));
   source.onerror = () => { if (source.readyState === EventSource.CLOSED) loadRuns(); };
@@ -361,6 +361,7 @@ const HANDLERS = {
   live_review: (e) => { show("criticCard"); cell(e.round, "film", e.passed, low(e.scores)); roundDone({ index: e.round, passed: e.passed }); },
   model_download: (e) => { $("modelCredit").textContent = `Downloading the 3D model from ${e.source}: ${e.name}…`; },
   staged: (e) => { if (e.sheets) { show("profileCard"); e.sheets.forEach((f) => profileImage(f, f.includes("ups") ? "which way up" : "which side")); } },
+  recoloured: (e) => { if (e.sheet) { show("profileCard"); profileImage(e.sheet, "which colours"); } },
   model_fitted: (e) => {
     show("profileCard");
     $("modelCredit").replaceChildren(document.createTextNode(
@@ -391,6 +392,7 @@ const DETAILS = {
   model_pick: (e) => e.name ? `${e.name} from ${e.source}: ${e.reason}` : `none fits, traced from the photo: ${e.reason}`,
   scout_failed: (e) => `${e.error}; traced from the photo`, model_download: (e) => `${e.name} from ${e.source}`,
   staged: (e) => e.by === "spark" ? `${e.up}, turned ${e.turn}°: ${e.up_reason} ${e.side_reason}` : `${e.up}, turned ${e.turn}° (by proportions: ${e.error})`,
+  recoloured: (e) => e.error ? `kept its own colours (${e.error})` : e.by ? `repainted in the photo's colours (paired by ${e.by}): ${e.reason}` : `kept its own colours: ${e.reason}`,
   progress: (e) => progressText(e),
 };
 

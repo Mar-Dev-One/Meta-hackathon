@@ -25,6 +25,7 @@ from pipeline.schemas import BrandProfile
 from pipeline.studio import build, final_cut, frame_size, models, preview
 
 from .analyst import analyse
+from .colourist import colour
 from .critic.loop import refine
 from .director import live
 from .director.write import write
@@ -200,8 +201,10 @@ async def with_model(studio, run: Run, profile: BrandProfile, model: Path | str,
     stood and turned the way Muse Spark sees the product in `photo` (the
     stager; the photo's `aspect` if it can't answer), fitted to its real
     height, in place of the traced shape and the label (a label can't be
-    wrapped onto any shape). It keeps its own textures and colours: one
-    brand colour over everything lost a shoe's sole, a watch's dial. A glass
+    wrapped onto any shape). It keeps its own textures, repainted in the
+    photo's colours region by region if Spark sees that closer (the
+    colourist; one brand colour over everything lost a shoe's sole, a
+    watch's dial). A glass
     product is the exception, dressed in the analyst's materials part by
     part (models.dress: one clear shell holding the liquid's colour, which
     the Studio can show). Saved again as brand_profile.json; the model's
@@ -210,6 +213,9 @@ async def with_model(studio, run: Run, profile: BrandProfile, model: Path | str,
     glass = any(m.transmission >= 0.5 for m in profile.materials)
     parts = {m.name: m.surface() for m in profile.materials} if glass else None
     fitted = models.fit(model, run.path("product.glb"), height=profile.height, parts=parts, up=up, turn=turn)
+    if not glass:
+        colours = [(s.hex, s.share) for s in profile.palette if s.role in ("product", "accent")]
+        await colour(studio, run, fitted, photo, colours, profile.height, category=category)
     height, width = models.size(fitted)
     profile = profile.model_copy(update={"model": str(fitted), "profile_parts": None, "template": None, "label": None})
     run.output("brand_profile", run.save_json("brand_profile.json", profile))
