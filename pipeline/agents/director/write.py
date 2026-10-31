@@ -25,7 +25,7 @@ from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
 from pipeline.schemas.storyboard import EndCard, Look, Music, Shot, Strict, Title, Track
 from pipeline.studio import models
-from pipeline.studio.build import ASPECTS, build, motion_keys, product_size, trucks_in_frame
+from pipeline.studio.build import ASPECTS, build, motion_keys, product_size, prop_spots, trucks_in_frame
 
 from . import grammar
 from .styles import STYLES
@@ -214,6 +214,12 @@ def problems(sb: Storyboard, profile: BrandProfile | None, seconds: float) -> li
         card = f" and the end card's {sb.end_card.seconds:g} s" if sb.end_card else ""
         out.append(f"the shots ({sb.duration:g} s){card} add up to {sb.length:g} s, but the ad is {seconds:g} s: "
                    f"change their durations")
+    if sb.look.props and not sb.look.backdrop:   # no floor: only the pedestal to stand on
+        for p, spot in zip(sb.look.props, prop_spots(sb)):
+            if spot["on"] != "pedestal":
+                room = f"the pedestal ({sb.look.pedestal.width:g} m wide)" if sb.look.pedestal else "no pedestal"
+                out.append(f"prop {p.prop} would float: with no backdrop there's no floor, and it doesn't fit on "
+                           f"{room} beside the product; put it on a wider pedestal, choose a smaller prop, or none")
     for shot in sb.shots:
         if not SHOT_MIN <= shot.duration <= SHOT_MAX:
             out.append(f"shot {shot.id} lasts {shot.duration:g} s: keep shots between {SHOT_MIN:g} and {SHOT_MAX:g} s")
@@ -383,6 +389,43 @@ def light_problems(sb: Storyboard, profile: BrandProfile | None) -> list[str]:
                        f"y {top:.2f}-{min(bottom, 1):.2f} of the frame. Put the title above the product (y "
                        f"{max(TITLE_BANDS[0][0], 0.05):g}-{TITLE_BANDS[0][1]:g}){room}; or frame that shot wider "
                        f"(lower fill) with a low slab so there's set below it")
+    return out
+
+
+PROP_HIDES = 0.15   # of the product a shot's props may hide
+
+
+async def prop_problems(studio, sb: Storyboard) -> list[str]:
+    """Props hiding the product: each shot's middle frame, the product's
+    pixels as the critic finds them (shown against hidden) with the props
+    and without them. A rule of taste."""
+    if not sb.look.props:
+        return []
+    from pipeline.agents.critic.measure import _passes, product_mask
+
+    width, height = 480, round(480 / ASPECTS[sb.aspect])
+    times = [start + 0.5 * shot.duration for start, shot in zip(sb.shot_starts(), sb.shots)]
+    await build(studio, sb)
+    boxes = [(await studio.call("shot.bounds", entity="product", t=t, width=width, height=height)).get("box")
+             for t in times]
+
+    async def pixels(folder: str) -> list[int]:
+        _, _, alone, empty = await _passes(studio, times, width, height, CHECKS.resolve() / folder, 8)
+        return [int(product_mask(a, e, box).sum()) for a, e, box in zip(alone, empty, boxes)]
+
+    seen = await pixels("props_shown")
+    for i in range(len(sb.look.props)):
+        await studio.call("component.set", entity=f"prop_{i + 1}", component="MeshRenderer", fields={"visible": False})
+    whole = await pixels("props_hidden")
+    out = []
+    for shot, shown, all_of_it in zip(sb.shots, seen, whole):
+        hidden = 1 - shown / all_of_it if all_of_it else 0.0
+        if hidden > PROP_HIDES:
+            az = shot.camera.azimuth
+            near = [p.prop for p in sb.look.props if abs((p.angle - az + 180) % 360 - 180) < 90]
+            out.append(f"shot {shot.id}: the props ({', '.join(near) or 'some'}) hide {hidden:.0%} of the product "
+                       f"(camera at azimuth {az:g}): set them beside or behind it as this camera sees it, their angle "
+                       f"at least 60° from the camera's azimuth, or further out (gap)")
     return out
 
 
@@ -572,8 +615,8 @@ async def write(brief: str, profile: BrandProfile, *, studio=None, run=None, sec
                 if run and balanced:
                     run.event("balanced", attempt=attempt, changes=balanced)
             found = must + light_problems(sb, profile) + jump_cuts(sb) + \
-                (await title_contrast_problems(studio, sb) + await hero_problems(studio, sb)
-                 if studio and not must else [])
+                (await title_contrast_problems(studio, sb) + await hero_problems(studio, sb) +
+                 await prop_problems(studio, sb) if studio and not must else [])
         if run:
             run.event("draft", attempt=attempt, problems=found, cached=answer.cached)
         if sb is not None and not must:

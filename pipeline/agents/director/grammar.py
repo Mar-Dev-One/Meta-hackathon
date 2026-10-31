@@ -15,7 +15,9 @@ from pathlib import Path
 from annotated_types import Ge, Gt, Le, Lt
 from pydantic import BaseModel
 
+from pipeline.catalog.props import PROPS
 from pipeline.schemas.storyboard import (Backdrop, CameraMove, EndCard, Environment, Lighting, Look, Music, Pedestal,
+                                         PropPlace,
                                          ProductMotion, Shot, Title)
 
 from .styles import STYLES
@@ -200,11 +202,24 @@ def write(commands: dict) -> str:
             "cut. Null (the default) keeps it still.", "", *_fields(ProductMotion),
             "", "## Light (`look.lighting`)", "",
             f"Presets: {_arg(commands, 'lighting.preset', 'name')['description']}.", "", *_fields(Lighting),
-            "", "## The set (`look`)", "", *_fields(Look, skip=("environment", "backdrop", "pedestal", "lighting")),
+            "", "## The set (`look`)", "", *_fields(Look, skip=("environment", "backdrop", "pedestal", "lighting", "props")),
             "", "`look.environment`:", "", *_fields(Environment),
             "", "`look.backdrop` (a cyclorama: a floor curving up into a wall; or null: the light environment is the "
             "background):", "", *_fields(Backdrop, skip=("texture",)),
             "", "`look.pedestal` (or null: the product stands on the floor):", "", *_fields(Pedestal),
+            "", "## Props (`look.props[]`)", "",
+            "Objects set around the product, at their real sizes (a lemon is a lemon beside a 12 cm bottle), on the "
+            "pedestal if one fits there whole, else on the floor just clear of it. They tell the product's story "
+            "(citrus for a fresh scent, stone for skincare, a croissant for a coffee mug) and fill an empty set; "
+            "one to three, of a piece with the brand's palette and mood, are plenty, and none is often right "
+            "(a sleek tech or luxury product alone on its pedestal). Keep them beside or behind the product as the "
+            "cameras see it, never between a camera and the product: a prop's angle at least 60° from the "
+            "azimuths the shots film from. Big ones (vases, pots) go behind or well to the side. With no backdrop (a "
+            "light environment as the background) there's no floor: props must fit on the pedestal beside the "
+            "product (a wide, low one), or they'd float.", "",
+            *_fields(PropPlace),
+            "", "The library:", "",
+            *[f"- `{name}`: {p.text}" for name, p in PROPS.items()],
             "", "## Titles (`titles[]`)", "",
             f"Drawn by the Studio over the picture. Fonts: {_arg(commands, 'text.create', 'font')['description']}.",
             "Each fades in at `start` while rising a little and its letters drawing together.", "",

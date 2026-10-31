@@ -22,7 +22,7 @@ from pipeline.schemas import BrandProfile, Storyboard
 
 from . import grammar
 from .write import (DirectorError, _errors, _profile_text, balance, hero_problems, jump_cuts, light_problems,
-                    on_beat, problems, title_contrast_problems, title_problems)
+                    on_beat, problems, prop_problems, title_contrast_problems, title_problems)
 
 CHANGES = {"type": "object", "additionalProperties": True}
 
@@ -221,7 +221,8 @@ async def revise(sb: Storyboard, fix: str, profile: BrandProfile | None, *, stud
             if run and balanced:
                 run.event("balanced", round=round_, changes=balanced)
         found = must + light_problems(revised, profile) + jump_cuts(revised) + \
-            (await title_contrast_problems(studio, revised) + await hero_problems(studio, revised)
+            (await title_contrast_problems(studio, revised) + await hero_problems(studio, revised) +
+             await prop_problems(studio, revised)
              if studio and not must else [])
         if run:
             run.event("revision", round=round_, calls=[{"name": c["name"], "arguments": c["arguments"],

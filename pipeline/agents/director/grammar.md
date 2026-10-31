@@ -93,6 +93,39 @@ Presets: three_point, rim_dark (luxury, moody), high_key (clean, bright), top_so
 - `roughness` (0 .. 1, default 0.85): keep high (0.8+) under rim lights, or its top glares
 - `surface` (cream_marble | granite | terrazzo | dark_wood | light_wood | concrete | stone | sand | plaster | blue_linen | red_velvet): null: plain `color`. Or a material (see look.backdrop.surface); a low wide pedestal of one is a slab to stand the product on
 
+## Props (`look.props[]`)
+
+Objects set around the product, at their real sizes (a lemon is a lemon beside a 12 cm bottle), on the pedestal if one fits there whole, else on the floor just clear of it. They tell the product's story (citrus for a fresh scent, stone for skincare, a croissant for a coffee mug) and fill an empty set; one to three, of a piece with the brand's palette and mood, are plenty, and none is often right (a sleek tech or luxury product alone on its pedestal). Keep them beside or behind the product as the cameras see it, never between a camera and the product: a prop's angle at least 60° from the azimuths the shots film from. Big ones (vases, pots) go behind or well to the side. With no backdrop (a light environment as the background) there's no floor: props must fit on the pedestal beside the product (a wide, low one), or they'd float.
+
+- `prop` (rust_rock | slate | pale_stone | shell | succulent | lemon | lime | apple | pomegranate | kiwi | avocado | lychee | croissant | bottle_vase | block_vase | brass_vase | clay_pot | jug | wooden_bowl | wooden_plate | cutting_board): which prop (the prop library)
+- `angle` (-180 .. 180): where around the product, in degrees as the camera's azimuth: 0 in front (between it and a camera at azimuth 0), 90 its right, -90 its left, 180 behind
+- `gap` (0 .. 4, default 0.3): the space between it and the product, in product widths (0: touching)
+- `turn` (-360 .. 360, default 0.0): degrees it's turned about its vertical
+
+The library:
+
+- `rust_rock`: a rough rust-brown rock with pale patches, palm-sized
+- `slate`: a flat layered brown-grey slate, palm-sized
+- `pale_stone`: a smooth pale sandstone, flat-topped, two hands wide
+- `shell`: a spiky conch shell, cream with orange-brown stripes, palm-sized
+- `succulent`: a small spiky succulent in a white pot, 27 cm tall
+- `lemon`: a lemon, 9.5 cm
+- `lime`: a lime, 7.5 cm
+- `apple`: a glossy red apple, 10 cm
+- `pomegranate`: a red pomegranate, 11.5 cm
+- `kiwi`: a brown furry kiwi fruit, 9 cm
+- `avocado`: a dark pebbled avocado, 14 cm
+- `lychee`: a pink lychee, 5 cm
+- `croissant`: a golden croissant, 20 cm long: breakfast, coffee
+- `bottle_vase`: a white glazed bottle vase with a narrow neck, 40 cm tall
+- `block_vase`: a slim square-sided cream stone vase, 41 cm tall
+- `brass_vase`: a slender polished brass vase, 69 cm tall: luxury, behind the product
+- `clay_pot`: an empty weathered terracotta pot, 22 cm tall
+- `jug`: a white ceramic jug painted with pink tulips, 21 cm tall
+- `wooden_bowl`: a rustic hand-carved wooden bowl, 31 cm wide
+- `wooden_plate`: a flat pale carved wooden plate, 27 cm wide
+- `cutting_board`: a worn wooden cutting board, 45 cm long, lying flat
+
 ## Titles (`titles[]`)
 
 Drawn by the Studio over the picture. Fonts: serif (luxury), sans (clean), sans_bold, condensed (bold, sporty) or script (default sans).
