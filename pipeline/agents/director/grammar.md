@@ -138,6 +138,8 @@ Keys on any number field of an entity, eased between: for the lights (`light_*`)
   turn that settles facing front, or none) so the name lands on a still product.
 - Low camera (elevation 2-8) feels heroic and premium; high (20-40) feels calm and overseeing.
 - fill 0.45 wide, 0.6 medium, 0.9 close; a close-up (0.9+) is for the label or the cap.
+- A truck slides only as far as there's room beside the product, so it stays whole (a longer `travel` is cut
+  back): for a wide product (a shoe, headphones, a controller), frame the truck wide (fill 0.4-0.5) to give it room.
 - Depth of field (`aperture`) keeps the product sharp and softens what's behind it: use the style's on most
   shots, wider (2-2.8) on close-ups and the hero to set the product apart, 0 on a wide shot whose set should read.
 - Glass (a see-through product) shows what's behind it: on a dark set, light it strongly (`intensity` 1.5-2)

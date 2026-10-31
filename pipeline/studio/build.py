@@ -31,6 +31,28 @@ PAINT = ("A photograph of {place}, as the background of a premium product photo:
 PAINT_SIZE = "1536x1024"
 
 
+TRUCK_ROOM = 0.8   # a truck slides at most this share of the room beside the product (as the Studio's default)
+
+
+def trucks_in_frame(sb: Storyboard) -> Storyboard:
+    """The storyboard with every truck's slide kept within the room beside
+    the product, so it stays whole in the frame: a slide given in meters
+    can be far more than a long product leaves room for. The room is the
+    frame's width at the product (its height over the shot's fill, times
+    the frame's aspect) less the product's width."""
+    height, width = product_size(sb.product)
+    shots = []
+    for shot in sb.shots:
+        camera = shot.camera
+        if camera.move == "truck" and camera.travel is not None:
+            frame_width = height / max(camera.fill, 1e-3) * ASPECTS[sb.aspect]
+            room = TRUCK_ROOM * max(frame_width - width, 0.0)
+            if abs(camera.travel) > room:
+                camera = camera.model_copy(update={"travel": round(room if camera.travel > 0 else -room, 4)})
+        shots.append(shot.model_copy(update={"camera": camera}))
+    return sb.model_copy(update={"shots": shots})
+
+
 def product_size(product: Product) -> tuple[float, float]:
     """The product's height and width in meters, as the Studio builds it."""
     if product.model:

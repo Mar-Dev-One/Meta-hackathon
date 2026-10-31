@@ -24,7 +24,7 @@ from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
 from pipeline.schemas.storyboard import EndCard, Look, Shot, Strict, Title, Track
 from pipeline.studio import models
-from pipeline.studio.build import ASPECTS, build, motion_keys, product_size
+from pipeline.studio.build import ASPECTS, build, motion_keys, product_size, trucks_in_frame
 
 from . import grammar
 from .styles import STYLES
@@ -143,9 +143,10 @@ def _styles_text() -> str:
 
 
 def on_beat(sb: Storyboard) -> Storyboard:
-    """The storyboard cut on the music's beats (pipeline.encode.music),
-    within the craft rules' shot lengths."""
-    return cut_to_beat(sb, SHOT_MIN, SHOT_MAX, HERO_MIN)
+    """The storyboard as it will be shot: cut on the music's beats
+    (pipeline.encode.music), within the craft rules' shot lengths, and every
+    truck's slide kept within the frame (build.trucks_in_frame)."""
+    return trucks_in_frame(cut_to_beat(sb, SHOT_MIN, SHOT_MAX, HERO_MIN))
 
 
 def assemble(plan: Plan, profile: BrandProfile, brief: str, aspect: str) -> Storyboard:
