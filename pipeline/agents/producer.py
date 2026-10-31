@@ -199,12 +199,16 @@ async def with_model(studio, run: Run, profile: BrandProfile, model: Path | str,
     """The brand profile with `model` as its product (run's product.glb):
     stood and turned the way Muse Spark sees the product in `photo` (the
     stager; the photo's `aspect` if it can't answer), fitted to its real
-    height, and dressed in the analyst's materials part by part, in place of
-    the traced shape and the label (a label can't be wrapped onto any
-    shape). Saved again as brand_profile.json; the model's credit as
-    model_credit.json."""
+    height, in place of the traced shape and the label (a label can't be
+    wrapped onto any shape). It keeps its own textures and colours: one
+    brand colour over everything lost a shoe's sole, a watch's dial. A glass
+    product is the exception, dressed in the analyst's materials part by
+    part (models.dress: one clear shell holding the liquid's colour, which
+    the Studio can show). Saved again as brand_profile.json; the model's
+    credit as model_credit.json."""
     up, turn = await stage(studio, run, model, photo, profile.height, category=category, aspect=aspect)
-    parts = {m.name: m.surface() for m in profile.materials}
+    glass = any(m.transmission >= 0.5 for m in profile.materials)
+    parts = {m.name: m.surface() for m in profile.materials} if glass else None
     fitted = models.fit(model, run.path("product.glb"), height=profile.height, parts=parts, up=up, turn=turn)
     height, width = models.size(fitted)
     profile = profile.model_copy(update={"model": str(fitted), "profile_parts": None, "template": None, "label": None})

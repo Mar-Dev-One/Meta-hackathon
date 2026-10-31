@@ -130,6 +130,8 @@ def fit(source: Path | str, out: Path | str, height: float, aspect: float | None
     out = normalize(source, out, height, up=up, turn=turn)
     if parts:
         dress(out, out, parts)
+    if not (parts and any(p.get("transmission") for p in parts.values())):
+        opaque(out)   # not glass: solid, whatever its modeller set
     return out
 
 
@@ -223,10 +225,7 @@ def _dressed(mesh: trimesh.Trimesh, finish: dict, name: str) -> trimesh.visual.m
 def _add_extensions(glb: Path, finishes: dict[str, dict]) -> None:
     """Glass and clear coat into the GLB's materials, as the glTF extensions
     the Studio reads (KHR_materials_transmission, _volume, _ior, _clearcoat)."""
-    data = glb.read_bytes()
-    length = struct.unpack_from("<I", data, 12)[0]
-    gltf = json.loads(data[20:20 + length])
-    rest = data[20 + length:]
+    gltf, rest = _read_glb(glb)
     used = set(gltf.get("extensionsUsed", []))
     for material in gltf.get("materials", []):
         finish = finishes.get(material.get("name"), {})
@@ -247,6 +246,33 @@ def _add_extensions(glb: Path, finishes: dict[str, dict]) -> None:
             used.update(ext)
     if used:
         gltf["extensionsUsed"] = sorted(used)
+    _write_glb(glb, gltf, rest)
+
+
+def opaque(glb: Path | str) -> Path:
+    """Every material of the model solid: a modeller's "blend" (see-through,
+    for lace or mesh detail) makes a whole shoe a ghost in the Studio. For
+    a product that isn't glass."""
+    glb = Path(glb)
+    gltf, rest = _read_glb(glb)
+    for material in gltf.get("materials", []):
+        material["alphaMode"] = "OPAQUE"
+        material.pop("alphaCutoff", None)
+        factor = material.get("pbrMetallicRoughness", {}).get("baseColorFactor")
+        if factor and len(factor) == 4:
+            factor[3] = 1.0
+    _write_glb(glb, gltf, rest)
+    return glb
+
+
+def _read_glb(glb: Path) -> tuple[dict, bytes]:
+    """A GLB's JSON (its scene, materials ...) and the binary that follows."""
+    data = glb.read_bytes()
+    length = struct.unpack_from("<I", data, 12)[0]
+    return json.loads(data[20:20 + length]), data[20 + length:]
+
+
+def _write_glb(glb: Path, gltf: dict, rest: bytes) -> None:
     text = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
     text += b" " * (-len(text) % 4)
     body = struct.pack("<II", len(text), 0x4E4F534A) + text + rest

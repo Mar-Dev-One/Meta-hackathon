@@ -266,12 +266,13 @@ def cut_to_beat(sb: Storyboard, shortest: float, longest: float, hero_shortest: 
 
     for i, s in enumerate(starts[1:], 1):
         hero = i == len(starts) - 1
+        # The cut's window: the shot before it long enough, and room after it for every shot left (the hero last).
+        lo = new[-1] + shortest
+        hi = total - hero_shortest - shortest * (len(starts) - 1 - i)
         options = (nearest(s, bar) if hero else []) + nearest(s, beat)   # the hero: a bar line first
-        fits = [t for t in options if abs(t - s) <= beat and shortest <= t - new[-1] <= longest
-                and (not hero or total - t >= hero_shortest)]
-        # No beat fits: the cut stays where it was, unless the cut before moved so late that the shot between
-        # them would be too short; then just late enough.
-        new.append(fits[0] if fits else round(max(s, new[-1] + shortest), 3))
+        fits = [t for t in options if abs(t - s) <= beat and lo - 1e-6 <= t <= hi + 1e-6 and t - new[-1] <= longest]
+        # No beat fits: the cut stays where it was, moved only as far as its window needs.
+        new.append(fits[0] if fits else round(min(max(s, lo), hi) if lo <= hi else s, 3))
     moved = [n - o for n, o in zip(new, starts)]
 
     def shift(t: float) -> float:
