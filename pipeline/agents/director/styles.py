@@ -156,9 +156,9 @@ STYLES: dict[str, Style] = {s.name: s for s in [
     Style(
         name="city_nights", use_for="tech, sneakers, drinks, streetwear, nightlife: urban, bold, energetic, modern",
         look=Look(environment=Environment(hdri="city_night", show_skybox=True, sky_blur=0.35, ambient_strength=0.1,
-                                          bloom=0.12, tonemap="aces"),
+                                          exposure=0.5, bloom=0.12, tonemap="aces"),
                   backdrop=None, pedestal=Pedestal(width=0.32, height=0.04, surface="granite"),
-                  lighting=Lighting(preset="split", warmth=-0.3, intensity=1.5)),
+                  lighting=Lighting(preset="split", warmth=-0.3, intensity=1.8)),
         title=TitleStyle(font="sans_bold", color="#FFFFFF", size=0.08, tracking=0.12,
                          tagline_font="sans", tagline_color="#9FD3FF"),
         shot_seconds=(1.8, 2.5), moves=["truck", "orbit", "dolly", "static"], ease="out", aperture=2.8,

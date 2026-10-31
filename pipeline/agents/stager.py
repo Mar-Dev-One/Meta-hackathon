@@ -7,8 +7,9 @@ can't tell upright from upside down, or its front from its back.
 
 The model is rendered standing each of the six ways up (sheet A-F) and
 Spark, shown the photo, picks the one standing like the product; then that
-one is rendered from four sides (sheet A-D) and Spark picks the side the
-photo shows, which is turned to face the camera."""
+one is rendered from eight angles, every 45 degrees (sheet A-H), and Spark
+picks the one the photo is taken from (straight on or three-quarters),
+which is turned to face the camera."""
 
 from pathlib import Path
 from typing import Literal
@@ -26,8 +27,9 @@ from pipeline.studio import StudioError, build, models
 # model, the model's file not loading (trimesh), a file not written.
 FAILURES = (MetaError, StudioError, ValueError, OSError)
 
-LETTERS = "ABCDEF"
-SIDES = (0.0, 90.0, 180.0, 270.0)   # the camera's azimuths for the sides sheet
+LETTERS = "ABCDEFGH"
+SIDES = (0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0)   # the camera's azimuths for the sides sheet:
+                                                               # a three-quarter view has its match
 TILE = 320                          # each view's height in pixels
 ELEVATION = 12                      # a little above: the top and bottom read differently
 
@@ -55,21 +57,24 @@ async def _views(studio, model: Path, height: float, azimuths: tuple[float, ...]
     return [Path(f["path"]) for f in result["frames"]]
 
 
-def sheet(views: list[Path], out: Path) -> Path:
-    """The views side by side, lettered A, B, ... in their top-left corners."""
+def sheet(views: list[Path], out: Path, across: int | None = None) -> Path:
+    """The views in rows of `across` (default: one row), lettered A, B, ...
+    in their top-left corners."""
     tiles = [Image.open(v).convert("RGB") for v in views]
+    across = across or len(tiles)
+    rows = -(-len(tiles) // across)
     gap = 8
-    board = Image.new("RGB", (len(tiles) * (TILE + gap) - gap, TILE), (255, 255, 255))
+    board = Image.new("RGB", (across * (TILE + gap) - gap, rows * (TILE + gap) - gap), (255, 255, 255))
     draw = ImageDraw.Draw(board)
     try:
         font = ImageFont.truetype("arialbd.ttf", 40)
     except OSError:
         font = ImageFont.load_default()
     for i, tile in enumerate(tiles):
-        x = i * (TILE + gap)
-        board.paste(tile, (x, 0))
-        draw.rectangle((x, 0, x + 48, 52), fill=(0, 0, 0))
-        draw.text((x + 10, 4), LETTERS[i], fill=(255, 255, 255), font=font)
+        x, y = i % across * (TILE + gap), i // across * (TILE + gap)
+        board.paste(tile, (x, y))
+        draw.rectangle((x, y, x + 48, y + 52), fill=(0, 0, 0))
+        draw.text((x + 10, y + 4), LETTERS[i], fill=(255, 255, 255), font=font)
     out.parent.mkdir(parents=True, exist_ok=True)
     board.save(out)
     return out
@@ -86,9 +91,10 @@ async def ups_sheet(studio, source: Path, height: float, folder: Path) -> Path:
 
 
 async def sides_sheet(studio, source: Path, height: float, up: str, folder: Path) -> Path:
-    """The model standing `up`, seen from SIDES (front, its right, back, its left): A-D."""
+    """The model standing `up`, seen all the way round, every 45 degrees (A the front, C its right, E its
+    back, G its left): A-H, in two rows."""
     stood = models.normalize(source, folder / "stood.glb", height, up=up)
-    return sheet(await _views(studio, stood, height, SIDES, folder / "sides"), folder / "sides.png")
+    return sheet(await _views(studio, stood, height, SIDES, folder / "sides"), folder / "sides.png", across=4)
 
 
 # --- Spark's choice ------------------------------------------------------------------------------
@@ -100,7 +106,7 @@ class UpChoice(BaseModel):
 
 class SideChoice(BaseModel):
     reason: str = Field(description="in a sentence: what in the photo and the views decides it")
-    choice: Literal["A", "B", "C", "D"]
+    choice: Literal["A", "B", "C", "D", "E", "F", "G", "H"]
 
 
 SYSTEM = "You are a product photographer staging a 3D model of a product to match its photo exactly."
@@ -114,10 +120,11 @@ photo (a cap, a screen's camera notch, cameras, an opening, text reading the rig
 the view with the same thing at its top. Ignore which side faces the camera: that's chosen next."""
 
 SIDE_PROMPT = """The first image is a photo of the product ({category}). The second shows a 3D model of it,
-standing upright, from four sides (A-D).
+standing upright, from eight angles all the way round, 45 degrees apart (A-H).
 
-Which view shows the side of the product the photo shows (its front, back or a side: screen or
-cameras, label or plain back)? That side will face the camera in the ad."""
+Which view shows the product from the same angle as the photo: the same side towards the camera
+(front, back or a side: screen or cameras, label or plain back) and the same turn (straight on, or
+three-quarters, with the same part nearer the camera)? That view will be the ad's front."""
 
 
 def _ask(prompt: str, photo: Path, board: Path, schema: type[BaseModel]) -> BaseModel:

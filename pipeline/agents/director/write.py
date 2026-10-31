@@ -41,6 +41,8 @@ SEE_THROUGH = 0.5         # a material this transmissive is glass; this metallic
 SEPARATION = 15           # the product's and the backdrop's lightness (L*, 0-100) at least this far apart
 DARK_SET = 25             # a backdrop darker than this (L*) is a dark set
 GLASS_LIGHT = 1.5         # glass on a dark set needs the lights at least this strong (and a glow)
+DARK_PRODUCT = 35         # a product darker than this (L*) in front of an environment background ...
+DARK_LIGHT, DARK_EXPOSURE = 1.8, 0.8   # ... needs lights this strong and the environment this dim
 TITLE_CONTRAST = 3.0      # a title against what's behind it, as a contrast ratio
 CHECKS = Path("cache/title_check")   # where the frames behind the titles are rendered to be measured
 TITLE_BANDS = ((0.0, 0.27), (0.72, 1.0))  # where a title's centre may be (above or below the product)
@@ -244,6 +246,11 @@ def light_problems(sb: Storyboard, profile: BrandProfile | None) -> list[str]:
         out.append(f"the product ({tone}, lightness {_lightness(tone):.0f}) and the backdrop ({backdrop}, "
                    f"{_lightness(backdrop):.0f}) are too close in tone: it melts into the set. Make the backdrop "
                    f"clearly darker or lighter (at least {SEPARATION} apart, out of 100), or another surface")
+    if tone and env.show_skybox and _lightness(tone) < DARK_PRODUCT and \
+            (lighting.intensity < DARK_LIGHT or env.exposure > DARK_EXPOSURE):
+        out.append(f"the product is dark ({tone}, lightness {_lightness(tone):.0f}) and stands in front of a light "
+                   f"environment: backlit like that it reads as a silhouette. Light it strongly (look.lighting.intensity "
+                   f"at least {DARK_LIGHT:g}) and dim the background (environment.exposure at most {DARK_EXPOSURE:g})")
     if glass and backdrop and _lightness(backdrop) < DARK_SET and (lighting.intensity < GLASS_LIGHT or not lighting.glow):
         out.append(f"glass on a dark set reads black unless it's lit: set look.lighting.intensity to at least "
                    f"{GLASS_LIGHT:g} and give it a glow (2-3), or put a bright light environment behind it (backdrop "
