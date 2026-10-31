@@ -28,6 +28,7 @@ from pipeline.studio import StudioError, build, models
 FAILURES = (MetaError, StudioError, ValueError, OSError)
 
 LETTERS = "ABCDEFGH"
+UP_ANGLES = (0.0, 90.0)   # each way up seen from the front and from its side
 SIDES = (0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0)   # the camera's azimuths for the sides sheet:
                                                                # a three-quarter view has its match
 TILE = 320                          # each view's height in pixels
@@ -57,21 +58,22 @@ async def _views(studio, model: Path, height: float, azimuths: tuple[float, ...]
     return [Path(f["path"]) for f in result["frames"]]
 
 
-def sheet(views: list[Path], out: Path, across: int | None = None) -> Path:
-    """The views in rows of `across` (default: one row), lettered A, B, ...
-    in their top-left corners."""
-    tiles = [Image.open(v).convert("RGB") for v in views]
+def sheet(views: list[Path | Image.Image], out: Path, across: int | None = None) -> Path:
+    """The views (files or pictures, all one size) in rows of `across`
+    (default: one row), lettered A, B, ... in their top-left corners."""
+    tiles = [v if isinstance(v, Image.Image) else Image.open(v).convert("RGB") for v in views]
     across = across or len(tiles)
     rows = -(-len(tiles) // across)
     gap = 8
-    board = Image.new("RGB", (across * (TILE + gap) - gap, rows * (TILE + gap) - gap), (255, 255, 255))
+    w, h = tiles[0].size
+    board = Image.new("RGB", (across * (w + gap) - gap, rows * (h + gap) - gap), (255, 255, 255))
     draw = ImageDraw.Draw(board)
     try:
         font = ImageFont.truetype("arialbd.ttf", 40)
     except OSError:
         font = ImageFont.load_default()
     for i, tile in enumerate(tiles):
-        x, y = i % across * (TILE + gap), i // across * (TILE + gap)
+        x, y = i % across * (w + gap), i // across * (h + gap)
         board.paste(tile, (x, y))
         draw.rectangle((x, y, x + 48, y + 52), fill=(0, 0, 0))
         draw.text((x + 10, y + 4), LETTERS[i], fill=(255, 255, 255), font=font)
@@ -81,12 +83,18 @@ def sheet(views: list[Path], out: Path, across: int | None = None) -> Path:
 
 
 async def ups_sheet(studio, source: Path, height: float, folder: Path) -> Path:
-    """The model standing each of models.UPS ways up, from the front: A-F."""
+    """The model standing each of models.UPS ways up (A-F), each seen from the
+    front and, under it, from its side: what it stands on reads whichever
+    way it happens to face."""
     views = []
     for up in models.UPS:
         name = up.replace("+", "pos_").replace("-", "neg_")
         stood = models.normalize(source, folder / f"up_{name}.glb", height, up=up)
-        views += await _views(studio, stood, height, (0.0,), folder / f"up_{name}")
+        front, side = await _views(studio, stood, height, UP_ANGLES, folder / f"up_{name}")
+        pair = Image.new("RGB", (TILE, 2 * TILE), (255, 255, 255))
+        pair.paste(Image.open(front).convert("RGB"), (0, 0))
+        pair.paste(Image.open(side).convert("RGB"), (0, TILE))
+        views.append(pair)
     return sheet(views, folder / "ups.png")
 
 
@@ -112,12 +120,15 @@ class SideChoice(BaseModel):
 SYSTEM = "You are a product photographer staging a 3D model of a product to match its photo exactly."
 
 UP_PROMPT = """The first image is a photo of the product ({category}). The second shows a 3D model of it
-standing six different ways (A-F), each on a small grey stand, seen from the front.
+standing six different ways (A-F), each on a small grey stand: each column is one way, seen from the
+front (top) and from its side (bottom).
 
-Which view stands the model the way the product stands in the photo: upright, not upside down,
-not lying on its side or its back? Look at what's at the top and the bottom of the product in the
-photo (a cap, a screen's camera notch, cameras, an opening, text reading the right way up) and find
-the view with the same thing at its top. Ignore which side faces the camera: that's chosen next."""
+Which way stands the model as the product stands in the photo? Find what the product rests on in the
+photo (a shoe's sole, a bottle's or a mug's base, a phone's or a watch's lower edge) and what's at its
+top (a cap, an opening, a camera notch, a headband, text reading the right way up), and pick the column
+where the model rests on that same part with that same part on top: upright, not upside down, not lying
+on its side. The model may face any way in these views (the photo's side towards the camera is chosen
+next), so judge how it stands, not which side you see."""
 
 SIDE_PROMPT = """The first image is a photo of the product ({category}). The second shows a 3D model of it,
 standing upright, from eight angles all the way round, 45 degrees apart (A-H).

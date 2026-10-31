@@ -23,6 +23,7 @@ from pipeline.encode.music import cut_to_beat
 from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
 from pipeline.schemas.storyboard import EndCard, Look, Shot, Strict, Title, Track
+from pipeline.studio import models
 from pipeline.studio.build import ASPECTS, build, motion_keys, product_size
 
 from . import grammar
@@ -34,6 +35,10 @@ DEFAULT_SECONDS = 15.0
 SHOT_MIN, SHOT_MAX = 1.2, 5.0
 HERO_MIN = 2.5            # the last shot, seconds
 HERO_AZIMUTH = 25         # degrees from the front
+FLAT, FLAT_ELEVATION = 0.75, 30   # a model lower than this share of its narrower width (from above) lies flat:
+                                  # look down on it from at least this high
+THIN, THIN_AZIMUTH = 0.45, 30   # a model thinner than this share of its length (from above): keep cameras this
+                                # many degrees from looking along its length, or it's seen edge-on
 TITLE_DELAY = 0.4         # the name appears at least this long after the hero starts
 TITLE_SEEN = 0.8          # ... and at least this long before the end
 MAX_TITLES = 2            # titles stay on once in, so this many are on screen together
@@ -115,8 +120,15 @@ def _profile_text(p: BrandProfile | None) -> str:
     if p is None:
         return "(none: the storyboard's product, colours and style stand for the brand)"
     height, width = product_size(p.product())
+    edges = edge_on(p.product())
     facts = {"brand": p.brand, "product_name": p.product_name, "category": p.category,
              "size": f"{height * 100:.1f} cm tall, {width * 100:.1f} cm wide",
+             **({"flat": f"it lies low and flat: seen from near level it's only its edge, so look down on it, every "
+                         f"camera at least {FLAT_ELEVATION:g} degrees above it"} if lies_flat(p.product()) else {}),
+             **({"thin": f"seen from above it's much thinner one way than the other: from azimuth "
+                         f"{edges[0] % 360:.0f} or {edges[1] % 360:.0f} it's seen edge-on, so keep every camera at "
+                         f"least {THIN_AZIMUTH:g} degrees from those (azimuth, and an orbit's to_azimuth)"}
+                if edges else {}),
              "materials": [f"{m.name}: {m.looks_like} ({m.color})" for m in p.materials],
              "palette": [f"{s.hex} {s.role} {s.share:.0%}" for s in p.palette],
              "typography": p.typography.model_dump(), "mood": p.mood, "do_not": p.do_not,
@@ -143,6 +155,47 @@ def assemble(plan: Plan, profile: BrandProfile, brief: str, aspect: str) -> Stor
     return Storyboard.model_validate(data)
 
 
+def lies_flat(product) -> bool:
+    """Whether the product (a 3D model) lies low and flat (a controller on
+    its back, a watch laid down, a tablet): seen from near level it's only
+    its edge."""
+    if not product.model:
+        return False
+    across = models.footprint(product.model)[1]   # its narrower way from above: low against both ways is flat
+    return product_size(product)[0] < FLAT * across
+
+
+def _elevations(camera) -> list[float]:
+    """The heights a shot's camera passes through: its own, and a crane's start and end."""
+    if camera.move == "crane":
+        return [camera.from_elevation if camera.from_elevation is not None else camera.elevation - 15,
+                camera.to_elevation if camera.to_elevation is not None else camera.elevation + 25]
+    return [camera.elevation]
+
+
+def edge_on(product) -> list[float] | None:
+    """For a thin product (a 3D model much thinner one way than the other
+    seen from above: a watch, a phone, a controller, a shoe), the two
+    azimuths a camera sees it edge-on from (looking along its length); None
+    for one that reads from any side."""
+    if not product.model:
+        return None
+    length, thickness, azimuth = models.footprint(product.model)
+    return [azimuth, azimuth + 180] if thickness < THIN * length else None
+
+
+def _from_edge(azimuth: float, edges: list[float]) -> float:
+    """Degrees between a camera's azimuth and the nearest edge-on one."""
+    return min(abs((azimuth - e + 180) % 360 - 180) for e in edges)
+
+
+def _azimuths(camera) -> list[float]:
+    """The azimuths a shot's camera passes through: its own, and where an orbit ends."""
+    if camera.move == "orbit":
+        return [camera.azimuth, camera.to_azimuth if camera.to_azimuth is not None else camera.azimuth + 60]
+    return [camera.azimuth]
+
+
 def problems(sb: Storyboard, profile: BrandProfile | None, seconds: float) -> list[str]:
     """The craft rules in code: what's wrong with the storyboard, each said
     so it can be fixed."""
@@ -157,6 +210,21 @@ def problems(sb: Storyboard, profile: BrandProfile | None, seconds: float) -> li
     for a, b in zip(sb.shots, sb.shots[1:]):
         if a.camera.move == b.camera.move:
             out.append(f"shots {a.id} and {b.id} are both {a.camera.move}: consecutive shots move differently")
+
+    for shot in sb.shots if lies_flat(sb.product) else ():
+        low = [e for e in _elevations(shot.camera) if e < FLAT_ELEVATION]
+        if low:
+            out.append(f"shot {shot.id} puts the camera {low[0]:g} degrees above the product, which lies flat: from "
+                       f"that low it's seen edge-on. Keep every elevation (and a crane's from_ and to_elevation, which "
+                       f"are elevation - 15 and + 25 unless given) at least {FLAT_ELEVATION:g}, looking down on it")
+    edges = edge_on(sb.product)
+    for shot in sb.shots if edges else ():
+        near = [a for a in _azimuths(shot.camera) if _from_edge(a, edges) < THIN_AZIMUTH]
+        if near:
+            out.append(f"shot {shot.id} puts the camera at azimuth {near[0]:g}, which sees the thin product nearly "
+                       f"edge-on (it's edge-on from {edges[0] % 360:.0f} and {edges[1] % 360:.0f}): keep every azimuth, "
+                       f"and an orbit's to_azimuth (azimuth + 60 unless given), at least {THIN_AZIMUTH:g} degrees from "
+                       f"those")
 
     hero, hero_start = sb.shots[-1], sb.shot_starts()[-1]
     if hero.camera.move != "static" or abs(hero.camera.azimuth) > HERO_AZIMUTH or hero.duration < HERO_MIN:

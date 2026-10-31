@@ -44,6 +44,20 @@ def size(path: Path | str) -> tuple[float, float]:
     return float(hi[1] - lo[1]), float(max(hi[0] - lo[0], hi[2] - lo[2]))
 
 
+def footprint(path: Path | str) -> tuple[float, float, float]:
+    """The model seen from above, along its own axes (however it's turned):
+    its length along its longest horizontal axis, its thickness across it,
+    in meters, and the azimuth (degrees, the Studio's: 0 the front, 90 its
+    right) a camera looking along that axis stands at, where it's edge-on."""
+    points = np.concatenate([m.vertices[:, [0, 2]] for m in load(path).dump(concatenate=False)])
+    centred = points - points.mean(axis=0)
+    _, vectors = np.linalg.eigh(np.cov(centred.T))
+    long_axis = vectors[:, -1]                      # the direction it's longest in (x, z)
+    along, across = centred @ long_axis, centred @ vectors[:, 0]
+    azimuth = float(np.degrees(np.arctan2(long_axis[0], long_axis[1]))) % 180
+    return float(np.ptp(along)), float(np.ptp(across)), azimuth
+
+
 def normalize(source: Path | str, out: Path | str, height: float, up: str = "+y", turn: float = 0.0) -> Path:
     """`source` as a product: rotated so `up` ("+y", "+z", "-z", ...) points up
     and turned `turn` degrees about the vertical, centred over the origin,
