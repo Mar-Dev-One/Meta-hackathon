@@ -267,6 +267,38 @@ def light_problems(sb: Storyboard, profile: BrandProfile | None) -> list[str]:
     return out
 
 
+HERO_FIXES = {   # what to change when the critic's measurements of the hero find a problem, by its category
+    "brand": "the light around the product tints it: choose a light environment nearer its colours (a neutral "
+             "studio for a cool or dark product), light it more strongly with the lights (look.lighting.intensity), "
+             "or dim the environment (environment.exposure)",
+    "lighting": "light it so it reads: more light on it (look.lighting.intensity, or a preset that lights its front), "
+                "less when it's blown out, or a background that separates from it",
+    "product_visibility": "frame the hero so the product is whole and clearly seen",
+}
+
+
+async def hero_problems(studio, sb: Storyboard) -> list[str]:
+    """The hero shot measured as the critic measures every shot (pipeline.
+    agents.critic.measure), at planning time: the product's exact pixels
+    (rendered with it, alone and without it), then whether its colours are
+    the brand's, its outline separates from the background, its pixels
+    aren't crushed or blown. With the critic loop off, the critic's eye on
+    every ad still. Rules of taste."""
+    from pipeline.agents.critic.measure import Frame, _passes, flags_for, measure_frame, product_mask, \
+        storyboard_colours   # here: the critic's module imports this one's neighbours
+
+    width, height = 640, round(640 / ASPECTS[sb.aspect])
+    t = sb.shot_starts()[-1] + 0.5 * sb.shots[-1].duration
+    await build(studio, sb)
+    shown, paths, alone, empty = await _passes(studio, [t], width, height, CHECKS.resolve() / "hero", 16)
+    bounds = await studio.call("shot.bounds", entity="product", t=t, width=width, height=height)
+    frame = Frame(time=t, path=paths[0], bounds=bounds)
+    measure_frame(frame, shown[0], product_mask(alone[0], empty[0], bounds.get("box")), storyboard_colours(sb), {})
+    flags = flags_for(frame, is_last=True, fade_in=sb.look.lighting.fade_in or 0.0)
+    return [f"in the hero ({sb.shots[-1].id}), as rendered: {f.problem}. {HERO_FIXES.get(f.category, '')}".rstrip()
+            for f in flags if f.category in HERO_FIXES]
+
+
 async def title_contrast_problems(studio, sb: Storyboard) -> list[str]:
     """Titles hard to read against what's really behind them: the scene
     built and rendered at each title's start (it's still invisible then),
@@ -369,7 +401,8 @@ async def write(brief: str, profile: BrandProfile, *, studio=None, run=None, sec
         else:
             must = problems(sb, profile, seconds) + (await title_problems(studio, sb) if studio else [])
             found = must + light_problems(sb, profile) + \
-                (await title_contrast_problems(studio, sb) if studio and not must else [])
+                (await title_contrast_problems(studio, sb) + await hero_problems(studio, sb)
+                 if studio and not must else [])
         if run:
             run.event("draft", attempt=attempt, problems=found, cached=answer.cached)
         if not found or (attempt == tries and not must):
