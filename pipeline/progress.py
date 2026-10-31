@@ -25,6 +25,7 @@ TICK = 5.0                                   # seconds between progress events
 SPEEDS = Path("cache/render_speed.json")    # seconds a 1080p frame (16 samples) takes, per director
 SPEED = {"storyboard": 0.5, "live": 1.0}    # until one has been measured
 LEARN = 0.5                                  # how much a new measurement moves the stored speed
+OUTLIER = 3.0                                # a measurement this many times slower than the stored one is ignored
 
 
 def _speeds() -> dict:
@@ -45,6 +46,8 @@ def learn(seconds: float, frames: int, width: int, height: int, director: str) -
         return
     speeds = _speeds()
     measured = seconds / frames * (1920 * 1080) / (width * height)
+    if measured > OUTLIER * speeds.get(director, measured):
+        return   # not a render's speed: the machine slept, or the network dropped, while it ran
     speeds[director] = round((1 - LEARN) * speeds.get(director, measured) + LEARN * measured, 4)
     SPEEDS.parent.mkdir(parents=True, exist_ok=True)
     SPEEDS.write_text(json.dumps(speeds, indent=2), encoding="utf-8")

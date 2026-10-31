@@ -458,6 +458,7 @@ async def write(brief: str, profile: BrandProfile, *, studio=None, run=None, sec
                            styles=_styles_text(), grammar=grammar.load())
     schema = {**Plan.model_json_schema(), "title": "Plan"}
     feedback, found = "", []
+    valid = None   # the latest draft that broke only rules of taste: kept if a later one breaks a craft rule
     for attempt in range(1, tries + 1):
         answer = spark.ask(prompt + feedback, schema=schema, system=SYSTEM)
         sb, must = None, []
@@ -473,9 +474,12 @@ async def write(brief: str, profile: BrandProfile, *, studio=None, run=None, sec
                  if studio and not must else [])
         if run:
             run.event("draft", attempt=attempt, problems=found, cached=answer.cached)
-        if not found or (attempt == tries and not must):
+        if sb is not None and not must:
+            valid = (sb, found)
+        if not found or (attempt == tries and valid):
+            sb, found = (sb, found) if not found else valid
             if run:
-                if found:   # only rules of taste left on the last try: kept, with them said
+                if found:   # only rules of taste left: the latest such draft kept, with them said
                     run.event("draft_warnings", problems=found)
                 run.output("storyboard", run.save_json("storyboard.json", sb))
             return sb
