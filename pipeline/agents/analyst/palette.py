@@ -27,6 +27,8 @@ GREY = 8.0            # chroma under which a colour is a grey (its hue means not
 HUE = 30.0            # degrees of hue between two colour families
 TEXT = 25.0           # Lab distance the label's text needs from its paper
 MIN_SHARE = 0.03      # of its region: smaller clusters are noise or shading
+SHADOW = 0.35         # of a colour family's pixels: its darkest clusters up to this share are shade, not its colour
+HIGHLIGHT = 92.0      # L*: a near-white cluster this light is a specular highlight, not the material
 MIN_TEXT = 0.005      # of the label: thin lettering is only a little of it
 
 
@@ -110,9 +112,29 @@ def _hues(rgb: np.ndarray, k: int) -> list[tuple[np.ndarray, np.ndarray, float]]
     out = []
     for f in families:
         shares = np.array([c[2] for c in f])
-        out.append((np.average([c[0] for c in f], axis=0, weights=shares),
-                    np.average([c[1] for c in f], axis=0, weights=shares), float(shares.sum())))
+        lit = _lit(f)
+        weights = np.array([c[2] for c in lit])
+        out.append((np.average([c[0] for c in lit], axis=0, weights=weights),
+                    np.average([c[1] for c in lit], axis=0, weights=weights), float(shares.sum())))
     return sorted(out, key=lambda c: -c[2])
+
+
+def _lit(family: list) -> list:
+    """A family's clusters as the material's colour shows in light: without
+    its shadows (the darkest clusters, up to SHADOW of its pixels) and its
+    specular highlights (near-white), unless that would leave none; a
+    material's colour is how it looks lit, not its average with its shade."""
+    total = sum(c[2] for c in family)
+    ordered = sorted(family, key=lambda c: c[0][0])   # darkest first
+    dark, skip = 0.0, 0
+    for c in ordered[:-1]:   # shade is the darkest end only: stop at the first cluster too big to be it
+        if dark + c[2] > SHADOW * total:
+            break
+        dark += c[2]
+        skip += 1
+    kept = ordered[skip:]
+    shiny = [c for c in kept if c[0][0] > HIGHLIGHT and np.hypot(c[0][1], c[0][2]) < GREY]
+    return [c for c in kept if c not in shiny] or kept or family
 
 
 def palette(seg: Segmentation, k: int = 5) -> list[Swatch]:

@@ -26,6 +26,7 @@ SPEEDS = Path("cache/render_speed.json")    # seconds a 1080p frame (16 samples)
 SPEED = {"storyboard": 0.5, "live": 1.0}    # until one has been measured
 LEARN = 0.5                                  # how much a new measurement moves the stored speed
 OUTLIER = 3.0                                # a measurement this many times slower than the stored one is ignored
+OVERHEAD = 40.0                              # seconds around each render: the build, the music, the encoding
 
 
 def _speeds() -> dict:
@@ -36,12 +37,16 @@ def _speeds() -> dict:
 
 
 def render_seconds(frames: int, width: int, height: int, director: str) -> float:
-    """About how long a render of `frames` frames at width x height takes."""
-    return 15 + frames * _speeds().get(director, 1.0) * (width * height) / (1920 * 1080)
+    """About how long a render of `frames` frames at width x height takes,
+    with the build, music and encoding around it."""
+    return OVERHEAD + frames * _speeds().get(director, 1.0) * (width * height) / (1920 * 1080)
 
 
-def learn(seconds: float, frames: int, width: int, height: int, director: str) -> None:
-    """Remembers how fast a render went, for the next estimates."""
+def learn(seconds: float, frames: int, width: int, height: int, director: str, renders: int = 1) -> None:
+    """Remembers how fast `renders` renders went (`seconds` in all, their
+    build, music and encoding included: OVERHEAD each is taken off), for
+    the next estimates."""
+    seconds -= OVERHEAD * renders
     if frames <= 0 or seconds <= 0:
         return
     speeds = _speeds()

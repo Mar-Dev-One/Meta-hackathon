@@ -165,8 +165,19 @@ class Run:
 # --- Reading --------------------------------------------------------------------------------
 
 def events(root: Path | str) -> list[dict]:
+    """The run's events, in order; a line that isn't whole JSON (a log
+    written before writes were locked could have one) is skipped."""
     path = Path(root) / "log.jsonl"
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [entry for line in path.read_text(encoding="utf-8").splitlines() if (entry := parse_event(line))]
+
+
+def parse_event(line: str) -> dict | None:
+    """One log line as its event, or None if it's empty or not whole JSON."""
+    try:
+        entry = json.loads(line) if line.strip() else None
+    except json.JSONDecodeError:
+        return None
+    return entry if isinstance(entry, dict) and "kind" in entry else None
 
 
 def replay(root: Path | str, speed: float = 1.0) -> Iterator[dict]:

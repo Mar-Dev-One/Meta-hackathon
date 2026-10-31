@@ -126,6 +126,10 @@ Keys on any number field of an entity, eased between: for the lights (`light_*`)
 - Open strong: the product is on screen and readable within the first 2 seconds.
 - 3 to 6 shots for 15 seconds; no shot under 1.2 s or over 5 s (the style sets the pace).
 - Every shot moves differently from the one before (orbit, then dolly, then crane ...): cuts land on motion.
+- Every cut changes the picture clearly, not just the move: where a shot ends and the next begins, change the
+  side by 30 degrees or more, the height by 12 or more, or the size clearly (wide 0.4, medium 0.6, close 0.9),
+  or it's a jump cut that reads as a stutter. Vary the framings across the ad: wide, close, from the side, from
+  above, not one medium shot after another.
   Cuts fall on the music's beats by themselves (shot lengths are nudged a little to meet them).
 - Most shots come in on a straight cut. A `dip` (a brief fade through black) is a breath: use one or two in a
   slow, luxurious or calm ad, before the hero or where the film changes place, angle or time; none in a fast,

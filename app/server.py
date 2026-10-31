@@ -42,7 +42,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pipeline import catalog
 from pipeline.agents.producer import DIRECTORS, FORMATS, make_ad
 from pipeline.catalog.common import Candidate
-from pipeline.runs import RUNS, Run, all_runs, events
+from pipeline.runs import RUNS, Run, all_runs, events, parse_event
 from pipeline.studio import Studio
 
 PAGE = Path(__file__).with_name("static") / "index.html"
@@ -243,10 +243,10 @@ async def _stream(root: Path, speed: float, start: int):
         # Only whole lines: the worker may be halfway through writing the last one.
         lines = text[:text.rfind("\n") + 1].splitlines()
         for line in lines[sent:]:
-            if not line.strip():
+            entry = parse_event(line)
+            if entry is None:   # empty, or a broken line in an old log: skipped, not the whole stream
                 sent += 1
                 continue
-            entry = json.loads(line)
             if speed > 0:
                 first_t = entry["t"] if first_t is None else first_t
                 wait = (entry["t"] - first_t) / speed - (time.monotonic() - began)

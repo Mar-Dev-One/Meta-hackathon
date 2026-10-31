@@ -112,7 +112,7 @@ async def _make(studio, run: Run, progress: Progress, brief: str, photo: Path | 
     progress.start("render", label=f"Rendering {' and '.join(aspects)}")
     began = time.monotonic()
     videos = await final_cut(studio, run, sb, Path(photo).stem, aspects=aspects, short=short)
-    learn(time.monotonic() - began, frames * len(aspects), width, height, director)
+    learn(time.monotonic() - began, frames * len(aspects), width, height, director, renders=len(aspects))
     return videos
 
 

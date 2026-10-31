@@ -11,6 +11,7 @@ Whatever is wrong goes back to Spark with its answer, up to `tries` times.
 """
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Literal
@@ -50,6 +51,13 @@ DARK_PRODUCT = 35         # a product darker than this (L*) in front of an envir
 DARK_LIGHT, DARK_EXPOSURE = 1.8, 0.8   # ... needs lights this strong and the environment this dim
 TITLE_CONTRAST = 3.0      # a title against what's behind it, as a contrast ratio
 CHECKS = Path("cache/title_check")   # where the frames behind the titles are rendered to be measured
+# A cut is a jump cut when the framing changes less than all of these: size (log of the fill ratio, ~a third),
+# side (degrees of azimuth) and height (degrees of elevation).
+JUMP_SIZE, JUMP_TURN, JUMP_HEIGHT = 0.29, 30.0, 12.0
+# A light environment behind the product (balance): at most this much lighter than the product, and this light
+# (L*, 0-100); brought down this many times at most, each time by at most this factor of luminance.
+BACKGROUND_OVER, BACKGROUND_MAX = 5.0, 75.0
+BALANCE_TRIES, BALANCE_STEP = 3, 0.35
 TITLE_BANDS = ((0.0, 0.27), (0.72, 1.0))  # where a title's centre may be (above or below the product)
 TITLE_CLEAR = 0.02        # of the frame's height between a title's box and the product (centred, `fill` tall)
 PEDESTAL_WIDTH = (1.2, 7.0)   # a pedestal's width, in product widths: wider than it, not a dance floor
@@ -288,6 +296,47 @@ def _contrast(a: str, b: str) -> float:
     return (hi + 0.05) / (lo + 0.05)
 
 
+def _framing(camera, end: bool) -> tuple[float, float, float]:
+    """(fill, azimuth, elevation) a shot's camera starts (end=False) or ends
+    on, with camera.move's defaults: a dolly from fill * 0.6 to fill, an
+    orbit to azimuth + 60, a crane from elevation - 15 to + 25, a zoom from
+    a lens 1.5 times wider (the product that much smaller)."""
+    fill, azimuth, elevation = camera.fill, camera.azimuth, camera.elevation
+    if camera.move == "dolly":
+        fill = (camera.to_fill if camera.to_fill is not None else fill) if end else \
+            (camera.from_fill if camera.from_fill is not None else 0.6 * fill)
+    elif camera.move == "orbit" and end:
+        azimuth = camera.to_azimuth if camera.to_azimuth is not None else azimuth + 60
+    elif camera.move == "crane":
+        elevation = (camera.to_elevation if camera.to_elevation is not None else elevation + 25) if end else \
+            (camera.from_elevation if camera.from_elevation is not None else elevation - 15)
+    elif camera.move == "zoom" and not end:
+        wide = camera.from_fov if camera.from_fov is not None else 1.5 * camera.fov_degrees
+        to = camera.to_fov if camera.to_fov is not None else camera.fov_degrees
+        fill *= math.tan(math.radians(to) / 2) / math.tan(math.radians(wide) / 2)
+    return fill, azimuth, elevation
+
+
+def jump_cuts(sb: Storyboard) -> list[str]:
+    """Cuts between near-identical framings (the "30 degree rule"): the
+    shot before ends and the one after starts at much the same size, side
+    and height, so the cut reads as a stutter, not a new angle. A dip to
+    black between them is a pause, not a cut. Rules of taste."""
+    out = []
+    for a, b in zip(sb.shots, sb.shots[1:]):
+        if b.transition == "dip":
+            continue
+        (fa, aa, ea), (fb, ab, eb) = _framing(a.camera, end=True), _framing(b.camera, end=False)
+        size = abs(math.log(max(fb, 1e-3) / max(fa, 1e-3)))
+        turn = abs((ab - aa + 180) % 360 - 180)
+        if size < JUMP_SIZE and turn < JUMP_TURN and abs(eb - ea) < JUMP_HEIGHT:
+            out.append(f"the cut from {a.id} to {b.id} is a jump cut: {a.id} ends and {b.id} starts at nearly the "
+                       f"same framing (fill {fa:.2g} and {fb:.2g}, azimuth {aa:g} and {ab:g}, elevation {ea:g} and "
+                       f"{eb:g}). Change the angle by at least {JUMP_TURN:g} degrees, the height by {JUMP_HEIGHT:g}, "
+                       f"or the size clearly (fill a third bigger or smaller)")
+    return out
+
+
 def _set_colour(part) -> str:
     """A backdrop's or pedestal's colour as seen: its surface's, or its own."""
     return surface_colour(part.surface) if part.surface else part.color
@@ -353,8 +402,57 @@ async def hero_problems(studio, sb: Storyboard) -> list[str]:
     the brand's, its outline separates from the background, its pixels
     aren't crushed or blown. With the critic loop off, the critic's eye on
     every ad still. Rules of taste."""
-    from pipeline.agents.critic.measure import Frame, _passes, flags_for, measure_frame, product_mask, \
-        storyboard_colours   # here: the critic's module imports this one's neighbours
+    from pipeline.agents.critic.measure import flags_for   # here: the critic's module imports this one's neighbours
+
+    frame = await measure_hero(studio, sb)
+    flags = flags_for(frame, is_last=True, fade_in=sb.look.lighting.fade_in or 0.0)
+    return [f"in the hero ({sb.shots[-1].id}), as rendered: {f.problem}. {HERO_FIXES.get(f.category, '')}".rstrip()
+            for f in flags if f.category in HERO_FIXES]
+
+
+def _luminance_of(lightness: float) -> float:
+    """Relative luminance (0-1) from lightness L* (0-100)."""
+    return ((lightness + 16) / 116) ** 3 if lightness > 8 else lightness / 903.3
+
+
+async def balance(studio, sb: Storyboard) -> tuple[Storyboard, list[str]]:
+    """The storyboard with a bright background brought down behind the
+    product: when the light environment (or a painting) behind the hero is
+    much lighter than the product, the whole exposure is lowered and the
+    light on the product (the lights, and the environment's light on the
+    scene, ambient_strength) raised by the same factor, so the background
+    darkens and the product keeps its light. Measured on the hero (measure_hero), a few
+    times at most. Only for an environment shown as the background: a
+    backdrop's colour is the director's choice. With what was changed."""
+    if not sb.look.environment.show_skybox:
+        return sb, []
+    notes = []
+    for _ in range(BALANCE_TRIES):
+        frame = await measure_hero(studio, sb)
+        target = min(frame.product_l + BACKGROUND_OVER, BACKGROUND_MAX)
+        if frame.background_l <= target + 2:
+            break
+        k = max(_luminance_of(target) / _luminance_of(frame.background_l), BALANCE_STEP)
+        env, lighting = sb.look.environment, sb.look.lighting
+        exposure = round(max(env.exposure * k, 0.15), 3)
+        up = env.exposure / exposure   # what the product's light is raised by, to keep it as it was
+        intensity = round(min(lighting.intensity * up, 20.0), 3)
+        ambient = round(min(env.ambient_strength * up, 4.0), 3)
+        notes.append(f"background {frame.background_l:.0f} behind a product of {frame.product_l:.0f}: exposure "
+                     f"{env.exposure:g} -> {exposure:g}, lights {lighting.intensity:g} -> {intensity:g}, "
+                     f"environment light {env.ambient_strength:g} -> {ambient:g}")
+        look = sb.look.model_copy(update={
+            "environment": env.model_copy(update={"exposure": exposure, "ambient_strength": ambient}),
+            "lighting": lighting.model_copy(update={"intensity": intensity})})
+        sb = sb.model_copy(update={"look": look})
+    return sb, notes
+
+
+async def measure_hero(studio, sb: Storyboard):
+    """The hero shot's middle frame, built and measured as the critic
+    measures (critic.measure.Frame): the product's exact pixels, its
+    lightness and the background's around it, its outline, its colours."""
+    from pipeline.agents.critic.measure import Frame, _passes, measure_frame, product_mask, storyboard_colours
 
     width, height = 640, round(640 / ASPECTS[sb.aspect])
     t = sb.shot_starts()[-1] + 0.5 * sb.shots[-1].duration
@@ -363,9 +461,7 @@ async def hero_problems(studio, sb: Storyboard) -> list[str]:
     bounds = await studio.call("shot.bounds", entity="product", t=t, width=width, height=height)
     frame = Frame(time=t, path=paths[0], bounds=bounds)
     measure_frame(frame, shown[0], product_mask(alone[0], empty[0], bounds.get("box")), storyboard_colours(sb), {})
-    flags = flags_for(frame, is_last=True, fade_in=sb.look.lighting.fade_in or 0.0)
-    return [f"in the hero ({sb.shots[-1].id}), as rendered: {f.problem}. {HERO_FIXES.get(f.category, '')}".rstrip()
-            for f in flags if f.category in HERO_FIXES]
+    return frame
 
 
 async def title_contrast_problems(studio, sb: Storyboard) -> list[str]:
@@ -470,7 +566,11 @@ async def write(brief: str, profile: BrandProfile, *, studio=None, run=None, sec
             found = must = _errors(e)
         else:
             must = problems(sb, profile, seconds) + (await title_problems(studio, sb) if studio else [])
-            found = must + light_problems(sb, profile) + \
+            if studio and not must:   # a bright background brought down first: the titles are judged against it
+                sb, balanced = await balance(studio, sb)
+                if run and balanced:
+                    run.event("balanced", attempt=attempt, changes=balanced)
+            found = must + light_problems(sb, profile) + jump_cuts(sb) + \
                 (await title_contrast_problems(studio, sb) + await hero_problems(studio, sb)
                  if studio and not must else [])
         if run:

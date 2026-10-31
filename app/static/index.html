@@ -282,7 +282,7 @@ function open(id, speed = Number($("speed").value)) {
     "preview", "critique", "ad_critique", "second_opinion", "round", "revision", "revised", "revision_failed", "refined",
     "render", "rendered", "music", "finished", "failed", "resumed", "critique_draft", "ad_critique_draft", "resumed_rounds",
     "scouted", "model_pick", "scout_failed", "model_download", "staged", "model_fitted",
-    "tool", "directed", "live_review", "render_retry", "unfinished", "progress"];
+    "tool", "directed", "live_review", "render_retry", "unfinished", "progress", "balanced", "draft_warnings"];
   for (const k of kinds) source.addEventListener(k, (m) => handle(JSON.parse(m.data)));
   source.onerror = () => { if (source.readyState === EventSource.CLOSED) loadRuns(); };
 }
@@ -385,6 +385,8 @@ const DETAILS = {
   live_review: (e) => `round ${e.round}: ${e.passed ? "pass" : "fail"} ${e.scores ? low(e.scores) : ""}; ${(e.issues || []).join(" · ")}`,
   render_retry: (e) => `${e.aspect}: ${e.error}; rendering again in a new Studio`,
   unfinished: (e) => `${e.session}: ran out of turns before finish; the film is kept as it is, its cut read from its camera moves`,
+  balanced: (e) => `the background brought down behind the product: ${(e.changes || []).join("; ")}`,
+  draft_warnings: (e) => `kept with ${(e.problems || []).length} warning(s): ${(e.problems || []).map((p) => p.slice(0, 80)).join(" · ")}`,
   scouted: (e) => e.round ? `round: traced from the photo (${e.reason})` : `not round: searching ${(e.queries || []).join(", ")} (${e.reason})`,
   model_pick: (e) => e.name ? `${e.name} from ${e.source}: ${e.reason}` : `none fits, traced from the photo: ${e.reason}`,
   scout_failed: (e) => `${e.error}; traced from the photo`, model_download: (e) => `${e.name} from ${e.source}`,
