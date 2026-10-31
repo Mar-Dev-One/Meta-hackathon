@@ -53,8 +53,11 @@ SETTINGS = {
 
 
 def mood_of(sb: Storyboard) -> str:
-    """The mood whose names and words come up most in the storyboard's style
-    (and title): "calm" when none do."""
+    """The storyboard's music's mood: the director's choice, or (a storyboard
+    without one) the mood whose names and words come up most in its style
+    and title, "calm" when none do."""
+    if sb.music:
+        return sb.music.mood
     text = f"{sb.style} {sb.title}".lower()
     found = {mood: sum(word in text for word in words) for mood, words in MOODS.items()}
     best = max(found, key=found.get)
@@ -248,11 +251,20 @@ def master(stereo: np.ndarray) -> np.ndarray:
 # --- The bed ------------------------------------------------------------------------------
 
 
-def compose(mood: str, seconds: float, hero: float) -> np.ndarray:
+def tempo_of(sb: Storyboard) -> tuple[str, int, int]:
+    """The storyboard's music: (mood, bpm, key), the director's or the mood's own."""
+    if sb.music:
+        return sb.music.mood, sb.music.bpm, sb.music.key
+    mood = mood_of(sb)
+    return mood, SETTINGS[mood]["bpm"], 0
+
+
+def compose(mood: str, seconds: float, hero: float, bpm: int | None = None, key: int = 0) -> np.ndarray:
     """The music for an ad of `seconds`, its hero shot starting at `hero`
-    seconds: stereo float samples (n x 2), peaking at -3 dB."""
-    s = SETTINGS[mood]
-    beat = 60.0 / s["bpm"]
+    seconds, at `bpm` (the mood's own if None), `key` semitones from the
+    mood's home key: stereo float samples (n x 2), at LOUDNESS."""
+    s = dict(SETTINGS[mood], chords=[[n + key for n in c] for c in SETTINGS[mood]["chords"]])
+    beat = 60.0 / (bpm or s["bpm"])
     bar = 4 * beat
     total = seconds + 1.0   # a tail, cut by the fade
     track = np.zeros(int(total * RATE))
@@ -334,10 +346,11 @@ def cut_to_beat(sb: Storyboard, shortest: float, longest: float, hero_shortest: 
     `hero_shortest`). What happens inside a shot (titles, light keys) moves
     with it. Unchanged when the music is a track from Assets/music: its
     beats aren't known."""
-    mood = mood or mood_of(sb)
+    chosen, bpm, _ = tempo_of(sb)
+    mood = mood or chosen
     if track_for(mood):
         return sb
-    beat = 60.0 / SETTINGS[mood]["bpm"]
+    beat = 60.0 / (bpm if mood == chosen else SETTINGS[mood]["bpm"])
     bar = 4 * beat
     starts, total = sb.shot_starts(), sb.duration
     new = [0.0]
@@ -384,11 +397,14 @@ def track_for(mood: str) -> Path | None:
 def music_for(sb: Storyboard, out: Path, mood: str | None = None) -> Path:
     """The storyboard's music as a WAV at `out`, as long as the ad (its end
     card too): a track from Assets/music when there's one for its mood, else
-    synthesized."""
-    return music(mood or mood_of(sb), sb.length, sb.shot_starts()[-1], out)
+    synthesized, at the storyboard's tempo and key."""
+    chosen, bpm, key = tempo_of(sb)
+    if mood and mood != chosen:
+        bpm, key = None, 0
+    return music(mood or chosen, sb.length, sb.shot_starts()[-1], out, bpm=bpm, key=key)
 
 
-def music(mood: str, seconds: float, hero: float, out: Path) -> Path:
+def music(mood: str, seconds: float, hero: float, out: Path, bpm: int | None = None, key: int = 0) -> Path:
     """Music in `mood` as a WAV at `out`, `seconds` long, lifting at `hero`
     (the last shot's start): a track from Assets/music when there's one for
     the mood, else synthesized."""
@@ -397,4 +413,4 @@ def music(mood: str, seconds: float, hero: float, out: Path) -> Path:
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(track), "-t", f"{seconds:.3f}",
                         "-ar", str(RATE), "-ac", "2", str(out)], check=True)
         return out
-    return write_wav(compose(mood, seconds, hero), out)
+    return write_wav(compose(mood, seconds, hero, bpm, key), out)

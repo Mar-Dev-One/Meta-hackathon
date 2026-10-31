@@ -8,11 +8,11 @@
 
 from .brand import BrandProfile, PartMaterial, Swatch, Typography
 from .critique import AdCritique, AdIssue, AdScores, Critique, Issue, Scores
-from .storyboard import (Backdrop, CameraMove, Environment, Key, Label, Lighting, Look, PartLook, Pedestal, Product,
-                         ProductMotion, ProfilePart, Shot, Storyboard, Surface, Title, Track)
+from .storyboard import (Backdrop, CameraMove, Environment, Key, Label, Lighting, Look, Music, PartLook, Pedestal,
+                         Product, ProductMotion, ProfilePart, Shot, Storyboard, Surface, Title, Track)
 
 __all__ = [
-    "AdCritique", "AdIssue", "AdScores", "Backdrop", "BrandProfile", "CameraMove", "Critique", "Environment", "Issue", "Key", "Label", "Lighting", "Look",
+    "AdCritique", "AdIssue", "AdScores", "Backdrop", "BrandProfile", "CameraMove", "Critique", "Environment", "Issue", "Key", "Label", "Lighting", "Look", "Music",
     "PartLook", "PartMaterial", "Pedestal", "Product", "ProductMotion", "ProfilePart", "Scores", "Shot", "Storyboard", "Surface",
     "Swatch", "Title", "Track", "Typography",
 ]

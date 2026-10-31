@@ -117,6 +117,14 @@ A still the film dissolves into after the last shot: the product as photographed
 - `background`: the card's colour: from the brand's palette, calm and solid
 - `font` (serif | sans | sans_bold | condensed | script): the name's font, as the titles'
 
+## Music (`music`)
+
+Synthesized for the ad, swelling into the hero shot (the last) with a hit on its first beat. The cuts are moved onto its beats (each within a beat of where you put it, the hero's onto a bar line, four beats, when one is that close), so its tempo is the film's pace: a slow tempo for long, unhurried shots, a fast one for quick cutting. Fit it to the brief and the brand, not only the style.
+
+- `mood` (dark | calm | energetic | warm): dark: slow minor pads over a sub drone, a heartbeat pulse; calm: soft major pads and a plucked arpeggio; energetic: four on the floor, claps, a pumping bass and chord stabs; warm: electric-piano chords with tremolo, a soft shaker
+- `bpm`: its tempo in beats per minute, within the mood's range: dark 60-90, calm 70-110, energetic 100-140, warm 70-105; a beat lasts 60/bpm s, and the cuts land on beats
+- `key` (-5 .. 6, default 0): semitones up (+) or down (-) from the mood's home key: lower is deeper and heavier, higher brighter and lighter
+
 ## Other animation (`tracks[]`)
 
 Keys on any number field of an entity, eased between: for the lights (`light_*`), e.g. one rising or dimming at a cut. For the product moving, use the shots' `motion`, not a track.

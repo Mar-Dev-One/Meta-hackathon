@@ -379,7 +379,7 @@ const DETAILS = {
   ad_critique: (e) => `whole ad r${e.iteration} ${e.passed ? "pass" : "fail"}`,
   round: (e) => `round ${e.index}: ${e.passed ? "passed" : "not yet"}`,
   revision: (e) => e.summary, render: (e) => `${e.frames} frames ${e.width}×${e.height}`, rendered: (e) => `${e.seconds} s`,
-  music: (e) => e.mood, finished: (e) => `${e.status}, ${Math.round(e.seconds)} s`, failed: (e) => e.error,
+  music: (e) => e.bpm ? `${e.mood}, ${e.bpm} bpm${e.key ? `, key ${e.key > 0 ? "+" : ""}${e.key}` : ""}` : e.mood, finished: (e) => `${e.status}, ${Math.round(e.seconds)} s`, failed: (e) => e.error,
   second_opinion: (e) => `${e.shot}: ${e.first?.low} then ${e.second?.low}, kept ${e.kept}`,
   tool: (e) => `${e.session}: ${e.command}${e.error ? "  ✗ " + e.error : ""}`,
   directed: (e) => `${e.session}: ${e.shots} shots, ${e.duration} s, mood ${e.mood}, ${e.calls} commands. ${e.summary}`,

@@ -276,6 +276,30 @@ class EndCard(Strict):
     font: Font = Field(description="the name's font, as the titles'")
 
 
+# The music's moods (pipeline.encode.music) and the tempos each can take, in beats per minute.
+TEMPOS = {"dark": (60, 90), "calm": (70, 110), "energetic": (100, 140), "warm": (70, 105)}
+
+
+class Music(Strict):
+    """The ad's music, synthesized for it: a mood, its tempo and its key. The
+    cuts land on its beats, so the tempo is the cutting pace too."""
+    mood: Literal[tuple(TEMPOS)] = Field(description="dark: slow minor pads over a sub drone, a heartbeat pulse; calm: "
+                                                     "soft major pads and a plucked arpeggio; energetic: four on the "
+                                                     "floor, claps, a pumping bass and chord stabs; warm: electric-"
+                                                     "piano chords with tremolo, a soft shaker")
+    bpm: int = Field(description="its tempo in beats per minute, within the mood's range: dark 60-90, calm 70-110, "
+                                 "energetic 100-140, warm 70-105; a beat lasts 60/bpm s, and the cuts land on beats")
+    key: int = Field(0, ge=-5, le=6, description="semitones up (+) or down (-) from the mood's home key: lower is "
+                                                 "deeper and heavier, higher brighter and lighter")
+
+    @model_validator(mode="after")
+    def _tempo_fits(self):
+        lo, hi = TEMPOS[self.mood]
+        if not lo <= self.bpm <= hi:
+            raise ValueError(f"bpm {self.bpm} is outside {self.mood}'s range, {lo}-{hi}")
+        return self
+
+
 # --- The storyboard -------------------------------------------------------------------------------
 
 class Storyboard(Strict):
@@ -290,6 +314,7 @@ class Storyboard(Strict):
     titles: list[Title] = Field(default_factory=list, max_length=6)
     tracks: list[Track] = Field(default_factory=list)
     end_card: EndCard | None = None
+    music: Music | None = None
     packshot: str | None = Field(None, description="the product cut out of its photo, for the end card (from the "
                                                    "brand profile)")
 

@@ -23,7 +23,7 @@ from pipeline.catalog.sets import surface_colour
 from pipeline.encode.music import cut_to_beat
 from pipeline.meta import spark
 from pipeline.schemas import BrandProfile, Storyboard
-from pipeline.schemas.storyboard import EndCard, Look, Shot, Strict, Title, Track
+from pipeline.schemas.storyboard import EndCard, Look, Music, Shot, Strict, Title, Track
 from pipeline.studio import models
 from pipeline.studio.build import ASPECTS, build, motion_keys, product_size, trucks_in_frame
 
@@ -76,6 +76,7 @@ class Plan(Strict):
     titles: list[Title] = Field(max_length=MAX_TITLES)
     tracks: list[Track] = Field(default_factory=list, description="other animation, e.g. a light rising at a cut")
     end_card: EndCard | None = Field(None, description="the still the ad ends on, after the last shot; null: none")
+    music: Music = Field(description="the ad's music: its mood, tempo and key")
 
 
 SYSTEM = ("You are the director of a studio that makes short 3D product adverts. You plan an ad as shots for a "
@@ -107,7 +108,7 @@ recognisable through its name, its type and its palette's accents.
 # Your answer
 
 A Plan: a working title, the style you start from, the look (set, light, environment), the shots in
-order (their durations adding up to {seconds:g} s), the titles and any extra animation."""
+order (their durations adding up to {seconds:g} s), the titles, any extra animation and the music."""
 
 
 def seconds_in(brief: str) -> float | None:

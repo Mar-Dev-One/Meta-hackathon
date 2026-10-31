@@ -18,7 +18,7 @@ from pathlib import Path
 
 from pipeline.encode import finish
 from pipeline.encode.endcard import card
-from pipeline.encode.music import mood_of, music_for
+from pipeline.encode.music import music_for, tempo_of
 from pipeline.schemas import Storyboard
 
 from .build import build
@@ -72,7 +72,8 @@ async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samp
     sound = None
     if music:
         sound = music_for(sb, run.path("final", "music.wav"))
-        run.event("music", mood=mood_of(sb), file=str(sound.relative_to(run.root)))
+        mood, bpm, key = tempo_of(sb)
+        run.event("music", mood=mood, bpm=bpm, key=key, file=str(sound.relative_to(run.root)))
     dip_at = [start for start, shot in zip(sb.shot_starts(), sb.shots) if shot.transition == "dip" and start > 0]
     end_card = card(sb.end_card, sb.packshot, width, height, run.path("final", f"{name}_card.png")) \
         if sb.end_card else None

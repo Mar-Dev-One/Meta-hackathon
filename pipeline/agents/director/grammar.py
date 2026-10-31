@@ -15,7 +15,7 @@ from pathlib import Path
 from annotated_types import Ge, Gt, Le, Lt
 from pydantic import BaseModel
 
-from pipeline.schemas.storyboard import (Backdrop, CameraMove, EndCard, Environment, Lighting, Look, Pedestal,
+from pipeline.schemas.storyboard import (Backdrop, CameraMove, EndCard, Environment, Lighting, Look, Music, Pedestal,
                                          ProductMotion, Shot, Title)
 
 from .styles import STYLES
@@ -214,6 +214,12 @@ def write(commands: dict) -> str:
             "short line under that, on a plain colour (text light or dark to suit). It counts in the ad's length: "
             "the shots and the card together make it.", "",
             *_fields(EndCard),
+            "", "## Music (`music`)", "",
+            "Synthesized for the ad, swelling into the hero shot (the last) with a hit on its first beat. The cuts "
+            "are moved onto its beats (each within a beat of where you put it, the hero's onto a bar line, four "
+            "beats, when one is that close), so its tempo is the film's pace: a slow tempo for long, unhurried "
+            "shots, a fast one for quick cutting. Fit it to the brief and the brand, not only the style.", "",
+            *_fields(Music),
             "", "## Other animation (`tracks[]`)", "",
             "Keys on any number field of an entity, eased between: for the lights (`light_*`), e.g. one rising or "
             "dimming at a cut. For the product moving, use the shots' `motion`, not a track.",
