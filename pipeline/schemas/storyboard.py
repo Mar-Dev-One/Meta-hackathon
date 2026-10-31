@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from pipeline.catalog.props import PROPS
 from pipeline.catalog.sets import LIGHTS, SURFACES
 
 HEX = r"^#[0-9A-Fa-f]{6}$"
@@ -85,6 +86,18 @@ class Lighting(Strict):
     glow_color: str | None = Field(None, pattern=HEX, description="the glow's colour (default warm)")
 
 
+class PropPlace(Strict):
+    """An object from the prop library set beside the product, at its real
+    size, on the pedestal if it fits there whole, else on the floor."""
+    prop: Literal[tuple(PROPS)] = Field(description="which prop (the prop library)")
+    angle: float = Field(ge=-180, le=180, description="where around the product, in degrees as the camera's azimuth: "
+                                                      "0 in front (between it and a camera at azimuth 0), 90 its "
+                                                      "right, -90 its left, 180 behind")
+    gap: float = Field(0.3, ge=0, le=4, description="the space between it and the product, in product widths (0: "
+                                                    "touching)")
+    turn: float = Field(0.0, ge=-360, le=360, description="degrees it's turned about its vertical")
+
+
 class Look(Strict):
     environment: Environment = Field(default_factory=Environment)
     background: list[float] = Field(default=[0.004, 0.004, 0.006], min_length=3, max_length=3,
@@ -94,6 +107,8 @@ class Look(Strict):
                                       "which removes the backdrop by itself)")
     pedestal: Pedestal | None = Field(default_factory=Pedestal, description="null: the product stands on the floor")
     lighting: Lighting
+    props: list[PropPlace] = Field(default_factory=list, max_length=6,
+                                   description="objects set around the product (none: the product alone)")
 
     @model_validator(mode="after")
     def _background_or_wall(self):

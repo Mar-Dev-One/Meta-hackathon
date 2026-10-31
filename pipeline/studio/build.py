@@ -4,6 +4,13 @@ commands. The hand-made ads and the director both build through this.
     length = await build(studio, storyboard)    # then shot.preview / shot.render up to `length`
 """
 
+import math
+from pathlib import Path
+
+import trimesh
+
+from pipeline.catalog.common import CACHE
+from pipeline.catalog.props import prop_file
 from pipeline.catalog.sets import LIGHTS, SURFACES, install_hdri, surface_texture
 from pipeline.meta import image
 from pipeline.schemas import Product, Storyboard
@@ -31,6 +38,8 @@ PAINT = ("A photograph of {place}, as the background of a premium product photo:
 PAINT_SIZE = "1536x1024"
 
 
+PROP_CACHE = CACHE / "props"   # the props, stood and centred for placing
+PROP_CLEAR = 0.005             # meters between a prop on the floor and the pedestal's side
 TRUCK_ROOM = 0.8   # a truck slides at most this share of the room beside the product (as the Studio's default)
 
 
@@ -110,12 +119,72 @@ async def build_scene(studio: Studio, sb: Storyboard) -> dict:
         await place_product_model(studio, product, top)
     else:
         await create_product(studio, product, top)
+    await add_props(studio, sb)
 
     lighting = look.lighting
     glow = {k: v for k, v in (("glow", lighting.glow), ("glow_color", lighting.glow_color)) if v is not None}
     lights = await studio.call("lighting.preset", subject=PRODUCT, name=lighting.preset, intensity=lighting.intensity,
                                turn=lighting.turn, warmth=lighting.warmth, **glow)
     return {light["entity"]: light["intensity"] for light in lights["lights"]}
+
+
+def product_radius(product: Product) -> float:
+    """Half the product's widest way across, seen from above: nothing set
+    beside it that far out (plus its own radius) can overlap it."""
+    if product.model:
+        length, thickness, _ = models.footprint(product.model)
+        return 0.5 * math.hypot(length, thickness)
+    return 0.5 * product_size(product)[1]
+
+
+def prop_model(name: str) -> Path:
+    """The prop's model standing on y = 0, centred, at its real size (cached)."""
+    out = PROP_CACHE / f"{name}.glb"
+    if not out.exists():
+        source = prop_file(name)
+        bounds = trimesh.load(str(source), force="scene").bounds
+        models.normalize(source, out, float(bounds[1][1] - bounds[0][1]))
+    return out
+
+
+def prop_radius(name: str) -> float:
+    """Half its widest way across, seen from above, however it's turned."""
+    lo, hi = trimesh.load(str(prop_model(name)), force="scene").bounds
+    return 0.5 * math.hypot(hi[0] - lo[0], hi[2] - lo[2])
+
+
+def prop_spots(sb: Storyboard) -> list[dict]:
+    """Where each of the look's props goes: {name, position [x, y, z],
+    radius, on: "pedestal" | "floor", moved}: on the pedestal if it fits
+    there whole, else on the floor; one that would hang over the pedestal's
+    edge is moved out onto the floor, just clear of it (moved: how far, m)."""
+    near = product_radius(sb.product)
+    width = product_size(sb.product)[1]
+    pedestal = sb.look.pedestal
+    spots = []
+    for p in sb.look.props:
+        radius = prop_radius(p.prop)
+        out = near + p.gap * width + radius
+        a = math.radians(p.angle)
+        on, moved = "floor", 0.0
+        if pedestal and out - radius < pedestal.width / 2:
+            if out + radius <= pedestal.width / 2:
+                on = "pedestal"
+            else:
+                moved = pedestal.width / 2 + radius + PROP_CLEAR - out
+                out += moved
+        y = pedestal.height if on == "pedestal" else 0.0
+        spots.append({"name": p.prop, "position": [round(out * math.sin(a), 4), y, round(out * math.cos(a), 4)],
+                      "radius": round(radius, 4), "on": on, "moved": round(moved, 4)})
+    return spots
+
+
+async def add_props(studio: Studio, sb: Storyboard) -> None:
+    """The look's props, each at its spot (prop_spots), turned as given."""
+    for i, (p, spot) in enumerate(zip(sb.look.props, prop_spots(sb))):
+        key = models.install(studio, prop_model(p.prop))
+        await studio.call("place_model", model=key, name=f"prop_{i + 1}", position=spot["position"],
+                          rotation_deg=p.turn, scale=[1, 1, 1])
 
 
 async def create_product(studio: Studio, product: Product, top: float) -> None:
