@@ -85,7 +85,7 @@ async def _make(studio, run: Run, progress: Progress, brief: str, photo: Path | 
     aspect = (box[3] - box[1]) / max(box[2] - box[0], 1)   # the product's outline in the photo, height / width
     progress.start("model")
     if not model:
-        model, credit = scout(run, photo, analysis.profile.category)
+        model, credit = await scout(run, photo, analysis.profile.category, studio=studio)
     if model:
         profile = await with_model(studio, run, analysis.profile, model, credit, photo, analysis.profile.category,
                                    aspect)

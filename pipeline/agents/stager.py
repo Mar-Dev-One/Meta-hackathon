@@ -42,13 +42,16 @@ def _look() -> Look:
                 lighting=Lighting(preset="high_key"))
 
 
-async def _views(studio, model: Path, height: float, azimuths: tuple[float, ...], out: Path) -> list[Path]:
-    """`model` (normalized) seen from each of `azimuths`, a static shot each."""
+async def _views(studio, model: Path, height: float, azimuths: tuple[float, ...], out: Path,
+                 elevations: tuple[float, ...] | None = None) -> list[Path]:
+    """`model` (normalized) seen from each of `azimuths` (at `elevations`,
+    default ELEVATION each), a static shot each."""
+    elevations = elevations or (ELEVATION,) * len(azimuths)
     sb = Storyboard(title="stage", brief="-", style="plain", look=_look(),
                     product=Product(model=str(model), height=height),
                     shots=[Shot(id=f"s{i + 1}", intent="-", duration=1,
-                                camera=CameraMove(move="static", azimuth=a, elevation=ELEVATION, fill=0.7))
-                           for i, a in enumerate(azimuths)])
+                                camera=CameraMove(move="static", azimuth=a, elevation=e, fill=0.7))
+                           for i, (a, e) in enumerate(zip(azimuths, elevations))])
     try:
         await build(studio, sb)
         result = await studio.call("shot.preview", times=[i + 0.5 for i in range(len(azimuths))],

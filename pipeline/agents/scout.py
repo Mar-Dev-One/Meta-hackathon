@@ -2,11 +2,14 @@
 model, and which one. Round products (bottles, jars, cans) are traced from
 the photo and keep their real label; any other shape (a phone, a shoe, a
 box) is looked for online (pipeline.catalog) and Muse Spark picks the
-closest model by looking at the candidates.
+closest model by looking: first its top few from the catalogues'
+thumbnails, then, those downloaded and rendered alike in the Studio (a
+thumbnail can be a scene, a beauty render, a different model's picture),
+the one whose render is closest.
 
     need = shape(photo, category)        # Shape: round, or the words to search for
-    found, answer, board = pick(photo, need.queries, folder, category)   # a catalog.Candidate, or None
-    model, credit = scout(run, photo, category)   # both, logged in the run: the model's .glb, or None
+    ranked, answer, board = pick(photo, need.queries, folder, category)   # catalog.Candidates, best first
+    model, credit = await scout(run, photo, category, studio=studio)   # logged in the run: the model's .glb, or None
 """
 
 import hashlib
@@ -20,8 +23,13 @@ from pipeline.catalog.common import CACHE, CatalogError, Candidate, fetch
 from pipeline.meta import spark
 from pipeline.meta.client import MetaError
 from pipeline.runs import Run
+from pipeline.studio import StudioError, models
+
+from .stager import LETTERS, TILE as VIEW, _views, sheet as lettered
 
 CANDIDATES = 12   # thumbnails on the sheet Spark picks from, at most (4 x 3)
+FINALISTS = 3     # of them downloaded and rendered, for the pick by render
+AUDITION = ((30.0, 12.0), (120.0, 12.0), (30.0, 60.0))   # each finalist's views: (azimuth, elevation)
 PER_SEARCH = 4    # from each source for each search
 TILE = 256
 
@@ -62,18 +70,37 @@ def shape(photo: Path | str, category: str = "product") -> Shape:
 # --- The pick --------------------------------------------------------------------------------------
 
 class Pick(BaseModel):
-    reason: str = Field(description="in a sentence: how the chosen model's shape matches the product's, or why none does")
-    choice: int = Field(ge=0, le=CANDIDATES, description="the number of the closest model; 0 if none is the same kind of product")
+    reason: str = Field(description="in a sentence: how the chosen models' shapes match the product's, or why none does")
+    choices: list[int] = Field(max_length=FINALISTS,
+                               description=f"the numbers of the closest models, up to {FINALISTS}, the closest first; "
+                                           "empty if none is the same kind of product")
 
 
 PICK_PROMPT = """The first image is a photo of a product ({category}). The second shows 3D models found online,
 numbered 1-{n}. One will stand in for the product in a CGI ad: it gets the product's colours and
 materials, so only its shape matters, not its colour, texture or background.
 
-Which model has the closest shape to the product: the same kind of product, the same proportions
+Which models have the closest shape to the product: the same kind of product, the same proportions
 and the same features (a camera bump, a cap, buttons, a handle)? Prefer a single clean product over
-a scene, a set of several objects or a rough, low-detail model. Answer 0 if none is the same kind
-of product."""
+a scene, a set of several objects or a rough, low-detail model. Give up to {finalists}, the closest
+first (they'll be looked at more closely); none if none is the same kind of product."""
+
+
+class Final(BaseModel):
+    reason: str = Field(description="in a sentence: what in the renders decides it (shape, features, detail, defects)")
+    choice: str = Field(description="the letter of the model to use")
+
+
+FINAL_PROMPT = """The first image is a photo of a product ({category}). The second shows {n} 3D models of
+it (A-{last}), downloaded for a CGI ad, each column one model rendered in the same plain grey studio
+from three angles (two from the side, one from above). A model may lie on its side or upside down:
+it will be stood up the way the product stands, so don't judge how it's lying. It will also be
+repainted in the product's colours, so don't judge its colours.
+
+Which model will stand in for the product best? The same kind of product with the same shape and
+proportions, the same features (a camera bump, a cap, buttons, a handle, a sole's tread); then the
+cleanest: one whole object, finely detailed, with nothing broken or missing, no holes or spikes, and
+nothing else with it (no floor, stand, box, hand or second product)."""
 
 
 def candidates(queries: list[str]) -> list[Candidate]:
@@ -121,41 +148,88 @@ def sheet(found: list[Candidate], out: Path) -> tuple[Path, list[Candidate]]:
 
 
 def pick(photo: Path | str, queries: list[str], folder: Path, category: str = "product"
-         ) -> tuple[Candidate, Pick, Path] | tuple[None, Pick | None, Path | None]:
-    """The model Spark sees closest to the product in `photo`, of those
-    found for `queries`: (candidate, Spark's answer, the sheet), or None for
-    the candidate if nothing was found or none is the same kind of product."""
+         ) -> tuple[list[Candidate], Pick | None, Path | None]:
+    """The models Spark sees closest to the product in `photo` from their
+    thumbnails, of those found for `queries`, the closest first (up to
+    FINALISTS): (candidates, Spark's answer, the sheet); no candidates if
+    nothing was found or none is the same kind of product."""
     found = candidates(queries)
     if not found:
-        return None, None, None
+        return [], None, None
     board, shown = sheet(found, folder / "candidates.png")
-    answer = spark.ask(PICK_PROMPT.format(category=category, n=len(shown)), images=[photo, board], schema=Pick,
-                       system=SYSTEM)
+    answer = spark.ask(PICK_PROMPT.format(category=category, n=len(shown), finalists=FINALISTS),
+                       images=[photo, board], schema=Pick, system=SYSTEM)
     chosen = Pick.model_validate(answer.data)
-    if not 1 <= chosen.choice <= len(shown):
-        return None, chosen, board
-    return shown[chosen.choice - 1], chosen, board
+    numbers = list(dict.fromkeys(n for n in chosen.choices if 1 <= n <= len(shown)))
+    return [shown[n - 1] for n in numbers], chosen, board
 
 
-def scout(run: Run, photo: Path | str, category: str = "product") -> tuple[Path | None, dict | None]:
+async def audition(studio, photo: Path | str, finalists: list[tuple[Candidate, Path]], folder: Path,
+                   category: str = "product") -> tuple[int, Final, Path]:
+    """Which of `finalists` ((candidate, its .glb)) Spark sees standing in
+    best for the product in `photo`, rendered alike: (its index, Spark's
+    answer, the sheet). They're shown in an order of their own (by their
+    keys), not best thumbnail first: the first column isn't a hint."""
+    order = sorted(range(len(finalists)), key=lambda i: hashlib.sha1(finalists[i][0].key.encode()).hexdigest())
+    columns = []
+    for i in order:
+        glb = finalists[i][1]
+        size = models.normalize(glb, folder / f"finalist_{i + 1}.glb", 0.15)
+        views = await _views(studio, size, 0.15, tuple(a for a, _ in AUDITION), folder / f"finalist_{i + 1}",
+                             elevations=tuple(e for _, e in AUDITION))
+        column = Image.new("RGB", (VIEW, VIEW * len(views)), (255, 255, 255))
+        for k, view in enumerate(views):
+            column.paste(Image.open(view).convert("RGB"), (0, VIEW * k))
+        columns.append(column)
+    board = lettered(columns, folder / "finalists.png")
+    answer = spark.ask(FINAL_PROMPT.format(category=category, n=len(finalists), last=LETTERS[len(finalists) - 1]),
+                       images=[photo, board], schema=Final, system=SYSTEM)
+    final = Final.model_validate(answer.data)
+    letter = final.choice.strip().upper()[:1]
+    if letter not in LETTERS[:len(finalists)]:
+        raise ValueError(f"no model {final.choice!r} among A-{LETTERS[len(finalists) - 1]}")
+    return order[LETTERS.index(letter)], final, board
+
+
+async def scout(run: Run, photo: Path | str, category: str = "product",
+                studio=None) -> tuple[Path | None, dict | None]:
     """The model for the product in `photo`, downloaded, and its credit; or
     (None, None) when the product is round, or no model fits, or the search
-    fails: then it's traced from the photo. Each step is logged in `run`
-    (scouted, model_pick, model_download; scout_failed), the sheet saved in
-    its stage/ folder."""
+    fails: then it's traced from the photo. With a `studio`, Spark's top
+    thumbnails are downloaded and rendered, and it picks by the renders
+    (audition); if that fails, or without one, its closest thumbnail wins.
+    Each step is logged in `run` (scouted, model_pick, model_download,
+    model_audition; scout_failed), the sheets saved in its stage/ folder."""
     try:
         need = shape(photo, category)
         run.event("scouted", round=need.round, reason=need.reason, queries=need.queries)
         if need.round:
             return None, None
-        found, answer, board = pick(photo, need.queries, run.folder("stage"), category)
-        run.event("model_pick", name=found.name if found else None, source=found.source if found else None,
-                  reason=answer.reason if answer else "nothing found",
+        folder = run.folder("stage")
+        ranked, answer, board = pick(photo, need.queries, folder, category)
+        run.event("model_pick", name=ranked[0].name if ranked else None, source=ranked[0].source if ranked else None,
+                  finalists=[c.name for c in ranked], reason=answer.reason if answer else "nothing found",
                   sheet=board.relative_to(run.root).as_posix() if board else None)
-        if not found:
-            return None, None
-        run.event("model_download", source=found.source, name=found.name)
-        return catalog.download(found), found.to_json()
+        finalists = []
+        for found in ranked if studio else ranked[:1]:
+            run.event("model_download", source=found.source, name=found.name)
+            try:
+                finalists.append((found, catalog.download(found)))
+            except (CatalogError, OSError) as e:   # one that won't download: the others still can
+                run.event("scout_failed", error=f"{found.name}: {e}")
     except (MetaError, CatalogError, ValueError, OSError) as e:   # OSError: requests' network errors too
         run.event("scout_failed", error=str(e))
         return None, None
+    if not finalists:
+        return None, None
+    chosen = 0
+    if len(finalists) > 1:
+        try:
+            chosen, final, board = await audition(studio, photo, finalists, folder, category)
+            run.event("model_audition", name=finalists[chosen][0].name, source=finalists[chosen][0].source,
+                      reason=final.reason, sheet=board.relative_to(run.root).as_posix(),
+                      finalists=[c.name for c, _ in finalists], thumbnail_pick=finalists[0][0].name)
+        except (MetaError, StudioError, ValueError, OSError) as e:
+            run.event("model_audition", name=finalists[0][0].name, error=str(e))
+    found, glb = finalists[chosen]
+    return glb, found.to_json()
