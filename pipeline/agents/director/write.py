@@ -35,6 +35,8 @@ FRAMES = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}
 DEFAULT_SECONDS = 15.0
 
 SHOT_MIN, SHOT_MAX = 1.2, 5.0
+LONG, LONG_SHOT_MAX = 30.0, 8.0   # an ad longer than this many seconds may hold a shot this long
+MAX_SHOTS = 30            # a 2-minute ad: 15 to 25 shots
 HERO_MIN = 2.5            # the last shot, seconds
 HERO_AZIMUTH = 25         # degrees from the front
 FLAT, FLAT_ELEVATION = 0.75, 30   # a model lower than this share of its narrower width (from above) lies flat:
@@ -75,7 +77,7 @@ class Plan(Strict):
     title: str = Field(description="a working name for the ad")
     style: Literal[tuple(STYLES)] = Field(description="the style from the library it starts from")
     look: Look
-    shots: list[Shot] = Field(min_length=2, max_length=12)
+    shots: list[Shot] = Field(min_length=2, max_length=MAX_SHOTS)
     titles: list[Title] = Field(max_length=MAX_TITLES)
     tracks: list[Track] = Field(default_factory=list, description="other animation, e.g. a light rising at a cut")
     end_card: EndCard | None = Field(None, description="the still the ad ends on, after the last shot; null: none")
@@ -115,8 +117,18 @@ order (their durations adding up to {seconds:g} s), the titles, any extra animat
 
 
 def seconds_in(brief: str) -> float | None:
+    """The ad's length the brief asks for: "15 seconds", "2 minutes", "1 minute 30", "1.5 min"."""
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(?:minutes?|mins?)\b(?:\s*(?:and\s*)?(\d+)\s*(?:s\b|sec\b|secs\b|seconds?\b)?)?",
+                  brief, re.IGNORECASE)
+    if m:
+        return 60 * float(m.group(1)) + (float(m.group(2)) if m.group(2) else 0.0)
     m = re.search(r"(\d+(?:\.\d+)?)\s*(?:s\b|sec\b|secs\b|seconds?\b)", brief, re.IGNORECASE)
     return float(m.group(1)) if m else None
+
+
+def shot_max(seconds: float) -> float:
+    """The longest a shot may be in an ad of `seconds`: a long ad breathes."""
+    return LONG_SHOT_MAX if seconds > LONG else SHOT_MAX
 
 
 def aspect_in(brief: str) -> str:
@@ -158,7 +170,7 @@ def on_beat(sb: Storyboard) -> Storyboard:
     """The storyboard as it will be shot: cut on the music's beats
     (pipeline.encode.music), within the craft rules' shot lengths, and every
     truck's slide kept within the frame (build.trucks_in_frame)."""
-    return trucks_in_frame(cut_to_beat(sb, SHOT_MIN, SHOT_MAX, HERO_MIN))
+    return trucks_in_frame(cut_to_beat(sb, SHOT_MIN, shot_max(sb.length), HERO_MIN))
 
 
 def assemble(plan: Plan, profile: BrandProfile, brief: str, aspect: str) -> Storyboard:
@@ -230,8 +242,9 @@ def problems(sb: Storyboard, profile: BrandProfile | None, seconds: float) -> li
                 out.append(f"prop {p.prop} would float: with no backdrop there's no floor, and it doesn't fit on "
                            f"{room} beside the product; put it on a wider pedestal, choose a smaller prop, or none")
     for shot in sb.shots:
-        if not SHOT_MIN <= shot.duration <= SHOT_MAX:
-            out.append(f"shot {shot.id} lasts {shot.duration:g} s: keep shots between {SHOT_MIN:g} and {SHOT_MAX:g} s")
+        if not SHOT_MIN <= shot.duration <= shot_max(seconds):
+            out.append(f"shot {shot.id} lasts {shot.duration:g} s: keep shots between {SHOT_MIN:g} and "
+                       f"{shot_max(seconds):g} s")
     for a, b in zip(sb.shots, sb.shots[1:]):
         if a.camera.move == b.camera.move:
             out.append(f"shots {a.id} and {b.id} are both {a.camera.move}: consecutive shots move differently")

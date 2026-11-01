@@ -167,7 +167,13 @@ Keys on any number field of an entity, eased between: for the lights (`light_*`)
 ## Ad craft
 
 - Open strong: the product is on screen and readable within the first 2 seconds.
-- 3 to 6 shots for 15 seconds; no shot under 1.2 s or over 5 s (the style sets the pace).
+- 3 to 6 shots for 15 seconds; no shot under 1.2 s or over 5 s (the style sets the pace). An ad over 30 s may
+  hold a shot up to 8 s, and up to 30 shots.
+- A long ad (over 30 s) is a short film, built in parts: an opening that sets the mood; the product's details
+  one at a time (close-ups on what makes it special: a texture, a cap, a button, the label); the product in
+  its world (wide, with the set and props); the hero. Let it breathe: slower moves, longer shots, framings
+  varied widely (wide, medium, close, from the side, from above), a path or two as signature moves. Its
+  titles come late, near the hero.
 - Every shot moves differently from the one before (orbit, then dolly, then crane ...): cuts land on motion.
 - A `path` is the ad's signature move: at most one, usually the opening reveal or the move into the hero
   (low from the side, round to the front, rising over it into a close-up); plain moves for the rest, so it

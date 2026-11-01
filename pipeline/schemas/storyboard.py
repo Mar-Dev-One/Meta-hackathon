@@ -354,7 +354,7 @@ class Storyboard(Strict):
     aspect: Literal["16:9", "9:16", "1:1"] = "16:9"
     look: Look
     product: Product
-    shots: list[Shot] = Field(min_length=1, max_length=12)
+    shots: list[Shot] = Field(min_length=1, max_length=30)
     titles: list[Title] = Field(default_factory=list, max_length=6)
     tracks: list[Track] = Field(default_factory=list)
     end_card: EndCard | None = None
