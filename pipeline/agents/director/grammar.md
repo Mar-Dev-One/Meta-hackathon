@@ -52,9 +52,9 @@ The product itself moving during a shot, while the camera does its move; it's ba
 
 ## Light (`look.lighting`)
 
-Presets: three_point, rim_dark (luxury, moody), high_key (clean, bright), top_soft, split (dramatic) or neon_dual (bold).
+Presets: three_point, rim_dark (luxury, moody), high_key (clean, bright), top_soft, split (dramatic), neon_dual (bold), overhead_soft (flat products) or edge_rim (dark products).
 
-- `preset` (three_point | rim_dark | high_key | top_soft | split | neon_dual): rim_dark: luxury, moody; high_key: clean, bright (light backdrop); top_soft: natural, skylight; split: dramatic; neon_dual: bold, energetic; three_point: neutral
+- `preset` (three_point | rim_dark | high_key | top_soft | split | neon_dual | overhead_soft | edge_rim): rim_dark: luxury, moody; high_key: clean, bright (light backdrop); top_soft: natural, skylight; split: dramatic; neon_dual: bold, energetic; three_point: neutral; overhead_soft: a flat product lying down (its top face lit, its front filled); edge_rim: a dark product (bright rims trace its outline on any set)
 - `intensity` (0 .. 20, default 1.0): times the preset's brightness
 - `turn` (-360 .. 360, default 0.0): degrees to turn the whole setup around the product
 - `warmth` (-1 .. 1, default 0.0): -1 cooler .. 1 warmer

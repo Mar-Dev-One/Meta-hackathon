@@ -29,6 +29,10 @@ from .client import StudioTimeout
 RENDER_SETUP, RENDER_PER_FRAME = 120, 2.0
 
 ASPECT_SIZES = {"16:9": (16, 9), "9:16": (9, 16), "1:1": (1, 1)}
+# Sub-frames per frame of the final render. 8 matched 16 at 54-55 dB PSNR on a
+# still hero and a moving orbit (indistinguishable) in half the time: the
+# render was more than half of every ad's time.
+SAMPLES = 8
 
 
 def frame_size(aspect: str, short: int) -> tuple[int, int]:
@@ -56,7 +60,7 @@ async def preview(studio, run, sb: Storyboard, short: int = 360, samples: int = 
     return frames
 
 
-async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samples: int = 16,
+async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samples: int = SAMPLES,
                  fade_in: float = 0.4, fade_out: float = 0.6, music: bool = True, label: str = "video") -> Path:
     """The built storyboard as final/<name>.mp4 in the run, faded from and to
     black, with music in the style's mood (pipeline.encode.music) unless
@@ -86,7 +90,7 @@ async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samp
 
 
 async def final_cut(studio, run, sb: Storyboard, name: str, aspects: tuple[str, ...] = ("16:9", "9:16"),
-                    short: int = 1080, samples: int = 16) -> dict[str, Path]:
+                    short: int = 1080, samples: int = SAMPLES) -> dict[str, Path]:
     """The ad in every aspect, from the same storyboard (reframed: titles
     fitted to each frame), as final/<name>_<w>x<h>.mp4 with the same music;
     each aspect's storyboard saved as storyboard_<w>x<h>.json, each video

@@ -82,6 +82,19 @@ static const lighting_preset PRESETS[] = {
         { "key", 0, 20, 0.2f, 6500, { 0 }, false },
         { "rim_left", -110, 5, 3.5f, 0, { 1.0f, 0.15f, 0.75f }, true },
         { "rim_right", 110, 5, 3.5f, 0, { 0.1f, 0.85f, 1.0f }, true } }, 3 },
+    // A flat product (a controller on its back, a watch laid down) shows mostly its top: a big soft light from
+    // above reads it, a front fill keeps its near face from going black, a kicker behind lifts it off the set.
+    { "overhead_soft", "flat products lying down: a big soft light from above, a front fill, a kicker behind", {
+        { "top", 0, 72, 1.3f, 5600, { 0 }, true },
+        { "fill", 0, 15, 0.5f, 5800, { 0 }, false },
+        { "kick", 180, 25, 1.0f, 6000, { 0 }, true } }, 3 },
+    // A dark product (black, deep navy) swallows a key: bright rims on both sides and from above behind
+    // trace its outline, so it reads on any set, light or dark.
+    { "edge_rim", "dark products: a moderate key, bright rims on both sides and from above behind, tracing the outline", {
+        { "key", -35, 30, 0.8f, 5600, { 0 }, true },
+        { "rim_left", -130, 20, 3.0f, 6200, { 0 }, true },
+        { "rim_right", 130, 20, 3.0f, 6200, { 0 }, true },
+        { "top_rim", 180, 55, 1.8f, 6000, { 0 }, false } }, 4 },
 };
 #define PRESET_COUNT (sizeof(PRESETS) / sizeof(PRESETS[0]))
 
@@ -250,7 +263,7 @@ cmd_lighting_preset(void* user, command_context* ctx, const cJSON* args, cJSON**
 }
 
 static const cmd_arg PRESET_ARGS[] = {
-    { "name", "string", true, "three_point, rim_dark (luxury, moody), high_key (clean, bright), top_soft, split (dramatic) or neon_dual (bold)" },
+    { "name", "string", true, "three_point, rim_dark (luxury, moody), high_key (clean, bright), top_soft, split (dramatic), neon_dual (bold), overhead_soft (flat products) or edge_rim (dark products)" },
     { "subject", "string", true, "the entity to light (the product)" },
     { "intensity", "number", false, "times the preset's brightness, 0 to 20 (default 1)" },
     { "turn", "number", false, "degrees to turn the whole setup around the subject (default 0)" },

@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 from pipeline.progress import Progress, learn, render_seconds
-from pipeline.runs import Run
+from pipeline.runs import Run, inputs
 from pipeline.schemas import BrandProfile
 from pipeline.studio import build, final_cut, frame_size, models, preview
 
@@ -64,8 +64,10 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     if director not in DIRECTORS:
         raise ValueError(f"director must be one of {', '.join(DIRECTORS)}, not {director!r}")
     run.watch(studio)
+    if model:   # kept with the run, like the photo, so it can be made again (runs.inputs)
+        run.add_file(model, "inputs/" + Path(model).name)
     run.event("brief", text=brief, photo=Path(photo).name, category=category, format=format,
-              model=Path(model).name if model else None, director=director)
+              model=Path(model).name if model else None, director=director, critic=critic, video=video, short=short)
     progress = Progress(run, _plan(director, critic, video, format, bool(model), brief, short))
     try:
         videos = await _make(studio, run, progress, brief, photo, category, short, video, critic, format, model,
@@ -216,6 +218,11 @@ async def with_model(studio, run: Run, profile: BrandProfile, model: Path | str,
     if not glass:
         colours = [(s.hex, s.share) for s in profile.palette if s.role in ("product", "accent")]
         await colour(studio, run, fitted, photo, colours, profile.height, category=category)
+        main = profile.materials[0] if profile.materials else None   # the analyst's main part: the body
+        given = models.finish_unset(fitted, main.metallic, main.roughness) if main else []
+        if given:
+            run.event("material_finish", materials=given, looks_like=main.looks_like, metallic=main.metallic,
+                      roughness=main.roughness)
     height, width = models.size(fitted)
     profile = profile.model_copy(update={"model": str(fitted), "profile_parts": None, "template": None, "label": None})
     run.output("brand_profile", run.save_json("brand_profile.json", profile))
@@ -236,8 +243,10 @@ if __name__ == "__main__":
     from pipeline.studio import Studio
 
     parser = argparse.ArgumentParser(description="A product photo and a brief in, a finished ad out (one run).")
-    parser.add_argument("photo")
-    parser.add_argument("brief")
+    parser.add_argument("photo", nargs="?")
+    parser.add_argument("brief", nargs="?")
+    parser.add_argument("--again", metavar="RUN", help="make a run's ad again from its inputs (after a failure: "
+                                                       "what it had done is cached, so it picks up quickly)")
     parser.add_argument("--category", default="product", help='what the product is, e.g. "perfume bottle"')
     parser.add_argument("--size", type=int, default=1080, help="the video's shorter side in pixels")
     parser.add_argument("--preview", action="store_true", help="no video: stop once the storyboard is final")
@@ -249,14 +258,20 @@ if __name__ == "__main__":
     parser.add_argument("--director", choices=DIRECTORS, default="storyboard",
                         help="storyboard: Spark plans, code builds (default); live: Spark makes the film in the Studio")
     args = parser.parse_args()
+    if args.again:
+        given = inputs(args.again)
+    elif args.photo and args.brief:
+        given = dict(brief=args.brief, photo=args.photo, category=args.category, short=args.size,
+                     video=not args.preview, critic=args.critic, format=args.format, model=args.model,
+                     director=args.director)
+    else:
+        parser.error("give a photo and a brief, or --again RUN")
 
     async def main() -> None:
         began = time.time()
         async with Studio() as studio:
-            with Run.create(f"ad-{Path(args.photo).stem}") as run:
-                videos = await make_ad(studio, run, args.brief, args.photo, args.category, args.size,
-                                       video=not args.preview, critic=args.critic, format=args.format,
-                                       model=args.model, director=args.director)
+            with Run.create(f"ad-{Path(given['photo']).stem}") as run:
+                videos = await make_ad(studio, run, **given)
         summary = json.loads((run.root / "run.json").read_text(encoding="utf-8"))
         made = "\n".join(str(v) for v in videos.values()) if videos else str(run.root)
         print(f"{made}\n{time.time() - began:.0f} s, {summary['model_calls']} model calls "

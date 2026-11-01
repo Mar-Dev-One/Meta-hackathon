@@ -13,6 +13,7 @@ Whatever is wrong goes back to Spark with its answer, up to `tries` times.
 import json
 import math
 import re
+import shutil
 from pathlib import Path
 from typing import Literal
 
@@ -47,6 +48,8 @@ SEE_THROUGH = 0.5         # a material this transmissive is glass; this metallic
 SEPARATION = 15           # the product's and the backdrop's lightness (L*, 0-100) at least this far apart
 DARK_SET = 25             # a backdrop darker than this (L*) is a dark set
 GLASS_LIGHT = 1.5         # glass on a dark set needs the lights at least this strong (and a glow)
+MISSES_DARK = ("top_soft", "split", "high_key")   # presets that leave a dark product's outline in shadow
+MISSES_TOP = ("rim_dark", "split", "neon_dual")   # side lights, low: a flat product's top unlit
 DARK_PRODUCT = 35         # a product darker than this (L*) in front of an environment background ...
 DARK_LIGHT, DARK_EXPOSURE = 1.8, 0.8   # ... needs lights this strong and the environment this dim
 TITLE_CONTRAST = 3.0      # a title against what's behind it, as a contrast ratio
@@ -375,7 +378,15 @@ def light_problems(sb: Storyboard, profile: BrandProfile | None) -> list[str]:
             (lighting.intensity < DARK_LIGHT or env.exposure > DARK_EXPOSURE):
         out.append(f"the product is dark ({tone}, lightness {_lightness(tone):.0f}) and stands in front of a light "
                    f"environment: backlit like that it reads as a silhouette. Light it strongly (look.lighting.intensity "
-                   f"at least {DARK_LIGHT:g}) and dim the background (environment.exposure at most {DARK_EXPOSURE:g})")
+                   f"at least {DARK_LIGHT:g}, the edge_rim preset is made for dark products) and dim the background "
+                   f"(environment.exposure at most {DARK_EXPOSURE:g})")
+    if tone and _lightness(tone) < DARK_PRODUCT and lighting.preset in MISSES_DARK:
+        out.append(f"the product is dark ({tone}, lightness {_lightness(tone):.0f}) and the {lighting.preset} light "
+                   f"leaves its outline in shadow: use edge_rim (bright rims trace a dark product), or rim_dark for a "
+                   f"moody luxury look")
+    if lies_flat(sb.product) and lighting.preset in MISSES_TOP:
+        out.append(f"the product lies flat, so the camera sees mostly its top, and the {lighting.preset} light comes "
+                   f"from the sides, low: use overhead_soft (a big soft light from above, a front fill)")
     if glass and backdrop and _lightness(backdrop) < DARK_SET and (lighting.intensity < GLASS_LIGHT or not lighting.glow):
         out.append(f"glass on a dark set reads black unless it's lit: set look.lighting.intensity to at least "
                    f"{GLASS_LIGHT:g} and give it a glow (2-3), or put a bright light environment behind it (backdrop "
@@ -433,22 +444,27 @@ HERO_FIXES = {   # what to change when the critic's measurements of the hero fin
     "brand": "the light around the product tints it: choose a light environment nearer its colours (a neutral "
              "studio for a cool or dark product), light it more strongly with the lights (look.lighting.intensity), "
              "or dim the environment (environment.exposure)",
-    "lighting": "light it so it reads: more light on it (look.lighting.intensity, or a preset that lights its front), "
-                "less when it's blown out, or a background that separates from it",
+    "lighting": "light it so it reads: more light on it (look.lighting.intensity, or a preset that lights its front: "
+                "edge_rim for a dark product, overhead_soft for one lying flat), less when it's blown out, or a "
+                "background that separates from it",
     "product_visibility": "frame the hero so the product is whole and clearly seen",
 }
 
 
-async def hero_problems(studio, sb: Storyboard) -> list[str]:
+async def hero_problems(studio, sb: Storyboard, keep: Path | None = None) -> list[str]:
     """The hero shot measured as the critic measures every shot (pipeline.
     agents.critic.measure), at planning time: the product's exact pixels
     (rendered with it, alone and without it), then whether its colours are
     the brand's, its outline separates from the background, its pixels
     aren't crushed or blown. With the critic loop off, the critic's eye on
-    every ad still. Rules of taste."""
+    every ad still. Rules of taste. The frame measured is copied to `keep`,
+    if given (a draft's picture)."""
     from pipeline.agents.critic.measure import flags_for   # here: the critic's module imports this one's neighbours
 
     frame = await measure_hero(studio, sb)
+    if keep is not None:
+        keep.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(frame.path, keep)
     flags = flags_for(frame, is_last=True, fade_in=sb.look.lighting.fade_in or 0.0)
     return [f"in the hero ({sb.shots[-1].id}), as rendered: {f.problem}. {HERO_FIXES.get(f.category, '')}".rstrip()
             for f in flags if f.category in HERO_FIXES]
@@ -600,7 +616,9 @@ async def write(brief: str, profile: BrandProfile, *, studio=None, run=None, sec
     schema = {**Plan.model_json_schema(), "title": "Plan"}
     feedback, found = "", []
     valid = None   # the latest draft that broke only rules of taste: kept if a later one breaks a craft rule
+    before = None  # the last draft that made a storyboard, as data: what the next one changed
     for attempt in range(1, tries + 1):
+        hero = run.path("drafts", f"draft_{attempt}.png") if run else None
         answer = spark.ask(prompt + feedback, schema=schema, system=SYSTEM)
         sb, must = None, []
         try:
@@ -615,10 +633,20 @@ async def write(brief: str, profile: BrandProfile, *, studio=None, run=None, sec
                 if run and balanced:
                     run.event("balanced", attempt=attempt, changes=balanced)
             found = must + light_problems(sb, profile) + jump_cuts(sb) + \
-                (await title_contrast_problems(studio, sb) + await hero_problems(studio, sb) +
+                (await title_contrast_problems(studio, sb) + await hero_problems(studio, sb, keep=hero) +
                  await prop_problems(studio, sb) if studio and not must else [])
-        if run:
-            run.event("draft", attempt=attempt, problems=found, cached=answer.cached)
+        if run:   # each draft kept, with its hero as measured and what it changed from the one before
+            extra = {}
+            if sb is not None:
+                from .revise import diff   # here: revise imports this module
+                now = sb.model_dump(by_alias=True, exclude_none=True)
+                extra["file"] = run.save_json(f"drafts/draft_{attempt}.json", sb).relative_to(run.root).as_posix()
+                if before is not None:
+                    extra["changes"] = diff(before, now)
+                before = now
+            if hero is not None and hero.exists():
+                extra["hero"] = hero.relative_to(run.root).as_posix()
+            run.event("draft", attempt=attempt, problems=found, cached=answer.cached, **extra)
         if sb is not None and not must:
             valid = (sb, found)
         if not found or (attempt == tries and valid):

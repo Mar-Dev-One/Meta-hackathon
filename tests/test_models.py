@@ -50,6 +50,22 @@ class StripBase(unittest.TestCase):
             self.assertEqual(models.faces(fitted), 12)
 
 
+class Finish(unittest.TestCase):
+    def test_only_materials_without_a_finish_take_the_photos(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder, "model.glb")
+            trimesh.Scene([box((0.1, 0.1, 0.1), (0, 0.05, 0), [200, 50, 50, 255]),
+                           box((0.05, 0.05, 0.05), (0, 0.2, 0), [50, 50, 200, 255])]).export(str(path))
+            gltf, rest = models._read_glb(path)
+            gltf["materials"][1]["pbrMetallicRoughness"]["roughnessFactor"] = 0.3   # a modeller's finish
+            gltf["materials"][1]["pbrMetallicRoughness"]["metallicFactor"] = 0.0
+            models._write_glb(path, gltf, rest)
+            self.assertEqual(len(models.finish_unset(path, 0.0, 0.6)), 1)
+            unset, made = (m["pbrMetallicRoughness"] for m in models._read_glb(path)[0]["materials"])
+            self.assertEqual((unset["metallicFactor"], unset["roughnessFactor"]), (0.0, 0.6))
+            self.assertEqual((made["metallicFactor"], made["roughnessFactor"]), (0.0, 0.3))
+
+
 class Recolour(unittest.TestCase):
     def test_lab_round_trip(self):
         rgb = np.random.default_rng(0).uniform(0, 255, (500, 3))

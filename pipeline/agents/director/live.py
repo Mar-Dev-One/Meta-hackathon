@@ -34,7 +34,7 @@ from pipeline.runs import Run
 from pipeline.schemas import BrandProfile
 from pipeline.studio import PRODUCT, StudioError, StudioTimeout
 from pipeline.studio.build import ASPECTS, create_product, place_product_model
-from pipeline.studio.render import RENDER_PER_FRAME, RENDER_SETUP, frame_size
+from pipeline.studio.render import RENDER_PER_FRAME, RENDER_SETUP, SAMPLES, frame_size
 from pipeline.studio.tools import Bridge
 
 MOODS = ("dark", "calm", "energetic", "warm")   # the music (pipeline.encode.music)
@@ -396,7 +396,7 @@ async def review(studio, run: Run, cut: Cut, brief: str, profile: BrandProfile, 
 
 # --- The video -----------------------------------------------------------------------------------
 
-async def render_cut(studio, run: Run, cut: Cut, name: str, short: int = 1080, samples: int = 16) -> Path:
+async def render_cut(studio, run: Run, cut: Cut, name: str, short: int = 1080, samples: int = SAMPLES) -> Path:
     """The film in the Studio as final/<name>_<w>x<h>.mp4, with music in its
     mood, faded in and out; the run's output video_<w>x<h>. The scene is
     saved first: if the Studio hangs, a new one loads it and renders again."""

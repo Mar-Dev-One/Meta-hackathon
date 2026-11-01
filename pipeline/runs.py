@@ -18,6 +18,7 @@ cost (pipeline.meta.usage). `python -m pipeline.runs` lists runs, shows one,
 or replays it with its timing (for the demo).
 """
 
+import asyncio
 import json
 import shutil
 import sys
@@ -88,7 +89,10 @@ class Run:
         for studio in self._watched:
             if self._on_studio_call in studio.listeners:
                 studio.listeners.remove(self._on_studio_call)
-        if error is not None:
+        if isinstance(error, asyncio.CancelledError):   # stopped on purpose (the app's cancel)
+            self.event("cancelled")
+            self.finish("cancelled")
+        elif error is not None:
             self.event("failed", error=f"{type(error).__name__}: {error}")
             self.finish("failed")
         elif self.status == "running":
@@ -169,6 +173,23 @@ def events(root: Path | str) -> list[dict]:
     written before writes were locked could have one) is skipped."""
     path = Path(root) / "log.jsonl"
     return [entry for line in path.read_text(encoding="utf-8").splitlines() if (entry := parse_event(line))]
+
+
+def inputs(run: Path | str) -> dict:
+    """What a run was given, as make_ad's arguments (brief, photo, category,
+    short, video, critic, format, model, director), to make it again: from
+    its brief event and inputs/ (`run` a folder, or a run's id). Older runs
+    didn't log critic, video or size: the defaults then (off, on, 1080)."""
+    root = Path(run) if Path(run).is_dir() else RUNS / str(run)
+    brief = next((e for e in events(root) if e["kind"] == "brief"), None)
+    if brief is None:
+        raise ValueError(f"{root} has no brief: nothing to make again")
+    model = root / "inputs" / brief["model"] if brief.get("model") else None
+    if model is not None and not model.exists():
+        raise ValueError(f"{root} was made with a model, {brief['model']}, that wasn't kept with it")
+    return dict(brief=brief["text"], photo=root / "inputs" / brief["photo"], category=brief.get("category", "product"),
+                short=brief.get("short", 1080), video=brief.get("video", True), critic=brief.get("critic", False),
+                format=brief.get("format", "both"), model=model, director=brief.get("director", "storyboard"))
 
 
 def parse_event(line: str) -> dict | None:

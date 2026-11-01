@@ -335,6 +335,27 @@ def opaque(glb: Path | str) -> Path:
     return glb
 
 
+def finish_unset(glb: Path | str, metallic: float, roughness: float) -> list[str]:
+    """The finish read from the photo (`metallic`, `roughness`) on the
+    model's materials that have none of their own: no metallic-roughness
+    texture and glTF's defaults (metallic 1, roughness 1), which render
+    plastic or ceramic as dull grey metal. A modeller's finish (a texture, or
+    values set) is kept: a watch's steel, leather and glass stay as made.
+    Returns the materials given the finish, by name."""
+    glb = Path(glb)
+    gltf, rest = _read_glb(glb)
+    given = []
+    for i, material in enumerate(gltf.get("materials", [])):
+        pbr = material.setdefault("pbrMetallicRoughness", {})
+        if "metallicRoughnessTexture" in pbr or pbr.get("metallicFactor", 1.0) != 1.0 or pbr.get("roughnessFactor", 1.0) != 1.0:
+            continue
+        pbr["metallicFactor"], pbr["roughnessFactor"] = float(metallic), float(roughness)
+        given.append(material.get("name") or f"material {i}")
+    if given:
+        _write_glb(glb, gltf, rest)
+    return given
+
+
 def _read_glb(glb: Path) -> tuple[dict, bytes]:
     """A GLB's JSON (its scene, materials ...) and the binary that follows."""
     data = glb.read_bytes()

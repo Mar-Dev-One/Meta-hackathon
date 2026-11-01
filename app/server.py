@@ -19,6 +19,10 @@ happens, open any run that's already done.
     GET  /runs/{id}/events           its log as Server-Sent Events: followed live while it runs;
                                      ?speed=1 replays a finished one with its timing (2 twice as fast)
     GET  /runs/{id}/files/{path}     a file in it: frames, contact sheets, the videos
+    POST /runs/{id}/cancel           stops a run (queued or running): its status becomes "cancelled"
+    POST /runs/{id}/again            queues the run's ad again from its inputs (pipeline.runs.inputs),
+                                     optionally with a new brief or format: a new run
+    GET  /gallery                    every finished ad, newest first: its videos, end card, time and cost
 
 Runs go one at a time (one renderer, one GPU) through a worker thread with
 its own event loop and its own Studio: the agents' model calls block, and in
@@ -42,7 +46,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pipeline import catalog
 from pipeline.agents.producer import DIRECTORS, FORMATS, make_ad
 from pipeline.catalog.common import Candidate
-from pipeline.runs import RUNS, Run, all_runs, events, parse_event
+from pipeline.runs import RUNS, Run, all_runs, events, inputs, parse_event
 from pipeline.studio import Studio
 
 PAGE = Path(__file__).with_name("static") / "index.html"
@@ -72,6 +76,8 @@ class Job:
 jobs: "queue.Queue[Job]" = queue.Queue()
 waiting: list[str] = []          # run ids queued, in order
 active: dict[str, str] = {}      # run id -> "running" while the worker has it
+cancelled: set[str] = set()      # queued runs cancelled before the worker got to them
+current: dict[str, tuple] = {}   # the running run's id -> (its event loop, its task), to cancel it
 
 
 def _work() -> None:
@@ -80,13 +86,23 @@ def _work() -> None:
         job = jobs.get()
         rid = job.run.root.name
         waiting.remove(rid)
+        if rid in cancelled:
+            continue
         active[rid] = "running"
         try:
-            asyncio.run(_make(job))
-        except Exception:   # noqa: BLE001 -- the run's log has it ("failed"); the worker carries on
+            asyncio.run(_running(rid, job))
+        except BaseException:   # noqa: BLE001 -- the run's log has it ("failed", "cancelled"); the worker carries on
             pass
         finally:
             active.pop(rid, None)
+            current.pop(rid, None)
+
+
+async def _running(rid: str, job: Job) -> None:
+    """The job, its loop and task kept so a cancel can reach it from the server's thread."""
+    task = asyncio.current_task()
+    current[rid] = (asyncio.get_running_loop(), task)
+    await _make(job)
 
 
 async def _make(job: Job) -> None:
@@ -120,6 +136,8 @@ def _status(root: Path) -> str:
     rid = root.name
     if rid in active:
         return active[rid]
+    if rid in cancelled:
+        return "cancelled"
     if rid in waiting:
         return "queued"
     summary = root / "run.json"
@@ -135,6 +153,8 @@ def _card(root: Path) -> dict:
         if e["kind"] == "brief":
             first = e
             break
+        if e["kind"] == "queued" and not first:   # one cancelled while queued never got a brief event
+            first = {"text": e.get("brief")}
     summary = root / "run.json"
     info = json.loads(summary.read_text(encoding="utf-8")) if summary.exists() else {}
     return {"id": root.name, "status": _status(root), "brief": first.get("text"), "photo": first.get("photo"),
@@ -206,6 +226,74 @@ async def start(photo: UploadFile = File(...), brief: str = Form(...), category:
               format=format, director=director, model=pick.name if pick else model_name or None)
     jobs.put(Job(run, upload, brief.strip(), category, critic, video, size, format, director, pick, model_upload))
     return {"id": rid, "status": "queued", "position": len(waiting), "events": f"/runs/{rid}/events"}
+
+
+@app.post("/runs/{rid}/cancel")
+def cancel(rid: str) -> dict:
+    """Stops a run: a queued one never starts; a running one stops at its next
+    step (a model call or render under way finishes first), its Studio closed."""
+    root = _root(rid)
+    if rid in waiting:
+        cancelled.add(rid)
+        with Run(root) as run:
+            run.event("cancelled")
+            run.finish("cancelled")
+        return {"id": rid, "status": "cancelled"}
+    if rid in current:
+        loop, task = current[rid]
+        loop.call_soon_threadsafe(task.cancel)
+        return {"id": rid, "status": "cancelling"}
+    raise HTTPException(409, f"{rid} isn't queued or running ({_status(root)})")
+
+
+@app.post("/runs/{rid}/again", status_code=202)
+def again(rid: str, brief: str = Form(""), format: str = Form("")) -> dict:
+    """The run's ad made again from its inputs, as a new run, with a new brief
+    or format if given (the rest as it was). What the first one had done is
+    cached (Spark's answers, the models), so it picks up quickly."""
+    given = inputs(_root(rid))
+    if brief.strip():
+        given["brief"] = brief.strip()
+    if format:
+        if format not in FORMATS:
+            raise HTTPException(422, f"the format must be one of {', '.join(FORMATS)}")
+        given["format"] = format
+    run = Run.create(f"ad-{given['photo'].stem}")
+    photo = run.path("upload", given["photo"].name)
+    shutil.copyfile(given["photo"], photo)
+    model = None
+    if given["model"]:
+        model = run.path("upload", given["model"].name)
+        shutil.copyfile(given["model"], model)
+    new = run.root.name
+    waiting.append(new)
+    run.event("queued", position=len(waiting), brief=given["brief"], category=given["category"], critic=given["critic"],
+              video=given["video"], format=given["format"], director=given["director"],
+              model=model.name if model else None, again=rid)
+    jobs.put(Job(run, photo, given["brief"], given["category"], given["critic"], given["video"], given["short"],
+                 given["format"], given["director"], None, model))
+    return {"id": new, "status": "queued", "position": len(waiting), "again": rid, "events": f"/runs/{new}/events"}
+
+
+@app.get("/gallery")
+def gallery(limit: int = 60) -> list[dict]:
+    """Every finished ad, newest first: its videos (by aspect), its end card,
+    its brief, time and cost."""
+    out = []
+    for root in all_runs():
+        summary = root / "run.json"
+        if not summary.exists():
+            continue
+        info = json.loads(summary.read_text(encoding="utf-8"))
+        videos = {k.removeprefix("video_"): v for k, v in info.get("outputs", {}).items()
+                  if k.startswith("video") and (root / v).exists()}
+        if info.get("status") != "done" or not videos:
+            continue
+        card = next(iter(sorted(root.glob("final/*_card.png"))), None)
+        out.append(_card(root) | {"videos": videos, "poster": card.relative_to(root).as_posix() if card else None})
+        if len(out) >= limit:
+            break
+    return out
 
 
 @app.get("/runs")

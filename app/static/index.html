@@ -110,6 +110,14 @@
   .chip { display: inline-flex; gap: 6px; align-items: center; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 12px; max-width: 100%; }
   .chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chip button { background: none; border: 0; color: var(--dim); cursor: pointer; font-size: 14px; }
+  .pill.cancelled { color: var(--dim); border-color: var(--line); }
+  .again { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; margin-top: 10px; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .ad { background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .ad video { width: 100%; display: block; background: #000; aspect-ratio: 16 / 9; object-fit: contain; }
+  .ad .body { padding: 9px 11px 11px; }
+  .ad .brief { font-size: 13px; }
+  .ad .row { margin-top: 6px; justify-content: space-between; }
   .decisions { list-style: none; margin: 0; padding: 0; }
   .decision { display: grid; grid-template-columns: 16px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
   .decision:first-child { border-top: 0; padding-top: 0; }
@@ -158,6 +166,7 @@
       <div id="formMsg" class="meta"></div>
     </form>
     <div>
+      <button class="btn ghost" id="galleryButton" type="button" style="width:100%;margin-bottom:12px">Gallery of finished ads</button>
       <div class="head"><h2>Runs</h2>
         <label class="meta">open <select id="speed">
           <option value="0">all at once</option><option value="1">replay 1×</option>
@@ -181,13 +190,26 @@
     <section id="top" class="hidden">
       <div class="head">
         <div class="brief" id="briefText"></div>
-        <div class="row"><span id="status" class="pill"></span><span id="cost" class="meta"></span></div>
+        <div class="row"><span id="status" class="pill"></span><span id="cost" class="meta"></span>
+          <button class="btn ghost hidden" id="cancelButton" type="button">Cancel</button>
+          <button class="btn ghost hidden" id="againButton" type="button">Make again</button></div>
       </div>
+      <form id="againForm" class="again hidden">
+        <input id="againBrief" type="text" aria-label="the brief, changed or as it was">
+        <select id="againFormat" aria-label="format"><option value="">same format</option>
+          <option value="horizontal">horizontal</option><option value="vertical">vertical</option><option value="both">both</option></select>
+        <button class="btn" type="submit">Go</button>
+      </form>
       <div id="progress" class="progress hidden">
         <div class="bar"><div id="progressFill"></div></div>
         <div class="meta" id="progressText"></div>
       </div>
       <div class="meta" id="runId"></div>
+    </section>
+
+    <section id="galleryCard" class="card hidden">
+      <div class="head"><h2>Gallery</h2><span class="meta" id="galleryMeta"></span></div>
+      <div class="gallery" id="gallery"></div>
     </section>
 
     <section id="decisionsCard" class="card hidden">
@@ -289,7 +311,8 @@ function reset() {
 function open(id, speed = Number($("speed").value)) {
   if (source) source.close();
   run = id; reset();
-  show("empty", false); show("top"); show("logCard");
+  show("empty", false); show("galleryCard", false); show("top"); show("logCard");
+  show("againForm", false);
   $("runId").textContent = id; $("briefText").textContent = ""; setStatus("running");
   history.replaceState(null, "", "#" + id);
   loadRuns();
@@ -299,13 +322,17 @@ function open(id, speed = Number($("speed").value)) {
   const kinds = ["started", "queued", "brief", "analyse", "segmented", "read", "output", "saved", "model", "draft", "studio",
     "preview", "critique", "ad_critique", "second_opinion", "round", "revision", "revised", "revision_failed", "refined",
     "render", "rendered", "music", "finished", "failed", "resumed", "critique_draft", "ad_critique_draft", "resumed_rounds",
-    "scouted", "model_pick", "scout_failed", "model_download", "model_rejected", "model_audition", "staged", "model_fitted", "recoloured",
-    "tool", "directed", "live_review", "render_retry", "unfinished", "progress", "balanced", "draft_warnings"];
+    "scouted", "model_pick", "scout_failed", "model_download", "model_rejected", "model_audition", "staged", "model_fitted", "recoloured", "material_finish",
+    "tool", "directed", "live_review", "render_retry", "unfinished", "progress", "balanced", "draft_warnings", "cancelled"];
   for (const k of kinds) source.addEventListener(k, (m) => handle(JSON.parse(m.data)));
   source.onerror = () => { if (source.readyState === EventSource.CLOSED) loadRuns(); };
 }
 
-function setStatus(s) { const p = $("status"); p.className = "pill " + s; p.textContent = s; }
+function setStatus(s) {
+  const p = $("status"); p.className = "pill " + s; p.textContent = s;
+  show("cancelButton", s === "running" || s === "queued");
+  show("againButton", !["running", "queued"].includes(s));
+}
 
 // --- Events --------------------------------------------------------------------
 function handle(e) {
@@ -375,6 +402,7 @@ const HANDLERS = {
     else $("progressText").textContent = `${e.status} after ${duration(e.seconds)}`;
     if (e.cost != null) $("cost").textContent = `$${e.cost.toFixed(3)} on Meta models · ${Math.round(e.seconds)} s`; },
   failed: (e) => setStatus("failed"),
+  cancelled: () => setStatus("cancelled"),
   model_pick: (e) => { if (e.sheet) profileImage(e.sheet, "models found"); },
   model_audition: (e) => { if (e.sheet) profileImage(e.sheet, "finalists, rendered"); },
   directed: (e) => { show("criticCard"); $("criticMeta").textContent = `${e.session}: ${e.summary} (${e.shots} shots, ${e.duration} s, ${e.calls} commands)`; },
@@ -419,8 +447,17 @@ const DECISIONS = {
     { why: e.by === "spark" ? `${e.up_reason} ${e.side_reason || ""}` : `By its proportions (${e.error})`, pics: e.sheets }),
   recoloured: (e) => decided("Colours", e.error ? "Kept its own colours" : e.by ? `Repainted in the photo's colours (regions matched by ${e.by})` : "Kept its own colours",
     { why: e.error || e.reason, pics: [e.sheet] }),
-  draft: (e) => decided("Plan", `Draft ${e.attempt}: ${e.problems?.length ? plural(e.problems.length, "problem") + " found" : "no problems found"}`,
-    { list: e.problems, tone: e.problems?.length ? "warn" : "pass" }),
+  draft: (e) => {   // before and after: the problems the last draft had, what this one changed, each one's hero
+    const changed = (e.changes || []).filter((c) => !c.startsWith("brief") && !c.startsWith("product"));
+    decided("Plan", `Draft ${e.attempt}: ${e.problems?.length ? plural(e.problems.length, "problem") + " found" : "no problems found"}`,
+      { why: e.attempt > 1 && changed.length ? `To fix the last draft's problems, Spark changed ${plural(changed.length, "setting")}:` : "",
+        list: [...(e.attempt > 1 ? changed.slice(0, 8).map((c) => "changed: " + c) : []),
+               ...(changed.length > 8 ? [`… and ${changed.length - 8} more`] : []),
+               ...(e.problems || []).map((p) => "problem: " + p)],
+        pics: [e.hero], tone: e.problems?.length ? "warn" : "pass" });
+  },
+  material_finish: (e) => decided("Finish", `${(e.materials || []).join(", ")}: ${e.looks_like}`,
+    { why: `The model gave no finish for ${e.materials?.length === 1 ? "this part" : "these parts"}, so it takes the photo's: metallic ${e.metallic}, roughness ${e.roughness}.` }),
   balanced: (e) => decided("Light check", "A bright background brought down behind the product", { list: e.changes }),
   draft_warnings: (e) => decided("Plan", `Kept with ${plural((e.problems || []).length, "taste warning")} (no hard rule broken)`,
     { list: e.problems, tone: "warn" }),
@@ -430,6 +467,7 @@ const DECISIONS = {
   finished: (e) => decided("Result", e.status === "done" ? `Finished in ${duration(e.seconds)}${e.cost != null ? `, $${e.cost.toFixed(3)} on Meta models` : ""}`
     : `${e.status} after ${duration(e.seconds)}`, { tone: e.status === "done" ? "pass" : "fail" }),
   failed: (e) => decided("Result", "Failed", { why: e.error, tone: "fail" }),
+  cancelled: () => decided("Result", "Cancelled", { tone: "fail" }),
 };
 
 function decidedBrand(p, t) {
@@ -483,6 +521,7 @@ const DETAILS = {
   scout_failed: (e) => `${e.error}; traced from the photo`, model_download: (e) => `${e.name} from ${e.source}`,
   staged: (e) => e.by === "spark" ? `${e.up}, turned ${e.turn}°: ${e.up_reason} ${e.side_reason}` : `${e.up}, turned ${e.turn}° (by proportions: ${e.error})`,
   recoloured: (e) => e.error ? `kept its own colours (${e.error})` : e.by ? `repainted in the photo's colours (paired by ${e.by}): ${e.reason}` : `kept its own colours: ${e.reason}`,
+  material_finish: (e) => `${(e.materials || []).join(", ")} given the photo's finish (${e.looks_like}): metallic ${e.metallic}, roughness ${e.roughness}`,
   progress: (e) => progressText(e),
 };
 
@@ -705,9 +744,62 @@ $("form").onsubmit = async (e) => {
   finally { $("go").disabled = false; }
 };
 
+// --- Cancel, make again -------------------------------------------------------------
+$("cancelButton").onclick = async () => {
+  $("cancelButton").disabled = true;
+  try {
+    const r = await fetch(`/runs/${run}/cancel`, { method: "POST" });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.detail || r.statusText);
+    setStatus(body.status);
+  } catch (err) { alert("Couldn't cancel: " + err.message); }
+  finally { $("cancelButton").disabled = false; loadRuns(); }
+};
+
+$("againButton").onclick = () => {
+  $("againBrief").value = $("briefText").textContent;
+  show("againForm", $("againForm").classList.contains("hidden"));
+};
+
+$("againForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const data = new FormData();
+  data.append("brief", $("againBrief").value);
+  data.append("format", $("againFormat").value);
+  try {
+    const r = await fetch(`/runs/${run}/again`, { method: "POST", body: data });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.detail || r.statusText);
+    open(body.id, 0);
+  } catch (err) { alert("Couldn't start it again: " + err.message); }
+};
+
+// --- Gallery -------------------------------------------------------------------------
+async function gallery() {
+  if (source) source.close();
+  run = null; history.replaceState(null, "", "#gallery");
+  for (const id of ["empty", "top", "decisionsCard", "profileCard", "storyCard", "criticCard", "previewCard", "finalCard", "logCard", "modelsCard"]) show(id, false);
+  show("galleryCard");
+  const ads = await (await fetch("/gallery")).json();
+  $("galleryMeta").textContent = `${ads.length} finished ad${ads.length === 1 ? "" : "s"}`;
+  $("gallery").replaceChildren(...ads.map((a) => {
+    const aspects = Object.keys(a.videos);
+    const wide = a.videos["16x9"] || a.videos[aspects[0]];
+    const at = (path) => `/runs/${a.id}/files/${path}`;
+    const v = el("video", { src: at(wide), controls: "", preload: "none", playsinline: "", ...(a.poster ? { poster: at(a.poster) } : {}) });
+    return el("div", { class: "ad" }, v, el("div", { class: "body" },
+      el("div", { class: "brief", text: a.brief || "" }),
+      el("div", { class: "row" },
+        el("span", { class: "meta", text: [aspects.join(" · ").replaceAll("x", ":"), a.seconds ? duration(a.seconds) : "", a.cost != null ? `$${a.cost.toFixed(3)}` : ""].filter(Boolean).join(" · ") }),
+        el("a", { href: "#" + a.id, text: "how it was made", onclick: (e) => { e.preventDefault(); open(a.id); } }))));
+  }));
+}
+$("galleryButton").onclick = gallery;
+
 loadRuns();
 setInterval(loadRuns, 15000);
-if (location.hash.length > 1) open(location.hash.slice(1));
+if (location.hash === "#gallery") gallery();
+else if (location.hash.length > 1) open(location.hash.slice(1));
 </script>
 </body>
 </html>

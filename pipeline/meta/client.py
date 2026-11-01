@@ -22,9 +22,10 @@ MAX_RETRIES = 4
 TIMEOUT_SECONDS = 180
 
 # Then an outage (no connection, timeouts, 5xx) is waited out this many more
-# times, this many seconds each, before a call fails: about 2 minutes, so a
-# long run survives a dropped connection.
-OUTAGE_WAITS = (10, 20, 40, 60)
+# times, this many seconds each, before a call fails: about 10 minutes, so a
+# long run survives a dropped connection or a router restarting (one ad
+# failed overnight on an outage longer than the 2 minutes this used to be).
+OUTAGE_WAITS = (10, 20, 30, 60, 90, 120, 120, 150)
 
 
 class MetaError(Exception):

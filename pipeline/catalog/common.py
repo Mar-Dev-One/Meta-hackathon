@@ -2,6 +2,7 @@
 where downloads go, and HTTP with a name and a timeout."""
 
 import json
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -52,25 +53,58 @@ class Candidate:
         return asdict(self) | {"licence_label": label, "licence_url": url, "credit": self.credit()}
 
 
+# A dropped connection, a timeout or a server error (5xx) is tried again after
+# each of these waits (seconds): about 3 minutes, then it fails.
+OUTAGE_WAITS = (5, 15, 30, 60, 90)
+
+
+class _Outage(Exception):
+    """A server error worth trying again."""
+
+
+def _patiently(attempt):
+    """attempt()'s result, an outage waited out (OUTAGE_WAITS)."""
+    for wait in (*OUTAGE_WAITS, None):
+        try:
+            return attempt()
+        except (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError, _Outage) as e:
+            if wait is None:
+                raise CatalogError(f"no answer after {sum(OUTAGE_WAITS)} s of trying: {e}") from e
+            time.sleep(wait)
+
+
 def get(url: str, **kwargs) -> requests.Response:
-    response = requests.get(url, headers=HEADERS | kwargs.pop("headers", {}), timeout=TIMEOUT, **kwargs)
-    if response.status_code >= 400:
-        raise CatalogError(f"{url}: HTTP {response.status_code} {response.text[:200]}")
-    return response
+    headers = HEADERS | kwargs.pop("headers", {})
+
+    def attempt():
+        response = requests.get(url, headers=headers, timeout=TIMEOUT, **kwargs)
+        if response.status_code >= 500:
+            raise _Outage(f"{url}: HTTP {response.status_code}")
+        if response.status_code >= 400:
+            raise CatalogError(f"{url}: HTTP {response.status_code} {response.text[:200]}")
+        return response
+    return _patiently(attempt)
 
 
 def fetch(url: str, path: Path, **kwargs) -> Path:
-    """`url` saved at `path` (folders made), streamed."""
+    """`url` saved at `path` (folders made), streamed; a download cut off is
+    started again (only a whole file takes the name)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with requests.get(url, headers=HEADERS | kwargs.pop("headers", {}), timeout=TIMEOUT, stream=True, **kwargs) as r:
-        if r.status_code >= 400:
-            raise CatalogError(f"{url}: HTTP {r.status_code}")
-        partial = path.with_suffix(path.suffix + ".part")
-        with partial.open("wb") as out:
-            for chunk in r.iter_content(1 << 16):
-                out.write(chunk)
-        partial.replace(path)
-    return path
+    headers = HEADERS | kwargs.pop("headers", {})
+
+    def attempt():
+        with requests.get(url, headers=headers, timeout=TIMEOUT, stream=True, **kwargs) as r:
+            if r.status_code >= 500:
+                raise _Outage(f"{url}: HTTP {r.status_code}")
+            if r.status_code >= 400:
+                raise CatalogError(f"{url}: HTTP {r.status_code}")
+            partial = path.with_suffix(path.suffix + ".part")
+            with partial.open("wb") as out:
+                for chunk in r.iter_content(1 << 16):
+                    out.write(chunk)
+            partial.replace(path)
+        return path
+    return _patiently(attempt)
 
 
 def save_credit(candidate: Candidate, model: Path) -> None:

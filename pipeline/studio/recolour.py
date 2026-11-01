@@ -110,6 +110,19 @@ def _move(lab: np.ndarray, centres: np.ndarray, targets: np.ndarray) -> np.ndarr
     return out
 
 
+def _repaint(texture: Image.Image, factor: np.ndarray, centres: np.ndarray, goal: np.ndarray) -> Image.Image:
+    """The texture (times its material's factor) moved to the photo's colours:
+    worked out once per distinct colour (a million texels hold a few
+    thousand), then laid back on the texels."""
+    pixels = np.asarray(texture.convert("RGBA"))
+    rgb = pixels[..., :3].reshape(-1, 3)
+    packed = (rgb[:, 0].astype(np.uint32) << 16) | (rgb[:, 1].astype(np.uint32) << 8) | rgb[:, 2]
+    colours, where = np.unique(packed, return_inverse=True)
+    distinct = np.stack([colours >> 16, (colours >> 8) & 255, colours & 255], axis=1).astype(float)
+    moved = to_rgb(_move(to_lab(_seen(distinct, factor)), centres, goal))[where.ravel()]
+    return Image.fromarray(np.dstack([moved.reshape(pixels.shape[:2] + (3,)), pixels[..., 3]]).astype(np.uint8), "RGBA")
+
+
 def _pairing(path: Path, colours: list[tuple[str, float]], by: str, seed: int) -> tuple[np.ndarray, np.ndarray]:
     """The model's colour groups' centres and, for each, the photo's colour
     it becomes (Lab), paired `by` size or lightness."""
@@ -138,20 +151,20 @@ def recolour(path: Path | str, colours: list[tuple[str, float]], out: Path | str
     centres, goal = _pairing(path, colours, by, seed)
     scene = trimesh.load(str(path), force="scene")
 
-    done: dict[int, Image.Image] = {}
+    done: dict[tuple, Image.Image] = {}   # each texture (with its factor) repainted once
+    painted: set[int] = set()              # each material once: meshes share them (a watch: 55 meshes, 8)
     for mesh in scene.geometry.values():
         material = _material(mesh)
-        if material is None:
+        if material is None or id(material) in painted:
             continue
+        painted.add(id(material))
         factor = _factor(material)
         texture = _texture(material)
         if texture is not None:
-            if id(texture) not in done:
-                pixels = np.asarray(texture.convert("RGBA"), float)
-                seen = _seen(pixels[..., :3], factor)
-                moved = to_rgb(_move(to_lab(seen.reshape(-1, 3)), centres, goal)).reshape(seen.shape)
-                done[id(texture)] = Image.fromarray(np.dstack([moved, pixels[..., 3]]).astype(np.uint8), "RGBA")
-            material.baseColorTexture = done[id(texture)]
+            key = (id(texture), tuple(factor))
+            if key not in done:
+                done[key] = _repaint(texture, factor, centres, goal)
+            material.baseColorTexture = done[key]
             material.baseColorFactor = [255, 255, 255, int(factor[3])]   # the colour is in the texture now
         else:
             moved = to_rgb(_move(to_lab(_to_srgb(factor[None, :3] / 255)), centres, goal))[0]

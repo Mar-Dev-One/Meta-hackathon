@@ -72,9 +72,12 @@ class Pedestal(Strict):
 
 
 class Lighting(Strict):
-    preset: Literal["three_point", "rim_dark", "high_key", "top_soft", "split", "neon_dual"] = Field(
+    preset: Literal["three_point", "rim_dark", "high_key", "top_soft", "split", "neon_dual", "overhead_soft",
+                    "edge_rim"] = Field(
         description="rim_dark: luxury, moody; high_key: clean, bright (light backdrop); top_soft: natural, skylight; "
-                    "split: dramatic; neon_dual: bold, energetic; three_point: neutral")
+                    "split: dramatic; neon_dual: bold, energetic; three_point: neutral; overhead_soft: a flat "
+                    "product lying down (its top face lit, its front filled); edge_rim: a dark product (bright "
+                    "rims trace its outline on any set)")
     intensity: float = Field(1.0, ge=0, le=20, description="times the preset's brightness")
     turn: float = Field(0.0, ge=-360, le=360, description="degrees to turn the whole setup around the product")
     warmth: float = Field(0.0, ge=-1, le=1, description="-1 cooler .. 1 warmer")
