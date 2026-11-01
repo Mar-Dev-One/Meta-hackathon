@@ -55,7 +55,8 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     `model` is a 3D model file (.glb) of the product, for shapes that aren't
     round (`credit` is its candidate's, kept in the run as model_credit.json);
     without one, the scout looks at the photo: a round product is traced from
-    it, any other shape gets the closest model found online, if one fits.
+    it, any other shape gets the closest model found online, or the ad stops
+    (scout.NoModel) if none fits: traced, it would be a blob.
     Without the critic, the director's first storyboard is built and a few
     frames previewed (frames/). `director` is "live" (Spark makes the film
     in the Studio with every command; live_ad) or "storyboard"."""

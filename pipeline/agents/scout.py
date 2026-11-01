@@ -37,6 +37,15 @@ TILE = 256
 SYSTEM = "You are a 3D artist preparing a product for a CGI ad."
 
 
+class NoModel(Exception):
+    """The product isn't round and no model can stand in for it: traced
+    from the photo it would be a turned blob (a drone as a mushroom), so the
+    ad stops here and asks for a model instead."""
+
+    def __init__(self, category: str, why: str):
+        super().__init__(f"no 3D model fits this {category}: {why}. Upload a model of it (.glb) to make its ad")
+
+
 class Shape(BaseModel):
     reason: str = Field(description="in a sentence: the product's shape, seen from above and from the side")
     round: bool = Field(description="true if the product is round seen from above, the same all the way round "
@@ -217,12 +226,15 @@ async def audition(studio, photo: Path | str, finalists: list[tuple[Candidate, P
 async def scout(run: Run, photo: Path | str, category: str = "product",
                 studio=None) -> tuple[Path | None, dict | None]:
     """The model for the product in `photo`, downloaded, and its credit; or
-    (None, None) when the product is round, or no model fits, or the search
-    fails: then it's traced from the photo. With a `studio`, Spark's top
+    (None, None) when the product is round, or Spark can't say (it's traced
+    from the photo then). One that isn't round with no model to stand in for
+    it (none found, none fits, every one branded, none would download) is
+    NoModel: traced, it would be a blob. With a `studio`, Spark's top
     thumbnails are downloaded and rendered, and it picks by the renders
     (audition); if that fails, or without one, its closest thumbnail wins.
     Each step is logged in `run` (scouted, model_pick, model_download,
     model_audition; scout_failed), the sheets saved in its stage/ folder."""
+    need = None
     try:
         need = shape(photo, category)
         run.event("scouted", round=need.round, reason=need.reason, queries=need.queries)
@@ -249,9 +261,12 @@ async def scout(run: Run, photo: Path | str, category: str = "product",
                 run.event("scout_failed", error=f"{found.name}: {e}")
     except (MetaError, CatalogError, ValueError, OSError) as e:   # OSError: requests' network errors too
         run.event("scout_failed", error=str(e))
-        return None, None
+        if need is None:   # not even its shape known: traced, as a round one would be
+            return None, None
+        raise NoModel(category, f"the search failed ({e})") from e
     if not finalists:
-        return None, None
+        raise NoModel(category, "none of the close models would download or render" if ranked
+                      else answer.reason if answer else "the catalogues have nothing for it")
     chosen = 0
     if len(finalists) > 1:
         try:
@@ -261,7 +276,7 @@ async def scout(run: Run, photo: Path | str, category: str = "product",
                       reason=final.reason, branded=final.branded, sheet=board.relative_to(run.root).as_posix(),
                       finalists=[c.name for c, _ in finalists], thumbnail_pick=finalists[0][0].name)
             if picked is None:   # every one carries a brand
-                return None, None
+                raise NoModel(category, "every model close enough carries another company's brand")
             chosen = picked
         except (MetaError, StudioError, ValueError, OSError) as e:
             run.event("model_audition", name=finalists[0][0].name, error=str(e))
