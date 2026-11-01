@@ -194,10 +194,19 @@ class Product(Strict):
 
 # --- Shots, titles, tracks ----------------------------------------------------------------------
 
+class PathPoint(Strict):
+    """A free path's waypoint: where the camera is at `at` of the shot."""
+    at: float = Field(ge=0, le=1, description="the share of the shot it's reached at: the first 0, the last 1")
+    azimuth: float = Field(ge=-360, le=360, description="degrees around: 0 front, 90 its right, -90 its left")
+    elevation: float = Field(ge=-85, le=85, description="degrees above it")
+    fill: float = Field(ge=0.05, le=5, description="share of the frame's height it fills (0.45 wide, 0.9 close)")
+
+
 class CameraMove(Strict):
-    move: Literal["static", "orbit", "dolly", "crane", "truck", "reveal", "zoom"] = Field(
+    move: Literal["static", "orbit", "dolly", "crane", "truck", "reveal", "zoom", "path"] = Field(
         description="static: holds; orbit: circles it; dolly: pushes in/out; crane: rises or drops; "
-                    "truck: slides past; reveal: aim pans onto it; zoom: lens only")
+                    "truck: slides past; reveal: aim pans onto it; zoom: lens only; path: glides through "
+                    "waypoints (points): any route, e.g. low from the side, rising over the top into a close-up")
     ease: Ease = "in_out"
     fill: float = Field(0.6, ge=0.05, le=5, description="share of the frame's height the product fills; 0.45 wide, 0.6 medium, 0.9 close, over 0.97 crops it (a close-up)")
     azimuth: float = Field(0, ge=-360, le=360, description="degrees around: 0 front, 90 its right, -90 its left")
@@ -216,10 +225,27 @@ class CameraMove(Strict):
                                                                   "stays sharp and what's behind softens; unset or 0 "
                                                                   "= all sharp, 2-2.8 a very soft background "
                                                                   "(close-ups, heroes), 4-5.6 a softened set")
+    points: list[PathPoint] | None = Field(None, max_length=8, description="path: 2 to 8 waypoints, `at` rising "
+                                                                           "from 0 to 1; the camera glides through "
+                                                                           "them, never swinging past one")
+
+    @model_validator(mode="after")
+    def _a_path_has_its_points(self):
+        if self.move != "path":
+            return self
+        at = [p.at for p in self.points or []]
+        if len(at) < 2:
+            raise ValueError("a path needs points: 2 to 8 waypoints {at, azimuth, elevation, fill}, at 0 to 1")
+        if at[0] != 0 or at[-1] != 1 or any(b <= a for a, b in zip(at, at[1:])):
+            raise ValueError(f"a path's points' `at` must rise from 0 (the first) to 1 (the last), not {at}")
+        return self
 
     def max_fill(self) -> float:
         """The most of the frame's height the product fills during the move
-        (a dolly's defaults as camera.move applies them)."""
+        (a dolly's defaults as camera.move applies them; a path's waypoints
+        hold its extremes)."""
+        if self.move == "path":
+            return max(p.fill for p in self.points)
         if self.move == "dolly":
             return max(self.from_fill if self.from_fill is not None else 0.6 * self.fill,
                        self.to_fill if self.to_fill is not None else self.fill)

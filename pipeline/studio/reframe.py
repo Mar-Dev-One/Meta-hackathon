@@ -69,8 +69,11 @@ async def _widest(studio, sb: Storyboard) -> float:
 def _scaled(sb: Storyboard, factor: float) -> Storyboard:
     """`sb` with every shot's fills but a close-up's times `factor`."""
     def camera(c):
-        return c.model_copy(update={k: max(0.05, round(getattr(c, k) * factor, 4)) for k in ("fill", "from_fill", "to_fill")
-                                    if getattr(c, k) is not None})
+        update = {k: max(0.05, round(getattr(c, k) * factor, 4)) for k in ("fill", "from_fill", "to_fill")
+                  if getattr(c, k) is not None}
+        if c.points:   # a path's framing is its waypoints'
+            update["points"] = [p.model_copy(update={"fill": max(0.05, round(p.fill * factor, 4))}) for p in c.points]
+        return c.model_copy(update=update)
     return sb.model_copy(update={"shots": [s if s.camera.max_fill() > CLOSE else s.model_copy(update={"camera": camera(s.camera)})
                                            for s in sb.shots]})
 

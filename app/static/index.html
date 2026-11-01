@@ -575,7 +575,8 @@ async function storyboard(path, round) {
   $("strip").replaceChildren(...sb.shots.map((s) => {
     const c = s.camera, start = t; t += s.duration;
     const how = { orbit: `${c.azimuth}° → ${c.to_azimuth ?? c.azimuth + 60}°`, dolly: `fill ${c.from_fill ?? "…"} → ${c.to_fill ?? c.fill}`,
-      crane: `${c.from_elevation ?? "…"}° → ${c.to_elevation ?? "…"}°`, reveal: `from ${c.from ?? "above"}` }[c.move] || `fill ${c.fill ?? 0.6}`;
+      crane: `${c.from_elevation ?? "…"}° → ${c.to_elevation ?? "…"}°`, reveal: `from ${c.from ?? "above"}`,
+      path: (c.points || []).map((p) => `${p.azimuth}°/${p.elevation}°`).join(" → ") }[c.move] || `fill ${c.fill ?? 0.6}`;
     return el("div", { class: "shot" }, el("div", { class: "top" }, el("span", { text: s.id }), el("span", { text: `${start.toFixed(1)}–${t.toFixed(1)} s` })),
       el("div", { class: "move", text: `${c.move} · ${how}` }), el("div", { class: "intent", text: s.intent }));
   }));

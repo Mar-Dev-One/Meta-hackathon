@@ -33,6 +33,7 @@ MOVES = {
     "truck": ("slides sideways past it", ["travel", "azimuth", "elevation", "fill"]),
     "reveal": ("the aim pans onto it from off frame", ["from", "azimuth", "elevation", "fill"]),
     "zoom": ("the lens zooms, the camera stays", ["from_fov", "to_fov", "azimuth", "elevation", "fill"]),
+    "path": ("glides through waypoints you place: any route round it (a signature move)", ["points"]),
 }
 
 # Schema fields whose values must be named in a Studio argument's description.

@@ -99,7 +99,9 @@ cmd_preview(void* user, command_context* ctx, const cJSON* args, cJSON** out_res
     uint16 width, height;
     uint32 samples;
     char   dir[1024];
+    f32    shutter = 0.0f;   // previews sharp unless asked: the checks measure exact pixels
     if (!read_size(args, PREVIEW_WIDTH, PREVIEW_HEIGHT, PREVIEW_SAMPLES, &width, &height, &samples, error, error_size)
+        || arg_number(args, "shutter", 0.0f, 1.0f, &shutter, error, error_size) < 0
         || !read_out_dir(args, "preview", dir, sizeof(dir), error, error_size))
         return false;
 
@@ -111,7 +113,8 @@ cmd_preview(void* user, command_context* ctx, const cJSON* args, cJSON** out_res
     {
         char path[1200];
         snprintf(path, sizeof(path), "%s/t_%08.3f.png", dir, t->valuedouble);
-        ok = shot_render_frame(&s->shots, s, (f32)t->valuedouble, width, height, samples, pixels, error, error_size)
+        ok = shot_render_frame(&s->shots, s, (f32)t->valuedouble, width, height, samples, shutter / RENDER_FPS, pixels,
+                               error, error_size)
              && shot_write_png(path, pixels, width, height, error, error_size);
         if (!ok)
             break;
@@ -155,7 +158,9 @@ cmd_render(void* user, command_context* ctx, const cJSON* args, cJSON** out_resu
     uint32      samples;
     const char* video_path = NULL;
     char        dir[1024]  = "";
+    f32         shutter    = 0.0f;
     if (!read_size(args, RENDER_WIDTH, RENDER_HEIGHT, RENDER_SAMPLES, &width, &height, &samples, error, error_size)
+        || arg_number(args, "shutter", 0.0f, 1.0f, &shutter, error, error_size) < 0
         || arg_string(args, "video", &video_path, error, error_size) < 0)
         return false;
     if (video_path && cJSON_GetObjectItemCaseSensitive(args, "out_dir"))
@@ -180,7 +185,8 @@ cmd_render(void* user, command_context* ctx, const cJSON* args, cJSON** out_resu
     b8     ok       = true;
     for (uint32 i = 0; ok && i < count; ++i)
     {
-        ok = shot_render_frame(&s->shots, s, start + (f32)i / fps, width, height, samples, pixels, error, error_size);
+        ok = shot_render_frame(&s->shots, s, start + (f32)i / fps, width, height, samples, shutter / fps, pixels, error,
+                               error_size);
         if (ok && video)
             ok = shot_video_write(video, pixels, error, error_size);
         else if (ok)
@@ -298,6 +304,7 @@ static const cmd_arg PREVIEW_ARGS[] = {
     { "width", "number", false, "pixels (default 960)" },
     { "height", "number", false, "pixels (default 540)" },
     { "samples", "number", false, "sub-frames per frame for antialiasing, 1 to 64 (default 8)" },
+    { "shutter", "number", false, "motion blur: the shutter open for this share of a 30 fps frame, 0 to 1 (0.5 = a film camera's 180 degrees; default 0, sharp)" },
     { "out_dir", "string", false, "folder for the PNGs (default renders/preview next to the Studio)" },
 };
 
@@ -308,6 +315,7 @@ static const cmd_arg RENDER_ARGS[] = {
     { "width", "number", false, "pixels (default 1920)" },
     { "height", "number", false, "pixels (default 1080)" },
     { "samples", "number", false, "sub-frames per frame for antialiasing, 1 to 64 (default 16)" },
+    { "shutter", "number", false, "motion blur: the shutter open for this share of each frame's interval, 0 to 1 (0.5 = a film camera's 180 degrees; default 0, sharp); no slower: the samples are spread over it" },
     { "video", "string", false, "an .mp4 or .mov file to write directly (needs ffmpeg on the PATH); the fast way" },
     { "out_dir", "string", false, "instead of video: a folder for frame_00000.png ... (default renders/shot next to the Studio)" },
 };

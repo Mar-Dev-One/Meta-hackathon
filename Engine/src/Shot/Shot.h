@@ -13,6 +13,14 @@
 // active camera with TAA starting afresh, so each sub-frame adds a new
 // sub-pixel position and the frame never depends on the one rendered before
 // it: re-rendering one frame gives the same pixels as rendering it in sequence.
+//
+// Motion blur: with a `shutter` (seconds the shutter is open, centred on the
+// frame's time), the frame is drawn in steps at times spread evenly over it,
+// each a short TAA run of its own (history cleared: TAA mustn't reproject
+// from another instant), and the steps are averaged. The draws are the same
+// `samples` in all, shared out between the steps, and the jitter sequence
+// runs on through them, so the average is antialiased as well as blurred:
+// no slower than a sharp frame.
 
 struct studio;
 
@@ -20,6 +28,8 @@ struct studio;
 // so past ~32 nothing changes).
 #define SHOT_MAX_SAMPLES 64
 #define SHOT_MAX_SIZE    4096
+#define SHOT_BLUR_STEPS  8      // instants a blurred frame is drawn at, at most
+#define SHOT_BLUR_DRAWS  2      // draws per instant, at least (one short TAA run each)
 
 // The shot's own scene renderer and colour target, made at the first frame
 // and remade when the size changes. Its TAA history and shadow caches are
@@ -35,11 +45,12 @@ typedef struct shot_renderer
 void shot_renderer_destroy(shot_renderer* r);
 
 // Renders the studio's scene at time `t` into `out_pixels` (width * height
-// * 4 bytes, RGBA8, rows bottom-up as rhi_read_pixels() gives them). Leaves
-// the timeline evaluated at `t`. False (error filled) if there's no active
-// camera or the size is out of range.
+// * 4 bytes, RGBA8, rows bottom-up as rhi_read_pixels() gives them), blurred
+// over `shutter` seconds around `t` (0: sharp). Leaves the timeline
+// evaluated at `t`. False (error filled) if there's no active camera or the
+// size is out of range.
 b8 shot_render_frame(shot_renderer* r, struct studio* s, f32 t, uint16 width, uint16 height, uint32 samples,
-                     uint8* out_pixels, char* error, size_t error_size);
+                     f32 shutter, uint8* out_pixels, char* error, size_t error_size);
 
 // Writes bottom-up RGBA8 pixels as a PNG file. False (error filled) on failure.
 // PNG compression is slow for big frames (~0.6 s at 1080p): fine for

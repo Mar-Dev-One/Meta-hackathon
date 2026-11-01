@@ -60,10 +60,20 @@ typedef enum move_kind
     MOVE_TRUCK,    // sideways, past it: camera and aim travel together
     MOVE_REVEAL,   // the camera holds while the aim pans onto the subject from off it
     MOVE_ZOOM,     // the lens alone: from_fov -> to_fov
+    MOVE_PATH,     // through waypoints: any route round the subject
     MOVE_COUNT
 } move_kind;
 
-static const char* const MOVE_NAMES[MOVE_COUNT] = { "static", "orbit", "dolly", "crane", "truck", "reveal", "zoom" };
+static const char* const MOVE_NAMES[MOVE_COUNT] = { "static", "orbit", "dolly", "crane", "truck", "reveal", "zoom",
+                                                    "path" };
+
+// A path's waypoint: where the camera is at `at` (a share of the move, 0..1),
+// as the other moves place it: around the subject, above it, framing it.
+#define PATH_MAX_POINTS 8
+typedef struct path_point
+{
+    f32 at, azimuth, elevation, fill;
+} path_point;
 static const char* const REVEAL_NAMES[4]        = { "above", "below", "left", "right" };
 
 typedef struct move
@@ -82,6 +92,9 @@ typedef struct move
     f32 fov, fill, azimuth, elevation, aspect;
     f32 to_azimuth, from_fill, to_fill, from_elevation, to_elevation, travel, from_fov, to_fov;
     int reveal_from;   // REVEAL_NAMES' index
+
+    path_point points[PATH_MAX_POINTS];   // a path's waypoints, `at` rising from 0 to 1
+    uint32     point_count;
 } move;
 
 #define FRAMING_RIM_POINTS 24   // per rim circle
@@ -168,6 +181,64 @@ framing_distance(const move* m, f32 fill, f32 fov, f32 elevation)
     return far;
 }
 
+// The value at `x` of the curve through (xs[i], ys[i]), `n` points, xs
+// rising: a monotone cubic (Fritsch-Carlson). It passes through every point
+// smoothly and never beyond them between two, so a path doesn't swing past a
+// waypoint (into the subject, or below the floor).
+static f32
+monotone(const f32* xs, const f32* ys, uint32 n, f32 x)
+{
+    if (x <= xs[0])
+        return ys[0];
+    if (x >= xs[n - 1])
+        return ys[n - 1];
+    f32 d[PATH_MAX_POINTS], m[PATH_MAX_POINTS];
+    for (uint32 i = 0; i + 1 < n; ++i)
+        d[i] = (ys[i + 1] - ys[i]) / fmaxf(xs[i + 1] - xs[i], 1e-6f);
+    m[0]     = d[0];
+    m[n - 1] = d[n - 2];
+    for (uint32 i = 1; i + 1 < n; ++i)
+        m[i] = d[i - 1] * d[i] <= 0.0f ? 0.0f : 0.5f * (d[i - 1] + d[i]);
+    for (uint32 i = 0; i + 1 < n; ++i)
+    {
+        if (d[i] == 0.0f)
+        {
+            m[i] = m[i + 1] = 0.0f;
+            continue;
+        }
+        f32 a = m[i] / d[i], b = m[i + 1] / d[i], s = a * a + b * b;
+        if (s > 9.0f)
+        {
+            f32 k    = 3.0f / sqrtf(s);
+            m[i]     = k * a * d[i];
+            m[i + 1] = k * b * d[i];
+        }
+    }
+    uint32 k = 0;
+    while (k + 2 < n && x >= xs[k + 1])
+        ++k;
+    f32 h = xs[k + 1] - xs[k], t = (x - xs[k]) / fmaxf(h, 1e-6f), t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * ys[k] + (t3 - 2 * t2 + t) * h * m[k] + (-2 * t3 + 3 * t2) * ys[k + 1]
+           + (t3 - t2) * h * m[k + 1];
+}
+
+// A path's azimuth, elevation and fill at progress u.
+static void
+path_at(const move* m, f32 u, f32* azimuth, f32* elevation, f32* fill)
+{
+    f32 at[PATH_MAX_POINTS], az[PATH_MAX_POINTS], el[PATH_MAX_POINTS], fl[PATH_MAX_POINTS];
+    for (uint32 i = 0; i < m->point_count; ++i)
+    {
+        at[i] = m->points[i].at;
+        az[i] = m->points[i].azimuth;
+        el[i] = m->points[i].elevation;
+        fl[i] = m->points[i].fill;
+    }
+    *azimuth   = monotone(at, az, m->point_count, u);
+    *elevation = glm_clamp(monotone(at, el, m->point_count, u), -85.0f, 85.0f);
+    *fill      = fmaxf(monotone(at, fl, m->point_count, u), 0.05f);
+}
+
 // A point `distance` from `center`, `azimuth` degrees around and `elevation` degrees up.
 static void
 around(const vec3 center, f32 distance, f32 azimuth, f32 elevation, vec3 out)
@@ -192,6 +263,7 @@ pose(const move* m, f32 u, vec3 position, vec3 target, f32* fov)
         case MOVE_DOLLY: fill = glm_lerp(m->from_fill, m->to_fill, u); break;
         case MOVE_CRANE: el   = glm_lerp(m->from_elevation, m->to_elevation, u); break;
         case MOVE_ZOOM:  *fov = glm_lerp(m->from_fov, m->to_fov, u); break;
+        case MOVE_PATH:  path_at(m, u, &az, &el, &fill); break;
         default: break;
     }
     // A zoom keeps the camera where the end lens frames the subject.
@@ -280,7 +352,7 @@ write_move(studio* s, move_tracks* tracks, const move* m, char* error, size_t er
     timeline_remove_keys(&s->timeline, tracks->camera, "Camera", "aperture", m->start, end);
 
     f32 last = end - fminf(MOVE_END_GAP, 0.5f * m->duration);
-    if (m->kind == MOVE_ORBIT || m->kind == MOVE_CRANE)
+    if (m->kind == MOVE_ORBIT || m->kind == MOVE_CRANE || m->kind == MOVE_PATH)
     {
         // Curved: samples along the eased path, joined by straight lines.
         uint32 segments = (uint32)ceilf(m->duration / MOVE_SAMPLE_SPACING);
@@ -324,6 +396,45 @@ read_name(const cJSON* args, const char* key, const char* const* names, int coun
     return set_error(error, error_size, "\"%s\" must be one of %s", key, list);
 }
 
+// A path's "points": 2 to PATH_MAX_POINTS waypoints, `at` from 0 (the first)
+// rising to 1 (the last); a waypoint's azimuth, elevation and fill default
+// to the move's own.
+static b8
+read_points(const cJSON* args, move* m, char* error, size_t error_size)
+{
+    const cJSON* points = cJSON_GetObjectItemCaseSensitive(args, "points");
+    int          count  = cJSON_IsArray(points) ? cJSON_GetArraySize(points) : 0;
+    if (count < 2 || count > PATH_MAX_POINTS)
+        return set_error(error, error_size, "a path needs \"points\": 2 to %d waypoints, e.g. [{\"at\": 0, \"azimuth\": "
+                         "-40, \"elevation\": 5, \"fill\": 0.5}, {\"at\": 1, \"azimuth\": 30, \"elevation\": 35, "
+                         "\"fill\": 0.8}]", PATH_MAX_POINTS);
+    const cJSON* point;
+    uint32       i = 0;
+    cJSON_ArrayForEach(point, points)
+    {
+        path_point* p = &m->points[i];
+        *p            = (path_point){ .azimuth = m->azimuth, .elevation = m->elevation, .fill = m->fill };
+        if (!cJSON_IsObject(point))
+            return set_error(error, error_size, "points[%u] must be an object: {at, azimuth, elevation, fill}", i);
+        int has_at = arg_number(point, "at", 0.0f, 1.0f, &p->at, error, error_size);
+        if (has_at < 0 || arg_number(point, "azimuth", -3600.0f, 3600.0f, &p->azimuth, error, error_size) < 0
+            || arg_number(point, "elevation", -85.0f, 85.0f, &p->elevation, error, error_size) < 0
+            || arg_number(point, "fill", 0.05f, 5.0f, &p->fill, error, error_size) < 0)
+            return false;
+        if (!has_at)
+            return set_error(error, error_size, "points[%u] needs \"at\": its share of the move, 0 to 1", i);
+        if (i > 0 && p->at <= m->points[i - 1].at)
+            return set_error(error, error_size, "points' \"at\" must rise: points[%u] is at %g, after %g", i, p->at,
+                             m->points[i - 1].at);
+        ++i;
+    }
+    if (m->points[0].at != 0.0f || m->points[i - 1].at != 1.0f)
+        return set_error(error, error_size, "a path's first point is at 0 and its last at 1 (got %g and %g)",
+                         m->points[0].at, m->points[i - 1].at);
+    m->point_count = i;
+    return true;
+}
+
 static b8
 cmd_camera_move(void* user, command_context* ctx, const cJSON* args, cJSON** out_result, char* error, size_t error_size)
 {
@@ -333,7 +444,7 @@ cmd_camera_move(void* user, command_context* ctx, const cJSON* args, cJSON** out
 
     int kind;
     if (!cJSON_GetObjectItemCaseSensitive(args, "move"))
-        return set_error(error, error_size, "\"move\" must be given: static, orbit, dolly, crane, truck, reveal or zoom");
+        return set_error(error, error_size, "\"move\" must be given: static, orbit, dolly, crane, truck, reveal, zoom or path");
     if (!read_name(args, "move", MOVE_NAMES, MOVE_COUNT, 0, &kind, error, error_size))
         return false;
     m.kind = (move_kind)kind;
@@ -386,6 +497,8 @@ cmd_camera_move(void* user, command_context* ctx, const cJSON* args, cJSON** out
         return false;
     m.from_elevation = glm_clamp(m.from_elevation, -85.0f, 85.0f);
     m.to_elevation   = glm_clamp(m.to_elevation, -85.0f, 85.0f);
+    if (m.kind == MOVE_PATH && !read_points(args, &m, error, error_size))
+        return false;
 
     char target[ENTITY_NAME_MAX];
     if (snprintf(target, sizeof(target), "%s_target", camera) >= (int)sizeof(target))
@@ -438,16 +551,17 @@ cmd_camera_move(void* user, command_context* ctx, const cJSON* args, cJSON** out
     cJSON_AddNumberToObject(*out_result, "end", json_round6(m.start + m.duration));
     cJSON_AddNumberToObject(*out_result, "keys", tracks.keys);
     cJSON_AddNumberToObject(*out_result, "subject_radius", json_round6(m.radius));
-    cJSON_AddNumberToObject(*out_result, "distance", json_round6(framing_distance(&m, m.kind == MOVE_DOLLY ? m.from_fill : m.fill,
-                                                                                   m.kind == MOVE_ZOOM ? m.to_fov : m.fov,
-                                                                                   m.kind == MOVE_CRANE ? m.from_elevation : m.elevation)));
+    f32 fill = m.kind == MOVE_DOLLY ? m.from_fill : m.kind == MOVE_PATH ? m.points[0].fill : m.fill;
+    f32 el   = m.kind == MOVE_CRANE ? m.from_elevation : m.kind == MOVE_PATH ? m.points[0].elevation : m.elevation;
+    cJSON_AddNumberToObject(*out_result, "distance",
+                            json_round6(framing_distance(&m, fill, m.kind == MOVE_ZOOM ? m.to_fov : m.fov, el)));
     return true;
 }
 
 // --- Table ----------------------------------------------------------------------------
 
 static const cmd_arg MOVE_ARGS[] = {
-    { "move", "string", true, "static, orbit, dolly, crane, truck (sideways past), reveal (aim pans onto it) or zoom" },
+    { "move", "string", true, "static, orbit, dolly, crane, truck (sideways past), reveal (aim pans onto it), zoom or path (through waypoints: any route)" },
     { "subject", "string", true, "the entity to frame, e.g. the product" },
     { "duration", "number", true, "seconds" },
     { "start", "number", false, "seconds (default 0); keys already in [start, start + duration) are replaced" },
@@ -474,6 +588,9 @@ static const cmd_arg MOVE_ARGS[] = {
     { "from", "string", false, "reveal: where the aim starts, above (default), below, left or right" },
     { "from_fov", "number", false, "zoom: start lens (default fov_degrees * 1.5)" },
     { "to_fov", "number", false, "zoom: end lens (default fov_degrees)" },
+    { "points", "array", false, "path: 2 to 8 waypoints {at, azimuth, elevation, fill}, `at` the share of the move "
+                                "from 0 (first) to 1 (last); the camera glides through them on a smooth curve that "
+                                "never swings past one; a waypoint's azimuth, elevation and fill default to the move's" },
 };
 
 static const cmd_host_command CAMERA_MOVE_COMMANDS[] = {

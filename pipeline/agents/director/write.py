@@ -179,7 +179,10 @@ def lies_flat(product) -> bool:
 
 
 def _elevations(camera) -> list[float]:
-    """The heights a shot's camera passes through: its own, and a crane's start and end."""
+    """The heights a shot's camera passes through: its own, a crane's start
+    and end, a path's waypoints (its curve never goes beyond them)."""
+    if camera.move == "path":
+        return [p.elevation for p in camera.points]
     if camera.move == "crane":
         return [camera.from_elevation if camera.from_elevation is not None else camera.elevation - 15,
                 camera.to_elevation if camera.to_elevation is not None else camera.elevation + 25]
@@ -203,7 +206,10 @@ def _from_edge(azimuth: float, edges: list[float]) -> float:
 
 
 def _azimuths(camera) -> list[float]:
-    """The azimuths a shot's camera passes through: its own, and where an orbit ends."""
+    """The azimuths a shot's camera passes through: its own, where an orbit
+    ends, a path's waypoints."""
+    if camera.move == "path":
+        return [p.azimuth for p in camera.points]
     if camera.move == "orbit":
         return [camera.azimuth, camera.to_azimuth if camera.to_azimuth is not None else camera.azimuth + 60]
     return [camera.azimuth]
@@ -312,6 +318,9 @@ def _framing(camera, end: bool) -> tuple[float, float, float]:
     orbit to azimuth + 60, a crane from elevation - 15 to + 25, a zoom from
     a lens 1.5 times wider (the product that much smaller)."""
     fill, azimuth, elevation = camera.fill, camera.azimuth, camera.elevation
+    if camera.move == "path":
+        point = camera.points[-1 if end else 0]
+        return point.fill, point.azimuth, point.elevation
     if camera.move == "dolly":
         fill = (camera.to_fill if camera.to_fill is not None else fill) if end else \
             (camera.from_fill if camera.from_fill is not None else 0.6 * fill)
