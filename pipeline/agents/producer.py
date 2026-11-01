@@ -290,6 +290,9 @@ if __name__ == "__main__":
         given = dict(brief=args.brief, photo=args.photo, category=args.category, short=args.size,
                      video=not args.preview, critic=args.critic, format=args.format, model=args.model,
                      director=args.director)
+        credit = Path(args.model).with_suffix(".credit.json") if args.model else None
+        if credit and credit.exists():   # a catalogue's model keeps its licence's credit (CC BY)
+            given["credit"] = json.loads(credit.read_text(encoding="utf-8"))
     else:
         parser.error("give a photo and a brief, or --again RUN")
 
