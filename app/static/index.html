@@ -110,6 +110,19 @@
   .chip { display: inline-flex; gap: 6px; align-items: center; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 12px; max-width: 100%; }
   .chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chip button { background: none; border: 0; color: var(--dim); cursor: pointer; font-size: 14px; }
+  .decisions { list-style: none; margin: 0; padding: 0; }
+  .decision { display: grid; grid-template-columns: 16px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .decision:first-child { border-top: 0; padding-top: 0; }
+  .decision .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); margin-top: 5px; }
+  .decision.warn .dot { background: var(--warn); }
+  .decision.fail .dot { background: var(--fail); }
+  .decision.pass .dot { background: var(--pass); }
+  .decision .step { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); }
+  .decision .what { font-weight: 600; margin: 1px 0 2px; }
+  .decision .why { color: var(--dim); font-size: 13px; }
+  .decision ul { margin: 4px 0 0; padding-left: 18px; color: var(--dim); font-size: 12px; }
+  .decision .pics { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+  .decision .pics img { height: 96px; max-width: 100%; object-fit: contain; border-radius: 6px; border: 1px solid var(--line); cursor: zoom-in; }
   @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } aside { border-right: 0; } .profile { grid-template-columns: 1fr; } main { padding: 16px; } }
 </style>
 </head>
@@ -175,6 +188,11 @@
         <div class="meta" id="progressText"></div>
       </div>
       <div class="meta" id="runId"></div>
+    </section>
+
+    <section id="decisionsCard" class="card hidden">
+      <div class="head"><h2>How Spark decided</h2><span class="meta">each choice, Spark's reason, what it looked at</span></div>
+      <ol class="decisions" id="decisions"></ol>
     </section>
 
     <section id="profileCard" class="card hidden">
@@ -260,10 +278,10 @@ async function loadRuns() {
 // --- Opening a run -------------------------------------------------------------
 function reset() {
   state = { rounds: {}, shots: [], ad: {}, cost: 0, studio: 0, events: 0, selected: null, videos: new Set(),
-            progressLogged: -Infinity, progressStep: null };
+            progressLogged: -Infinity, progressStep: null, brandDecided: false, planDecided: false };
   show("progress", false); $("progress").classList.remove("done", "failed"); $("progressFill").style.width = "0";
-  for (const id of ["profileImgs", "swatches", "brandKv", "strip", "timebar", "scores", "sheets", "frames", "videos", "log", "issues"]) $(id).replaceChildren();
-  for (const id of ["profileCard", "storyCard", "criticCard", "previewCard", "finalCard", "issues"]) show(id, false);
+  for (const id of ["profileImgs", "swatches", "brandKv", "strip", "timebar", "scores", "sheets", "frames", "videos", "log", "issues", "decisions"]) $(id).replaceChildren();
+  for (const id of ["decisionsCard", "profileCard", "storyCard", "criticCard", "previewCard", "finalCard", "issues"]) show(id, false);
   $("titles").textContent = ""; $("cost").textContent = ""; $("criticMeta").textContent = "";
   $("modelCredit").textContent = ""; show("modelsCard", false);
 }
@@ -291,7 +309,7 @@ function setStatus(s) { const p = $("status"); p.className = "pill " + s; p.text
 
 // --- Events --------------------------------------------------------------------
 function handle(e) {
-  state.events++;
+  state.events++; state.t = e.t;
   if (e.kind === "studio") { state.studio++; $("logMeta").textContent = `${state.studio} Studio commands`; return; }
   if (e.kind === "model") { state.cost += e.cost || 0; $("cost").textContent = `$${state.cost.toFixed(3)} on Meta models`; }
   if (e.kind === "progress") {   // the bar on every tick; a log line every LOG_EVERY seconds, or when the step changes
@@ -300,8 +318,9 @@ function handle(e) {
     state.progressLogged = e.t; state.progressStep = e.step;
   }
   if (!["critique_draft", "ad_critique_draft", "saved"].includes(e.kind)) logLine(e);
-  const on = HANDLERS[e.kind];
-  if (on) { try { on(e); } catch (err) { console.error(e.kind, err); } }
+  for (const on of [HANDLERS[e.kind], DECISIONS[e.kind]]) {
+    if (on) { try { on(e); } catch (err) { console.error(e.kind, err); } }
+  }
 }
 
 // --- Progress ------------------------------------------------------------------
@@ -370,6 +389,74 @@ const HANDLERS = {
   },
 };
 
+// --- How Spark decided ------------------------------------------------------------
+// One entry per decision, from the run's events: what was chosen, Spark's reason, the pictures it chose from.
+// Entries go in the order of their events (`t`: the event's time, the latest by default): one whose
+// file arrives late (the brand profile, the storyboard) still takes its place.
+function decided(step, what, { why, list, pics, tone, t = state.t } = {}) {
+  show("decisionsCard");
+  const item = el("li", { class: "decision " + (tone || ""), "data-t": t ?? 0 }, el("div", { class: "dot" }),
+    el("div", {}, el("div", { class: "step", text: step }), el("div", { class: "what", text: what }),
+      why ? el("div", { class: "why", text: why }) : null,
+      list?.length ? el("ul", {}, ...list.map((x) => el("li", { text: x }))) : null,
+      pics?.filter(Boolean).length ? el("div", { class: "pics" }, ...pics.filter(Boolean).map((p) => img(p))) : null));
+  const later = [...$("decisions").children].find((li) => Number(li.dataset.t) > (t ?? 0));
+  $("decisions").insertBefore(item, later || null);
+}
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+const DECISIONS = {
+  scouted: (e) => decided("Shape", e.round ? "Round: traced from the photo, its own label kept"
+    : `Not round: a 3D model, searched as ${(e.queries || []).map((q) => `“${q}”`).join(", ")}`, { why: e.reason }),
+  model_pick: (e) => decided("Model search", e.name ? `Shortlisted from the thumbnails: ${(e.finalists || [e.name]).join(", ")}`
+    : "None is the same kind of product: traced from the photo", { why: e.reason, pics: [e.sheet] }),
+  model_rejected: (e) => decided("Model check", `${e.name} left out`, { why: e.reason, tone: "warn" }),
+  model_audition: (e) => decided("Model choice", e.error ? `${e.name}, by its thumbnail (the renders failed)` : `${e.name}, from ${e.source}, by its render`,
+    { why: e.error || e.reason, pics: [e.sheet] }),
+  scout_failed: (e) => decided("Model search", "Traced from the photo instead", { why: e.error, tone: "warn" }),
+  staged: (e) => decided("Stance", `Stood ${e.up}, turned ${e.turn}°`,
+    { why: e.by === "spark" ? `${e.up_reason} ${e.side_reason || ""}` : `By its proportions (${e.error})`, pics: e.sheets }),
+  recoloured: (e) => decided("Colours", e.error ? "Kept its own colours" : e.by ? `Repainted in the photo's colours (regions matched by ${e.by})` : "Kept its own colours",
+    { why: e.error || e.reason, pics: [e.sheet] }),
+  draft: (e) => decided("Plan", `Draft ${e.attempt}: ${e.problems?.length ? plural(e.problems.length, "problem") + " found" : "no problems found"}`,
+    { list: e.problems, tone: e.problems?.length ? "warn" : "pass" }),
+  balanced: (e) => decided("Light check", "A bright background brought down behind the product", { list: e.changes }),
+  draft_warnings: (e) => decided("Plan", `Kept with ${plural((e.problems || []).length, "taste warning")} (no hard rule broken)`,
+    { list: e.problems, tone: "warn" }),
+  revised: (e) => decided("Revision", `${plural((e.changes || []).length, "change")} to answer the critic`, { list: (e.changes || []).slice(0, 12) }),
+  directed: (e) => decided("Film", `${e.session}: ${e.shots} shots, ${e.duration} s, ${e.calls} Studio commands`, { why: e.summary }),
+  music: (e) => decided("Music", e.bpm ? `${e.mood}, ${e.bpm} bpm${e.key ? `, key ${e.key > 0 ? "+" : ""}${e.key}` : ""}` : e.mood),
+  finished: (e) => decided("Result", e.status === "done" ? `Finished in ${duration(e.seconds)}${e.cost != null ? `, $${e.cost.toFixed(3)} on Meta models` : ""}`
+    : `${e.status} after ${duration(e.seconds)}`, { tone: e.status === "done" ? "pass" : "fail" }),
+  failed: (e) => decided("Result", "Failed", { why: e.error, tone: "fail" }),
+};
+
+function decidedBrand(p, t) {
+  if (state.brandDecided) return;
+  state.brandDecided = true;
+  decided("Reading the photo", [p.brand || p.product_name || "no brand legible", p.category, `${(p.height * 100).toFixed(1)} cm tall`].join(" · "),
+    { why: [p.mood?.length ? `Mood: ${p.mood.join(", ")}.` : "", p.do_not?.length ? `Never: ${p.do_not.join(", ")}.` : ""].join(" ").trim(),
+      list: [`Palette: ${p.palette.map((s) => `${s.hex} ${s.role}`).join(", ")}`, `Type: ${p.typography.font}, ${p.typography.case}`], t });
+}
+
+function decidedPlan(sb, t) {
+  if (state.planDecided) return;
+  state.planDecided = true;
+  const look = sb.look, env = look.environment || {};
+  const set = env.painted ? `a painted place: ${env.painted}` : env.show_skybox ? `the ${env.hdri} light environment as the background`
+    : `a ${look.backdrop?.surface || look.backdrop?.color || "plain"} backdrop, ${env.hdri || "studio"} light`;
+  const props = (look.props || []).map((p) => `${p.prop} at ${p.angle}°`);
+  const total = sb.shots.reduce((a, s) => a + s.duration, 0);
+  decided("The plan", `${sb.style.replaceAll("_", " ")} · ${plural(sb.shots.length, "shot")} · ${total.toFixed(1)} s${sb.end_card ? ` + a ${sb.end_card.seconds} s end card` : ""}`,
+    { list: [`Set: ${set}${look.pedestal ? `, on a ${look.pedestal.surface || look.pedestal.color} pedestal` : ""}`,
+             `Light: ${look.lighting.preset.replaceAll("_", " ")}, ×${look.lighting.intensity}`,
+             `Props: ${props.length ? props.join(", ") : "none, the product alone"}`,
+             ...(sb.music ? [`Music: ${sb.music.mood}, ${sb.music.bpm} bpm`] : []),
+             `Shots: ${sb.shots.map((s) => `${s.id} ${s.camera.move}${s.motion ? " + " + s.motion.move : ""}`).join(" → ")}`,
+             ...(sb.titles?.length ? [`Titles: ${sb.titles.map((x) => `“${x.text}”`).join(", ")}`] : [])], t });
+}
+
 // Each event kind's detail in the log: a function, so only that event's own line is built
 // (an eager table evaluated every entry for every event, and one bad entry broke them all).
 const DETAILS = {
@@ -416,7 +503,9 @@ function profileImage(path, caption) {
 }
 
 async function brandProfile(path) {
+  const t = state.t;   // the event's time, before the file arrives
   const p = await json(path);
+  decidedBrand(p, t);
   show("profileCard");
   $("brandName").textContent = p.brand || "(no brand legible)";
   $("brandSub").textContent = [p.product_name, p.category, `${(p.height * 100).toFixed(1)} cm`].filter(Boolean).join(" · ");
@@ -432,7 +521,9 @@ function lum(hex) { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 
 
 // --- Storyboard ----------------------------------------------------------------
 async function storyboard(path, round) {
+  const at = state.t;   // the event's time, before the file arrives
   let sb; try { sb = await json(path); } catch { return; }
+  if (round == null) decidedPlan(sb, at);
   show("storyCard");
   state.shots = sb.shots.map((s) => s.id);
   const total = sb.shots.reduce((a, s) => a + s.duration, 0);
