@@ -72,9 +72,13 @@ def shape(photo: Path | str, category: str = "product") -> Shape:
 
 class Pick(BaseModel):
     reason: str = Field(description="in a sentence: how the chosen models' shapes match the product's, or why none does")
+    branded: list[int] = Field(default_factory=list,
+                               description="the numbers of the models carrying a real brand: a logo, a brand name or "
+                                           "lettering on them, or in their title, or a specific real branded product "
+                                           "(a named car, a famous camera)")
     choices: list[int] = Field(max_length=FINALISTS,
-                               description=f"the numbers of the closest models, up to {FINALISTS}, the closest first; "
-                                           "empty if none is the same kind of product")
+                               description=f"the numbers of the closest models, up to {FINALISTS}, the closest first, "
+                                           "none of them branded; empty if none is the same kind of product")
 
 
 PICK_PROMPT = """The first image is a photo of a product ({category}). The second shows 3D models found online,
@@ -84,12 +88,21 @@ materials, so only its shape matters, not its colour, texture or background.
 Which models have the closest shape to the product: the same kind of product, the same proportions
 and the same features (a camera bump, a cap, buttons, a handle)? Prefer a single clean product over
 a scene, a set of several objects or a rough, low-detail model. Give up to {finalists}, the closest
-first (they'll be looked at more closely); none if none is the same kind of product."""
+first (they'll be looked at more closely); none if none is the same kind of product.
+
+An ad never shows another company's brand. List as branded every model with a real brand on it (a
+logo, a brand name, any lettering), in its title, or that is a specific real branded product (a named
+car model, a famous camera): never choose those, however close.
+
+Their titles:
+{titles}"""
 
 
 class Final(BaseModel):
     reason: str = Field(description="in a sentence: what in the renders decides it (shape, features, detail, defects)")
-    choice: str = Field(description="the letter of the model to use")
+    branded: list[str] = Field(default_factory=list,
+                               description="the letters of the models carrying a real brand's logo, name or lettering")
+    choice: str = Field(description="the letter of the model to use, not a branded one")
 
 
 FINAL_PROMPT = """The first image is a photo of a product ({category}). The second shows {n} 3D models of
@@ -101,7 +114,10 @@ repainted in the product's colours, so don't judge its colours.
 Which model will stand in for the product best? The same kind of product with the same shape and
 proportions, the same features (a camera bump, a cap, buttons, a handle, a sole's tread); then the
 cleanest: one whole object, finely detailed, with nothing broken or missing, no holes or spikes, and
-nothing else with it (no floor, stand, box, hand or second product)."""
+nothing else with it (no floor, stand, box, hand or second product).
+
+An ad never shows another company's brand: list as branded every model with a real brand's logo, name
+or lettering on it (repainting keeps them), and never choose one."""
 
 
 def candidates(queries: list[str]) -> list[Candidate]:
@@ -158,18 +174,20 @@ def pick(photo: Path | str, queries: list[str], folder: Path, category: str = "p
     if not found:
         return [], None, None
     board, shown = sheet(found, folder / "candidates.png")
-    answer = spark.ask(PICK_PROMPT.format(category=category, n=len(shown), finalists=FINALISTS),
+    titles = "\n".join(f"{i}. {c.name}" for i, c in enumerate(shown, 1))
+    answer = spark.ask(PICK_PROMPT.format(category=category, n=len(shown), finalists=FINALISTS, titles=titles),
                        images=[photo, board], schema=Pick, system=SYSTEM)
     chosen = Pick.model_validate(answer.data)
-    numbers = list(dict.fromkeys(n for n in chosen.choices if 1 <= n <= len(shown)))
+    numbers = list(dict.fromkeys(n for n in chosen.choices if 1 <= n <= len(shown) and n not in chosen.branded))
     return [shown[n - 1] for n in numbers], chosen, board
 
 
 async def audition(studio, photo: Path | str, finalists: list[tuple[Candidate, Path]], folder: Path,
-                   category: str = "product") -> tuple[int, Final, Path]:
+                   category: str = "product") -> tuple[int | None, Final, Path]:
     """Which of `finalists` ((candidate, its .glb)) Spark sees standing in
     best for the product in `photo`, rendered alike: (its index, Spark's
-    answer, the sheet). They're shown in an order of their own (by their
+    answer, the sheet); a branded one never (the next unbranded instead,
+    None if all are). They're shown in an order of their own (by their
     keys), not best thumbnail first: the first column isn't a hint."""
     order = sorted(range(len(finalists)), key=lambda i: hashlib.sha1(finalists[i][0].key.encode()).hexdigest())
     columns = []
@@ -189,7 +207,11 @@ async def audition(studio, photo: Path | str, finalists: list[tuple[Candidate, P
     letter = final.choice.strip().upper()[:1]
     if letter not in LETTERS[:len(finalists)]:
         raise ValueError(f"no model {final.choice!r} among A-{LETTERS[len(finalists) - 1]}")
-    return order[LETTERS.index(letter)], final, board
+    branded = {b.strip().upper()[:1] for b in final.branded}
+    if letter in branded:   # its pick is branded after all: the closest unbranded, by the thumbnails' ranking
+        letter = next((LETTERS[order.index(i)] for i in range(len(finalists))
+                       if LETTERS[order.index(i)] not in branded), None)
+    return order[LETTERS.index(letter)] if letter else None, final, board
 
 
 async def scout(run: Run, photo: Path | str, category: str = "product",
@@ -210,6 +232,7 @@ async def scout(run: Run, photo: Path | str, category: str = "product",
         ranked, answer, board = pick(photo, need.queries, folder, category)
         run.event("model_pick", name=ranked[0].name if ranked else None, source=ranked[0].source if ranked else None,
                   finalists=[c.name for c in ranked], reason=answer.reason if answer else "nothing found",
+                  branded=answer.branded if answer else [],
                   sheet=board.relative_to(run.root).as_posix() if board else None)
         finalists = []
         for found in ranked if studio else ranked[:1]:
@@ -232,10 +255,14 @@ async def scout(run: Run, photo: Path | str, category: str = "product",
     chosen = 0
     if len(finalists) > 1:
         try:
-            chosen, final, board = await audition(studio, photo, finalists, folder, category)
-            run.event("model_audition", name=finalists[chosen][0].name, source=finalists[chosen][0].source,
-                      reason=final.reason, sheet=board.relative_to(run.root).as_posix(),
+            picked, final, board = await audition(studio, photo, finalists, folder, category)
+            run.event("model_audition", name=finalists[picked][0].name if picked is not None else None,
+                      source=finalists[picked][0].source if picked is not None else None,
+                      reason=final.reason, branded=final.branded, sheet=board.relative_to(run.root).as_posix(),
                       finalists=[c.name for c, _ in finalists], thumbnail_pick=finalists[0][0].name)
+            if picked is None:   # every one carries a brand
+                return None, None
+            chosen = picked
         except (MetaError, StudioError, ValueError, OSError) as e:
             run.event("model_audition", name=finalists[0][0].name, error=str(e))
     found, glb = finalists[chosen]
