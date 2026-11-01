@@ -4,6 +4,7 @@ name, never invented (MONO's keyboard became "KEYCRAFT")."""
 import unittest
 
 from pipeline.agents.producer import brand_hint
+from pipeline.schemas.brand import HELD, PartMaterial
 
 
 class BrandHint(unittest.TestCase):
@@ -22,6 +23,21 @@ class BrandHint(unittest.TestCase):
     def test_not_a_camera_name_or_the_product(self):
         for name in ("IMG_2031.jpg", "images.png", "keyboard_photo.png", "DSC0042.jpg", "20261101.png"):
             self.assertIsNone(brand_hint("Keyboard ad, 15 s.", f"x/{name}", "mechanical keyboard"), name)
+
+
+class HeldLiquid(unittest.TestCase):
+    def glass(self, **liquid) -> PartMaterial:
+        return PartMaterial(name="body", looks_like="clear glass", color="#FFFFFF", metallic=0, roughness=0.05,
+                            transmission=1.0, **liquid)
+
+    def test_a_coloured_liquid_shows_its_own_colour(self):   # honey in front of a dark set went black
+        surface = self.glass(attenuation_color="#D3983E", attenuation_distance=0.08).surface()
+        self.assertEqual((surface["color"], surface["transmission"]), ("#D3983E", HELD))
+        self.assertEqual(surface["attenuation_color"], "#D3983E")
+
+    def test_empty_glass_stays_clear(self):
+        surface = self.glass().surface()
+        self.assertEqual((surface["color"], surface["transmission"]), ("#FFFFFF", 1.0))
 
 
 if __name__ == "__main__":

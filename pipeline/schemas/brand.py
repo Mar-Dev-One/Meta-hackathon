@@ -8,6 +8,8 @@ from pydantic import Field
 
 from .storyboard import HEX, Font, Label, PartLook, Product, ProfilePart, Strict
 
+HELD = 0.7   # the most light a glass part holding a coloured liquid lets through: the rest is the liquid's own colour
+
 
 class Swatch(Strict):
     hex: str = Field(pattern=HEX)
@@ -38,12 +40,16 @@ class PartMaterial(Strict):
                                                         "packaging): 0..1")
 
     def surface(self) -> dict:
-        """Its finish as Studio part settings (Surface fields)."""
+        """Its finish as Studio part settings (Surface fields). Glass holding
+        a coloured liquid shows that colour of its own too (HELD of it lets
+        light through): only tinting what's behind it, honey in front of a
+        dark set went black."""
         out = dict(color=self.color, metallic=self.metallic, roughness=self.roughness)
         if self.transmission > 0:
             out.update(transmission=self.transmission)
             if self.attenuation_color and self.attenuation_distance:
-                out.update(attenuation_color=self.attenuation_color, attenuation_distance=self.attenuation_distance)
+                out.update(attenuation_color=self.attenuation_color, attenuation_distance=self.attenuation_distance,
+                           color=self.attenuation_color, transmission=min(self.transmission, HELD))
         if self.clearcoat > 0:
             out.update(clearcoat=self.clearcoat, clearcoat_roughness=0.05)
         return out
