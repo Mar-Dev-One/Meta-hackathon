@@ -17,6 +17,32 @@
           "title": "Roughness",
           "type": "number"
         },
+        "surface": {
+          "anyOf": [
+            {
+              "enum": [
+                "cream_marble",
+                "granite",
+                "terrazzo",
+                "dark_wood",
+                "light_wood",
+                "concrete",
+                "stone",
+                "sand",
+                "plaster",
+                "blue_linen",
+                "red_velvet"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "null: plain `color`. Or a real material for it from the set library (its colour comes from the material; `color` is unused): cream_marble: warm cream marble with soft veins, polished: luxury, timeless; granite: dark grey speckled granite: luxury, masculine, tech; terrazzo: terrazzo, flecks in warm stone: modern, playful, design; dark_wood: dark reddish-brown wood: warm, crafted, premium; light_wood: light warm wood veneer: natural, Scandinavian, calm; concrete: smooth grey-brown concrete: urban, minimal, raw; stone: rough brown natural rock: outdoors, rugged, organic; sand: fine pale beach sand: summer, sun care, coastal; plaster: warm beige plaster: soft, natural, skincare (a wall); blue_linen: soft blue linen cloth: fresh, calm, home; red_velvet: deep red velvet: luxury, evening, romance",
+          "title": "Surface"
+        },
         "texture": {
           "anyOf": [
             {
@@ -38,7 +64,7 @@
       "additionalProperties": false,
       "properties": {
         "move": {
-          "description": "static: holds; orbit: circles it; dolly: pushes in/out; crane: rises or drops; truck: slides past; reveal: aim pans onto it; zoom: lens only",
+          "description": "static: holds; orbit: circles it; dolly: pushes in/out; crane: rises or drops; truck: slides past; reveal: aim pans onto it; zoom: lens only; path: glides through waypoints (points): any route, e.g. low from the side, rising over the top into a close-up",
           "enum": [
             "static",
             "orbit",
@@ -46,7 +72,8 @@
             "crane",
             "truck",
             "reveal",
-            "zoom"
+            "zoom",
+            "path"
           ],
           "title": "Move",
           "type": "string"
@@ -243,6 +270,23 @@
           "default": null,
           "description": "depth of field, the f-number: the product's front stays sharp and what's behind softens; unset or 0 = all sharp, 2-2.8 a very soft background (close-ups, heroes), 4-5.6 a softened set",
           "title": "Aperture"
+        },
+        "points": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/PathPoint"
+              },
+              "maxItems": 8,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "path: 2 to 8 waypoints, `at` rising from 0 to 1; the camera glides through them, never swinging past one",
+          "title": "Points"
         }
       },
       "required": [
@@ -251,26 +295,105 @@
       "title": "CameraMove",
       "type": "object"
     },
+    "EndCard": {
+      "additionalProperties": false,
+      "description": "The ad's last seconds: the film dissolves into a still card, the\nproduct as photographed, the brand's name and a line under it.",
+      "properties": {
+        "seconds": {
+          "default": 2.5,
+          "description": "how long it adds after the last shot (its dissolve begins a little before the film ends)",
+          "maximum": 4,
+          "minimum": 1.5,
+          "title": "Seconds",
+          "type": "number"
+        },
+        "name": {
+          "description": "the brand's name as it should read",
+          "title": "Name",
+          "type": "string"
+        },
+        "tagline": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "a short line under the name, or null",
+          "title": "Tagline"
+        },
+        "background": {
+          "description": "the card's colour: from the brand's palette, calm and solid",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "title": "Background",
+          "type": "string"
+        },
+        "font": {
+          "description": "the name's font, as the titles'",
+          "enum": [
+            "serif",
+            "sans",
+            "sans_bold",
+            "condensed",
+            "script"
+          ],
+          "title": "Font",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "background",
+        "font"
+      ],
+      "title": "EndCard",
+      "type": "object"
+    },
     "Environment": {
       "additionalProperties": false,
       "properties": {
         "hdri": {
-          "default": "hdri/studio_small_09_2k.hdr",
-          "description": "HDRI under the Studio's assets, for reflections and ambient light: hdri/studio_small_09_2k.hdr (a photo studio's softboxes: clean highlights on glass and metal) or hdri/citrus_orchard_road_puresky_4k.hdr (an open sky)",
+          "default": "studio",
+          "description": "the light environment around the product: it lights it, shows in its reflections (glass and metal read by it) and, with show_skybox, is the background. By name: studio: a small photo studio: soft, neutral light (the default); studio_bright: a large bright photo studio: clean, even, high key; studio_warm: a studio with warm brown walls: cosy, crafted; fireplace: a room lit by a fire: warm, intimate, evening; golden_hour: open land at sunrise: golden, natural, hopeful; sunset_sky: a blazing orange sunset sky: dramatic, bold; daylight: a clear blue sky with soft clouds: fresh, outdoors; city_night: a city's lights at night: urban, energetic, nightlife (or an HDRI's path under the Studio's assets)",
           "title": "Hdri",
           "type": "string"
         },
         "use_ibl": {
           "default": true,
-          "description": "light and reflect with the HDRI",
+          "description": "light and reflect with the light environment (keep on for glass and metal)",
           "title": "Use Ibl",
           "type": "boolean"
         },
         "show_skybox": {
           "default": false,
-          "description": "show the HDRI as the background (usually off: the backdrop is the background)",
+          "description": "show the light environment as the background, blurred by sky_blur; needs look.backdrop null (the backdrop's wall hides it)",
           "title": "Show Skybox",
           "type": "boolean"
+        },
+        "sky_blur": {
+          "default": 0.35,
+          "description": "how soft the background environment is: 0.2 recognisable, 0.35 a soft photographic blur, 0.6 only colour and light",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Sky Blur",
+          "type": "number"
+        },
+        "painted": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "a background painted for this ad by Muse Image, from this description of a place, its light and colours (e.g. 'a sunlit limestone bathroom, palm leaf shadows, warm morning light'): shown behind the product, blurred by sky_blur, and lighting it, in place of `hdri` (and of the backdrop); for a place the library doesn't have",
+          "title": "Painted"
         },
         "ambient_strength": {
           "default": 0.06,
@@ -296,8 +419,8 @@
           "type": "number"
         },
         "tonemap": {
-          "default": "agx",
-          "description": "agx: soft filmic; aces: contrasty; neutral: colours as authored (bright, clean looks)",
+          "default": "aces",
+          "description": "aces: filmic and contrasty, keeps colours rich; neutral: colours as authored (bright, clean looks); agx: soft, greys colours out (only for a white, grey or black product)",
           "enum": [
             "agx",
             "aces",
@@ -416,14 +539,16 @@
       "additionalProperties": false,
       "properties": {
         "preset": {
-          "description": "rim_dark: luxury, moody; high_key: clean, bright (light backdrop); top_soft: natural, skylight; split: dramatic; neon_dual: bold, energetic; three_point: neutral",
+          "description": "rim_dark: luxury, moody; high_key: clean, bright (light backdrop); top_soft: natural, skylight; split: dramatic; neon_dual: bold, energetic; three_point: neutral; overhead_soft: a flat product lying down (its top face lit, its front filled); edge_rim: a dark product (bright rims trace its outline on any set)",
           "enum": [
             "three_point",
             "rim_dark",
             "high_key",
             "top_soft",
             "split",
-            "neon_dual"
+            "neon_dual",
+            "overhead_soft",
+            "edge_rim"
           ],
           "title": "Preset",
           "type": "string"
@@ -525,7 +650,15 @@
           "type": "array"
         },
         "backdrop": {
-          "$ref": "#/$defs/Backdrop"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Backdrop"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "the floor curving up into a wall behind; null: none, the light environment is the background (set environment.show_skybox, which removes the backdrop by itself)"
         },
         "pedestal": {
           "anyOf": [
@@ -540,12 +673,57 @@
         },
         "lighting": {
           "$ref": "#/$defs/Lighting"
+        },
+        "props": {
+          "description": "objects set around the product (none: the product alone)",
+          "items": {
+            "$ref": "#/$defs/PropPlace"
+          },
+          "maxItems": 6,
+          "title": "Props",
+          "type": "array"
         }
       },
       "required": [
         "lighting"
       ],
       "title": "Look",
+      "type": "object"
+    },
+    "Music": {
+      "additionalProperties": false,
+      "description": "The ad's music, synthesized for it: a mood, its tempo and its key. The\ncuts land on its beats, so the tempo is the cutting pace too.",
+      "properties": {
+        "mood": {
+          "description": "dark: slow minor pads over a sub drone, a heartbeat pulse; calm: soft major pads and a plucked arpeggio; energetic: four on the floor, claps, a pumping bass and chord stabs; warm: electric-piano chords with tremolo, a soft shaker",
+          "enum": [
+            "dark",
+            "calm",
+            "energetic",
+            "warm"
+          ],
+          "title": "Mood",
+          "type": "string"
+        },
+        "bpm": {
+          "description": "its tempo in beats per minute, within the mood's range: dark 60-90, calm 70-110, energetic 100-140, warm 70-105; a beat lasts 60/bpm s, and the cuts land on beats",
+          "title": "Bpm",
+          "type": "integer"
+        },
+        "key": {
+          "default": 0,
+          "description": "semitones up (+) or down (-) from the mood's home key: lower is deeper and heavier, higher brighter and lighter",
+          "maximum": 6,
+          "minimum": -5,
+          "title": "Key",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "mood",
+        "bpm"
+      ],
+      "title": "Music",
       "type": "object"
     },
     "PartLook": {
@@ -745,6 +923,48 @@
       "title": "PartLook",
       "type": "object"
     },
+    "PathPoint": {
+      "additionalProperties": false,
+      "description": "A free path's waypoint: where the camera is at `at` of the shot.",
+      "properties": {
+        "at": {
+          "description": "the share of the shot it's reached at: the first 0, the last 1",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "At",
+          "type": "number"
+        },
+        "azimuth": {
+          "description": "degrees around: 0 front, 90 its right, -90 its left",
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Azimuth",
+          "type": "number"
+        },
+        "elevation": {
+          "description": "degrees above it",
+          "maximum": 85,
+          "minimum": -85,
+          "title": "Elevation",
+          "type": "number"
+        },
+        "fill": {
+          "description": "share of the frame's height it fills (0.45 wide, 0.9 close)",
+          "maximum": 5,
+          "minimum": 0.05,
+          "title": "Fill",
+          "type": "number"
+        }
+      },
+      "required": [
+        "at",
+        "azimuth",
+        "elevation",
+        "fill"
+      ],
+      "title": "PathPoint",
+      "type": "object"
+    },
     "Pedestal": {
       "additionalProperties": false,
       "properties": {
@@ -777,6 +997,32 @@
           "minimum": 0,
           "title": "Roughness",
           "type": "number"
+        },
+        "surface": {
+          "anyOf": [
+            {
+              "enum": [
+                "cream_marble",
+                "granite",
+                "terrazzo",
+                "dark_wood",
+                "light_wood",
+                "concrete",
+                "stone",
+                "sand",
+                "plaster",
+                "blue_linen",
+                "red_velvet"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "null: plain `color`. Or a material (see look.backdrop.surface); a low wide pedestal of one is a slab to stand the product on",
+          "title": "Surface"
         }
       },
       "title": "Pedestal",
@@ -859,6 +1105,31 @@
           "description": "the shape as profiles (from the brand analyst), instead of a template",
           "title": "Profile Parts"
         },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "the product as a 3D model file (.glb: meters, Y up, base at the origin), for shapes that aren't round; instead of a template or profiles (pipeline.studio.models)",
+          "title": "Model"
+        },
+        "finish": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Surface"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "a model's finish over its own texture: metallic, roughness, clear coat, glass"
+        },
         "label": {
           "anyOf": [
             {
@@ -872,6 +1143,43 @@
         }
       },
       "title": "Product",
+      "type": "object"
+    },
+    "ProductMotion": {
+      "additionalProperties": false,
+      "description": "The product moving during a shot (it's back at rest at the next cut).",
+      "properties": {
+        "move": {
+          "description": "turn: turns on its own axis and settles facing front by the end (shows the label coming round); float: rises gently, weightless, through the shot; drop: falls onto its stand in the shot's first 40%, then holds still; tilt: leans gently towards the camera and back",
+          "enum": [
+            "turn",
+            "float",
+            "drop",
+            "tilt"
+          ],
+          "title": "Move",
+          "type": "string"
+        },
+        "amount": {
+          "anyOf": [
+            {
+              "maximum": 720,
+              "minimum": -720,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "turn: degrees it turns (default 45; 360 a full spin; negative the other way); tilt: degrees it leans (default 8); float: how far it rises and drop: how far above it starts, as a share of its height (defaults 0.08 and 0.35)",
+          "title": "Amount"
+        }
+      },
+      "required": [
+        "move"
+      ],
+      "title": "ProductMotion",
       "type": "object"
     },
     "ProfilePart": {
@@ -1091,6 +1399,69 @@
       "title": "ProfilePart",
       "type": "object"
     },
+    "PropPlace": {
+      "additionalProperties": false,
+      "description": "An object from the prop library set beside the product, at its real\nsize, on the pedestal if it fits there whole, else on the floor.",
+      "properties": {
+        "prop": {
+          "description": "which prop (the prop library)",
+          "enum": [
+            "rust_rock",
+            "slate",
+            "pale_stone",
+            "shell",
+            "succulent",
+            "lemon",
+            "lime",
+            "apple",
+            "pomegranate",
+            "kiwi",
+            "avocado",
+            "lychee",
+            "croissant",
+            "bottle_vase",
+            "block_vase",
+            "brass_vase",
+            "clay_pot",
+            "jug",
+            "wooden_bowl",
+            "wooden_plate",
+            "cutting_board"
+          ],
+          "title": "Prop",
+          "type": "string"
+        },
+        "angle": {
+          "description": "where around the product, in degrees as the camera's azimuth: 0 in front (between it and a camera at azimuth 0), 90 its right, -90 its left, 180 behind",
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Angle",
+          "type": "number"
+        },
+        "gap": {
+          "default": 0.3,
+          "description": "the space between it and the product, in product widths (0: touching)",
+          "maximum": 4,
+          "minimum": 0,
+          "title": "Gap",
+          "type": "number"
+        },
+        "turn": {
+          "default": 0.0,
+          "description": "degrees it's turned about its vertical",
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Turn",
+          "type": "number"
+        }
+      },
+      "required": [
+        "prop",
+        "angle"
+      ],
+      "title": "PropPlace",
+      "type": "object"
+    },
     "Shot": {
       "additionalProperties": false,
       "properties": {
@@ -1113,6 +1484,28 @@
         },
         "camera": {
           "$ref": "#/$defs/CameraMove"
+        },
+        "motion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProductMotion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "the product moving in this shot; null: it stands still"
+        },
+        "transition": {
+          "default": "cut",
+          "description": "how the ad comes into this shot from the one before: cut (straight in) or dip (a brief fade through black: a pause, a change of place or time)",
+          "enum": [
+            "cut",
+            "dip"
+          ],
+          "title": "Transition",
+          "type": "string"
         }
       },
       "required": [
@@ -1122,6 +1515,204 @@
         "camera"
       ],
       "title": "Shot",
+      "type": "object"
+    },
+    "Surface": {
+      "additionalProperties": false,
+      "description": "A part's finish: what product.create takes for each part. Unset = the\ntemplate's (or, for glass, clear coat and specular, not used).",
+      "properties": {
+        "color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "sRGB",
+          "title": "Color"
+        },
+        "opacity": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0.02,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "below 1: see-through by fading out (a ghost, not glass; for glass use transmission)",
+          "title": "Opacity"
+        },
+        "metallic": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metallic"
+        },
+        "roughness": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "0 mirror .. 1 matte; glass ~0.05, gold ~0.2",
+          "title": "Roughness"
+        },
+        "transmission": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass and clear liquids: 0.9-1 shows the set through it, bent and tinted (then keep opacity unset)",
+          "title": "Transmission"
+        },
+        "ior": {
+          "anyOf": [
+            {
+              "maximum": 3,
+              "minimum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass: index of refraction, 1.5 glass, 1.33 water",
+          "title": "Ior"
+        },
+        "thickness": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass: meters light travels through it (default the part's width: a solid bottle of liquid)",
+          "title": "Thickness"
+        },
+        "attenuation_color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass: the colour light takes on through it, i.e. the liquid's (amber perfume, green oil)",
+          "title": "Attenuation Color"
+        },
+        "attenuation_distance": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 100,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "glass: meters of it after which light has fully taken on attenuation_color: 0.05 deep, 0.08 rich, 0.15 pale (under 0.04 a bottle turns nearly black); needed with it",
+          "title": "Attenuation Distance"
+        },
+        "clearcoat": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "a glossy lacquer over it (lacquered caps, coated labels), 0..1",
+          "title": "Clearcoat"
+        },
+        "clearcoat_roughness": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clearcoat Roughness"
+        },
+        "specular": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "strength of a non-metal's reflections (default 1)",
+          "title": "Specular"
+        },
+        "specular_color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "tint of a non-metal's reflections",
+          "title": "Specular Color"
+        }
+      },
+      "title": "Surface",
       "type": "object"
     },
     "Title": {
@@ -1200,7 +1791,7 @@
     },
     "Track": {
       "additionalProperties": false,
-      "description": "Anything else animated: e.g. the product turning (Transform rotation_deg).",
+      "description": "Anything else animated: e.g. a light rising at a cut (the product's own moves are Shot.motion).",
       "properties": {
         "entity": {
           "title": "Entity",
@@ -1277,7 +1868,7 @@
       "items": {
         "$ref": "#/$defs/Shot"
       },
-      "maxItems": 12,
+      "maxItems": 30,
       "minItems": 1,
       "title": "Shots",
       "type": "array"
@@ -1296,6 +1887,41 @@
       },
       "title": "Tracks",
       "type": "array"
+    },
+    "end_card": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EndCard"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "music": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Music"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "packshot": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "the product cut out of its photo, for the end card (from the brand profile)",
+      "title": "Packshot"
     }
   },
   "required": [

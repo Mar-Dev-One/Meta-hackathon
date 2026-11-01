@@ -499,6 +499,19 @@
       "description": "the shape traced from the photo's silhouette",
       "title": "Profile Parts"
     },
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "the product as a 3D model file (.glb), for shapes that aren't round (found online or given); then no profile",
+      "title": "Model"
+    },
     "materials": {
       "items": {
         "$ref": "#/$defs/PartMaterial"
@@ -560,6 +573,19 @@
       "default": null,
       "description": "path to the logo cut from the photo",
       "title": "Logo Image"
+    },
+    "packshot": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "path to the product cut out of its photo (a PNG, transparent around it), for the end card",
+      "title": "Packshot"
     },
     "photos": {
       "description": "the photos it was read from",

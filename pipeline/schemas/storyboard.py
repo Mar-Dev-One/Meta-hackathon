@@ -51,7 +51,11 @@ class Environment(Strict):
     ambient_strength: float = Field(0.06, ge=0, le=4, description="0.05 dark and moody, 0.6 bright and airy")
     exposure: float = Field(1.0, gt=0, le=16)
     bloom: float = Field(0.08, ge=0, le=1, description="glow around bright highlights; 0.03 clean, 0.14 dreamy or neon")
-    tonemap: Literal["agx", "aces", "neutral"] = Field("agx", description="agx: soft filmic; aces: contrasty; neutral: colours as authored (bright, clean looks)")
+    tonemap: Literal["agx", "aces", "neutral"] = Field("aces", description="aces: filmic and contrasty, keeps "
+                                                                           "colours rich; neutral: colours as authored "
+                                                                           "(bright, clean looks); agx: soft, greys "
+                                                                           "colours out (only for a white, grey or "
+                                                                           "black product)")
     ssao: bool = True
 
 

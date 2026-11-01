@@ -17,9 +17,11 @@ import shutil
 from pathlib import Path
 from typing import Literal
 
+import numpy as np
 from PIL import Image
 from pydantic import Field, ValidationError
 
+from pipeline.agents.analyst.palette import to_lab
 from pipeline.catalog.sets import surface_colour
 from pipeline.encode.music import cut_to_beat
 from pipeline.meta import spark
@@ -48,6 +50,7 @@ TITLE_SEEN = 0.8          # ... and at least this long before the end
 MAX_TITLES = 2            # titles stay on once in, so this many are on screen together
 SEE_THROUGH = 0.5         # a material this transmissive is glass; this metallic, metal
 SEPARATION = 15           # the product's and the backdrop's lightness (L*, 0-100) at least this far apart
+COLOURED = 10             # a product colour this saturated (C*) or more loses it under agx
 DARK_SET = 25             # a backdrop darker than this (L*) is a dark set
 GLASS_LIGHT = 1.5         # glass on a dark set needs the lights at least this strong (and a glow)
 MISSES_DARK = ("top_soft", "split", "high_key")   # presets that leave a dark product's outline in shadow
@@ -320,6 +323,12 @@ def _lightness(hex_colour: str) -> float:
     return 116 * y ** (1 / 3) - 16 if y > 0.008856 else 903.3 * y
 
 
+def _chroma(hex_colour: str) -> float:
+    """How coloured it is, C* (0 grey .. about 130)."""
+    _, a, b = to_lab(np.array([[int(hex_colour.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]], float))[0]
+    return math.hypot(a, b)
+
+
 def _contrast(a: str, b: str) -> float:
     """The contrast ratio of two colours (1 .. 21; text reads from about 3)."""
     hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
@@ -393,6 +402,9 @@ def light_problems(sb: Storyboard, profile: BrandProfile | None) -> list[str]:
         out.append(f"the product is {'glass' if glass else 'metal'}, which shows what's around it: keep "
                    f"look.environment.use_ibl on, or it renders black")
     tone = next((s.hex for s in profile.palette if s.role == "product"), None)
+    if tone and env.tonemap == "agx" and _chroma(tone) >= COLOURED:
+        out.append(f"the product is coloured ({tone}) and agx greys colours out: its blue came out sky-pale, its navy "
+                   f"grey. Use look.environment.tonemap aces (rich, filmic) or neutral (clean, bright)")
     if tone and backdrop and abs(_lightness(tone) - _lightness(backdrop)) < SEPARATION:
         out.append(f"the product ({tone}, lightness {_lightness(tone):.0f}) and the backdrop ({backdrop}, "
                    f"{_lightness(backdrop):.0f}) are too close in tone: it melts into the set. Make the backdrop "

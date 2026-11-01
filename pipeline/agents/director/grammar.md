@@ -78,7 +78,7 @@ Presets: three_point, rim_dark (luxury, moody), high_key (clean, bright), top_so
 - `ambient_strength` (0 .. 4, default 0.06): 0.05 dark and moody, 0.6 bright and airy
 - `exposure` (>0 .. 16, default 1.0)
 - `bloom` (0 .. 1, default 0.08): glow around bright highlights; 0.03 clean, 0.14 dreamy or neon
-- `tonemap` (agx | aces | neutral, default agx): agx: soft filmic; aces: contrasty; neutral: colours as authored (bright, clean looks)
+- `tonemap` (agx | aces | neutral, default aces): aces: filmic and contrasty, keeps colours rich; neutral: colours as authored (bright, clean looks); agx: soft, greys colours out (only for a white, grey or black product)
 - `ssao` (default True)
 
 `look.backdrop` (a cyclorama: a floor curving up into a wall; or null: the light environment is the background):
