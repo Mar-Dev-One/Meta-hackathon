@@ -23,6 +23,7 @@ happens, open any run that's already done.
     POST /runs/{id}/again            queues the run's ad again from its inputs (pipeline.runs.inputs),
                                      optionally with a new brief or format: a new run
     GET  /gallery                    every finished ad, newest first: its videos, end card, time and cost
+    POST /transcribe                 a spoken brief (audio): its text, mishearings mended (pipeline.agents.brief)
 
 Runs go one at a time (one renderer, one GPU) through a worker thread with
 its own event loop and its own Studio: the agents' model calls block, and in
@@ -35,6 +36,7 @@ import asyncio
 import json
 import queue
 import shutil
+import tempfile
 import threading
 import time
 from dataclasses import dataclass
@@ -44,6 +46,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from pipeline import catalog
+from pipeline.agents.brief import spoken_brief
 from pipeline.agents.producer import DIRECTORS, FORMATS, make_ad
 from pipeline.catalog.common import Candidate
 from pipeline.runs import RUNS, Run, all_runs, events, inputs, parse_event
@@ -273,6 +276,24 @@ def again(rid: str, brief: str = Form(""), format: str = Form("")) -> dict:
     jobs.put(Job(run, photo, given["brief"], given["category"], given["critic"], given["video"], given["short"],
                  given["format"], given["director"], None, model))
     return {"id": new, "status": "queued", "position": len(waiting), "again": rid, "events": f"/runs/{new}/events"}
+
+
+@app.post("/transcribe")
+async def transcribe(audio: UploadFile = File(...)) -> dict:
+    """A spoken brief to text: Muse Voice hears it, Muse Spark mends what it
+    misheard. Off the server's loop: both calls block."""
+    suffix = Path(audio.filename or "brief.webm").suffix or ".webm"
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / f"brief{suffix}"
+        with path.open("wb") as out:
+            shutil.copyfileobj(audio.file, out)
+        try:
+            brief, heard = await asyncio.to_thread(spoken_brief, path)
+        except Exception as e:   # noqa: BLE001 -- said to the page: no microphone audio, no key, an outage
+            raise HTTPException(502, f"couldn't transcribe it: {e}") from e
+    if not heard:
+        raise HTTPException(422, "nothing was heard: speak a little louder or longer")
+    return {"brief": brief, "heard": heard}
 
 
 @app.get("/gallery")

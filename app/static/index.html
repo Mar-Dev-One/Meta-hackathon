@@ -140,7 +140,10 @@
     <h1>Studio <span>·</span> ad from a photo</h1>
     <form id="form" class="card" style="display:flex;flex-direction:column;gap:12px">
       <div id="drop" class="drop">Drop a product photo, or click<input id="photo" type="file" accept="image/png,image/jpeg,image/webp" hidden></div>
-      <label class="field">Brief<textarea id="brief" placeholder="Luxury perfume ad, dark and moody, 15 seconds." required></textarea></label>
+      <label class="field"><span class="row" style="justify-content:space-between">Brief
+          <button class="btn ghost" id="speak" type="button" style="padding:3px 10px;font-size:12px">Speak it</button></span>
+        <textarea id="brief" placeholder="Luxury perfume ad, dark and moody, 15 seconds." required></textarea>
+        <span class="meta" id="heard"></span></label>
       <label class="field">What it is<input id="category" type="text" placeholder="perfume bottle"></label>
       <div class="field">3D model <span class="meta">optional: found automatically for a product that isn't round; pick one to choose it yourself</span>
         <div class="row">
@@ -719,6 +722,38 @@ function picked() {
   const f = input.files[0]; if (!f) return;
   drop.replaceChildren(el("img", { src: URL.createObjectURL(f) }), document.createTextNode(f.name), input);
 }
+
+// --- A spoken brief --------------------------------------------------------------------
+// Recorded in the page, heard by Muse Voice, mended by Muse Spark (POST /transcribe); the text lands in
+// the brief to read over before making the ad. A click starts, a second stops.
+let recorder = null;
+$("speak").onclick = async () => {
+  if (recorder) { recorder.stop(); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (err) { $("heard").textContent = "No microphone: " + err.message; return; }
+  const chunks = [];
+  recorder = new MediaRecorder(stream);
+  recorder.ondataavailable = (e) => chunks.push(e.data);
+  recorder.onstop = async () => {
+    stream.getTracks().forEach((t) => t.stop());
+    recorder = null;
+    $("speak").textContent = "Speak it"; $("speak").disabled = true;
+    $("heard").textContent = "Listening back…";
+    const data = new FormData();
+    data.append("audio", new Blob(chunks, { type: chunks[0]?.type || "audio/webm" }), "brief.webm");
+    try {
+      const r = await fetch("/transcribe", { method: "POST", body: data });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.detail || r.statusText);
+      $("brief").value = body.brief;
+      $("heard").textContent = body.heard !== body.brief ? `heard: “${body.heard}”` : "";
+    } catch (err) { $("heard").textContent = err.message; }
+    finally { $("speak").disabled = false; }
+  };
+  recorder.start();
+  $("speak").textContent = "Stop"; $("heard").textContent = "Recording: say the brief, then Stop.";
+};
 
 $("form").onsubmit = async (e) => {
   e.preventDefault();
