@@ -11,7 +11,7 @@
     with Run.create("noctis") as run:
         run.save_json("storyboard.json", storyboard)
         run.event("render", frames=390)
-    # an exception records "failed" (with the error) and is raised again
+    # an exception records "failed" (with the error, its traceback in traceback.txt) and is raised again
 
 Every Meta model call made while a run is open is logged into it with its
 cost (pipeline.meta.usage). `python -m pipeline.runs` lists runs, shows one,
@@ -24,6 +24,7 @@ import shutil
 import sys
 import threading
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator
@@ -92,8 +93,12 @@ class Run:
         if isinstance(error, asyncio.CancelledError):   # stopped on purpose (the app's cancel)
             self.event("cancelled")
             self.finish("cancelled")
-        elif error is not None:
-            self.event("failed", error=f"{type(error).__name__}: {error}")
+        elif error is not None:   # the whole traceback in traceback.txt, where it broke in the event
+            self.path("traceback.txt").write_text("".join(traceback.format_exception(kind, error, trace)),
+                                                  encoding="utf-8")
+            where = traceback.extract_tb(trace)[-1] if trace else None
+            self.event("failed", error=f"{type(error).__name__}: {error}",
+                       at=f"{Path(where.filename).name}:{where.lineno} in {where.name}" if where else None)
             self.finish("failed")
         elif self.status == "running":
             self.finish("done")

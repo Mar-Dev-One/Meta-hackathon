@@ -133,8 +133,8 @@ def _lit(family: list) -> list:
         dark += c[2]
         skip += 1
     kept = ordered[skip:]
-    shiny = [c for c in kept if c[0][0] > HIGHLIGHT and np.hypot(c[0][1], c[0][2]) < GREY]
-    return [c for c in kept if c not in shiny] or kept or family
+    shiny = {id(c) for c in kept if c[0][0] > HIGHLIGHT and np.hypot(c[0][1], c[0][2]) < GREY}   # by identity:
+    return [c for c in kept if id(c) not in shiny] or kept or family                            # they hold arrays
 
 
 def palette(seg: Segmentation, k: int = 5) -> list[Swatch]:
