@@ -150,12 +150,14 @@ def strip_base(meshes: list[trimesh.Trimesh]) -> int:
     a_thing = top - base_lo[1] >= BASE_SOLID * tall or max(across) > max(rest_across)
     if not (stands_on and wide and a_thing):
         return 0
-    removed = 0
+    gone: dict[int, tuple] = {}   # one mesh's base pieces together: its masks are of its faces before any go
     for mesh, mask, _, _ in base:
+        _, before = gone.get(id(mesh), (mesh, np.zeros_like(mask)))
+        gone[id(mesh)] = (mesh, before | mask)
+    for mesh, mask in gone.values():
         mesh.update_faces(~mask)
         mesh.remove_unreferenced_vertices()
-        removed += int(mask.sum())
-    return removed
+    return sum(int(mask.sum()) for _, mask in gone.values())
 
 
 def _rotation_between(a: np.ndarray, b: np.ndarray) -> np.ndarray:

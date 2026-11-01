@@ -27,6 +27,8 @@ from .segment import Segmentation
 
 MAX_ANGLE = np.radians(72)
 MAX_GAIN = 1.8      # the most a column is brightened to undo the shading
+INSET = 0.0005      # meters a label kept to its part stays inside the part's ends
+ON_PART = 0.5       # of the label's height: the least that must lie on a part's side to wrap it there
 
 
 @dataclass
@@ -125,3 +127,25 @@ def unroll(seg: Segmentation, traced: Traced, flatten: bool = True) -> CutLabel 
     m = traced.meters_per_pixel
     return CutLabel(Image.fromarray(rgba, "RGBA"), from_=(traced.bottom - bottom) * m, to=(traced.bottom - top) * m,
                     arc=arc)
+
+
+def onto(cut: CutLabel, parts) -> CutLabel | None:
+    """The label on the part its band lies on most (segmentation can call
+    most of a tube its cap), kept to that part's side: a band reaching past
+    it, into a lid, would wrap thin air. None if no part holds ON_PART of it.
+    The image keeps its rows: a sliver past the part's end is squeezed in."""
+    def side(part) -> tuple[float, float]:   # the heights where the part has a radius
+        ys = [y for r, y in part.profile if r > 0]
+        return (min(ys), max(ys)) if ys else (0.0, 0.0)
+
+    def overlap(part) -> float:
+        lo, hi = side(part)
+        return max(0.0, min(cut.to, hi) - max(cut.from_, lo))
+
+    best = max(parts, key=overlap, default=None)
+    if best is None or overlap(best) < ON_PART * (cut.to - cut.from_):
+        return None
+    lo, hi = side(best)
+    from_ = cut.from_ if cut.from_ > lo else lo + INSET
+    to = cut.to if cut.to < hi else hi - INSET
+    return CutLabel(cut.image, from_=from_, to=to, arc=cut.arc, part=best.name)

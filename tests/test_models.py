@@ -28,6 +28,10 @@ class StripBase(unittest.TestCase):
     def test_a_ground_plane_goes(self):
         self.assertGreater(self.strip(box((0.6, 0.0001, 0.6), (0, 0.00395, 0))), 0)
 
+    def test_a_stand_in_two_pieces_goes(self):   # one mesh, two base parts (BREVA's machine broke on it)
+        stand = trimesh.util.concatenate([box((0.12, 0.004, 0.06), (0, 0.002, z)) for z in (-0.031, 0.031)])
+        self.assertEqual(self.strip(stand), 24)
+
     def test_small_feet_stay(self):
         feet = [box((0.01, 0.004, 0.01), (x, 0.002, 0)) for x in (-0.04, 0.04)]
         self.assertEqual(self.strip(*feet), 0)

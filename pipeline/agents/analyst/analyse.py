@@ -26,7 +26,7 @@ from pipeline.schemas import BrandProfile, Label, Storyboard, Swatch
 from pipeline.schemas.storyboard import Backdrop, CameraMove, Environment, Key, Lighting, Look, Shot, Track
 from pipeline.studio import PRODUCT, build
 
-from .label import CutLabel, unroll
+from .label import CutLabel, onto, unroll
 from .materials import Reading, dress, read
 from .palette import palette, strip
 from .profile import Traced, outline, trace
@@ -64,6 +64,7 @@ def analyse(run: Run, photo: Path | str, category: str = "product") -> Analysis:
     outline(seg, traced).save(run.path("outline.png"))
 
     cut = unroll(seg, traced)
+    cut = cut and onto(cut, traced.parts)
     label = None
     if cut:
         cut.image.save(run.path("label.png"))
