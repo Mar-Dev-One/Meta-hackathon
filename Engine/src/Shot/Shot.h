@@ -19,8 +19,9 @@
 // each a short TAA run of its own (history cleared: TAA mustn't reproject
 // from another instant), and the steps are averaged. The draws are the same
 // `samples` in all, shared out between the steps, and the jitter sequence
-// runs on through them, so the average is antialiased as well as blurred:
-// no slower than a sharp frame.
+// runs on through them, so the average is antialiased as well as blurred.
+// About a third slower than a sharp frame (each step is read back and
+// averaged): 28 s against 21 s for 45 frames at 1080p.
 
 struct studio;
 

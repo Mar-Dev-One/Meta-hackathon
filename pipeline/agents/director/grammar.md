@@ -17,6 +17,7 @@ Writes a shot's camera move as keys: the camera keeps the subject framed and aim
 | `truck` | slides sideways past it | `travel`, `azimuth`, `elevation`, `fill` |
 | `reveal` | the aim pans onto it from off frame | `from`, `azimuth`, `elevation`, `fill` |
 | `zoom` | the lens zooms, the camera stays | `from_fov`, `to_fov`, `azimuth`, `elevation`, `fill` |
+| `path` | glides through waypoints you place: any route round it (a signature move) | `points` |
 
 The settings, as the Studio describes them:
 
@@ -35,6 +36,7 @@ The settings, as the Studio describes them:
 - `from`: reveal: where the aim starts, above (default), below, left or right
 - `from_fov`: zoom: start lens (default fov_degrees * 1.5)
 - `to_fov`: zoom: end lens (default fov_degrees)
+- `points`: path: 2 to 8 waypoints {at, azimuth, elevation, fill}, `at` the share of the move from 0 (first) to 1 (last); the camera glides through them on a smooth curve that never swings past one; a waypoint's azimuth, elevation and fill default to the move's
 
 ## Shots (`shots[]`)
 
@@ -167,6 +169,9 @@ Keys on any number field of an entity, eased between: for the lights (`light_*`)
 - Open strong: the product is on screen and readable within the first 2 seconds.
 - 3 to 6 shots for 15 seconds; no shot under 1.2 s or over 5 s (the style sets the pace).
 - Every shot moves differently from the one before (orbit, then dolly, then crane ...): cuts land on motion.
+- A `path` is the ad's signature move: at most one, usually the opening reveal or the move into the hero
+  (low from the side, round to the front, rising over it into a close-up); plain moves for the rest, so it
+  stands out. Its waypoints are framings like any shot's: keep its turns and rises to what a few seconds hold.
 - Every cut changes the picture clearly, not just the move: where a shot ends and the next begins, change the
   side by 30 degrees or more, the height by 12 or more, or the size clearly (wide 0.4, medium 0.6, close 0.9),
   or it's a jump cut that reads as a stutter. Vary the framings across the ad: wide, close, from the side, from
@@ -230,16 +235,16 @@ Keys on any number field of an entity, eased between: for the lights (`light_*`)
 
 Starting points: take the one that fits, then adapt its colours to the brand's palette.
 
-- `luxury_dark`: for perfume, spirits, jewellery, watches: luxurious, moody, premium. Near-black set, rim lights tracing the glass, lights rising from dark; slow, low camera; wide-spaced serif. Lighting `rim_dark`; titles `serif` #ECE4D2, tagline `sans`; shots 3-4 s; moves reveal, orbit, dolly, static; aperture f/2.8.
+- `luxury_dark`: for perfume, spirits, jewellery, watches: luxurious, moody, premium. Near-black set, rim lights tracing the glass, lights rising from dark; slow, low camera; wide-spaced serif. Lighting `rim_dark`; titles `serif` #ECE4D2, tagline `sans`; shots 3-4 s; moves reveal, path, orbit, dolly, static; aperture f/2.8.
 - `clean_minimal`: for skincare, wellness, home, tech accessories: clean, calm, bright, minimal. Light set in the product's paler colours, soft even light, unhurried; dark type on light. Lighting `high_key`; titles `serif` #3C342E, tagline `script`; shots 3-3.5 s; moves static, dolly, orbit; aperture f/5.6.
 - `bold_energetic`: for drinks, snacks, sport, gaming: bold, loud, energetic, young. Dark set, two coloured lights, glow; fast cuts that each snap to a stop (ease out); the product spins (a rotation track); big condensed type. Lighting `neon_dual`; titles `condensed` #FF5AB0, tagline `sans_bold`; shots 1.2-1.8 s; moves orbit, dolly, crane, truck, static; aperture f/4.
 - `natural_organic`: for food, oils, coffee, tea, natural cosmetics: warm, natural, earthy, honest. Wood-brown set, warm light from above like a window; gentle crane and orbit; warm cream serif. Lighting `top_soft`; titles `serif` #E8DCB8, tagline `serif`; shots 3-3.5 s; moves crane, orbit, static; aperture f/4.
 - `warm_glow`: for serums, oils, candles, amber glass: warm, glowing, radiant, premium. Dark warm set, warm rims and glow through the glass; light rising; amber type. Lighting `rim_dark`; titles `sans_bold` #F2A24A, tagline `sans`; shots 3-4 s; moves zoom, orbit, static; aperture f/2.8.
-- `tech_sleek`: for electronics, devices, tools, cars, men's grooming: sleek, precise, modern, cool. Blue-black glossy set, hard cool side light, crisp contrast; precise sideways and push moves; thin wide-spaced sans. Lighting `split`; titles `sans` #E6EEF5, tagline `sans`; shots 2-2.5 s; moves truck, dolly, orbit, static; aperture f/5.6.
+- `tech_sleek`: for electronics, devices, tools, cars, men's grooming: sleek, precise, modern, cool. Blue-black glossy set, hard cool side light, crisp contrast; precise sideways and push moves; thin wide-spaced sans. Lighting `split`; titles `sans` #E6EEF5, tagline `sans`; shots 2-2.5 s; moves path, truck, dolly, orbit, static; aperture f/5.6.
 - `playful_pop`: for toys, sweets, beauty for teens, fun gadgets: playful, cheerful, colourful. A saturated set from the brand's brightest colour, a contrasting pedestal, bright even light; bouncy moves, a spin; chunky type. Lighting `three_point`; titles `sans_bold` #2B1B4A, tagline `sans_bold`; shots 1.5-2.2 s; moves crane, orbit, dolly, static; aperture f/8.
 - `soft_pastel`: for beauty, fragrance, baby care, gifts: soft, delicate, romantic, feminine. Blush set, soft light from above with a little glow; slow drifting orbit; script name. Lighting `top_soft`; titles `script` #7A4E55, tagline `sans`; shots 3-4 s; moves orbit, dolly, static; aperture f/2.8.
-- `marble_luxury`: for perfume, jewellery, watches, premium skincare: luxurious, timeless, refined. A polished marble slab in a warm, softly blurred room; clear even light that makes glass sparkle; slow, close moves; dark serif. Lighting `three_point`; titles `serif` #2E241C, tagline `sans`; shots 3-4 s; moves dolly, orbit, static; aperture f/2.8.
+- `marble_luxury`: for perfume, jewellery, watches, premium skincare: luxurious, timeless, refined. A polished marble slab in a warm, softly blurred room; clear even light that makes glass sparkle; slow, close moves; dark serif. Lighting `three_point`; titles `serif` #2E241C, tagline `sans`; shots 3-4 s; moves path, dolly, orbit, static; aperture f/2.8.
 - `golden_outdoors`: for oils, natural cosmetics, drinks, sun care, food: natural, warm, honest, fresh. A natural stone in an open field at sunrise, blurred behind; warm light from above; gentle crane; cream serif. Lighting `top_soft`; titles `serif` #FFF6E5, tagline `sans`; shots 3-3.5 s; moves crane, dolly, orbit, static; aperture f/2.8.
-- `evening_fireplace`: for fragrance, spirits, candles, chocolate, cosy home: intimate, warm, rich. Dark wood before a glowing fire, deeply blurred; warm rims; slow and close, shallow focus; cream serif. Lighting `rim_dark`; titles `serif` #F6E7C8, tagline `sans`; shots 3-4 s; moves orbit, dolly, static; aperture f/2.
+- `evening_fireplace`: for fragrance, spirits, candles, chocolate, cosy home: intimate, warm, rich. Dark wood before a glowing fire, deeply blurred; warm rims; slow and close, shallow focus; cream serif. Lighting `rim_dark`; titles `serif` #F6E7C8, tagline `sans`; shots 3-4 s; moves path, orbit, dolly, static; aperture f/2.
 - `city_nights`: for tech, sneakers, drinks, streetwear, nightlife: urban, bold, energetic, modern. A granite slab against blurred city lights at night; hard cool side light, bloom; quick precise moves; bold white sans. Lighting `split`; titles `sans_bold` #FFFFFF, tagline `sans`; shots 1.8-2.5 s; moves truck, orbit, dolly, static; aperture f/2.8.
 - `summer_beach`: for sun care, drinks, swimwear, summer launches: sunny, fresh, carefree. Fine sand under a clear blue sky, softly blurred; bright sunny light; lively moves; bold white sans. Lighting `high_key`; titles `sans_bold` #FFFFFF, tagline `sans`; shots 2-3 s; moves crane, orbit, dolly, static; aperture f/4.

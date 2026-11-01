@@ -315,7 +315,7 @@ static const cmd_arg RENDER_ARGS[] = {
     { "width", "number", false, "pixels (default 1920)" },
     { "height", "number", false, "pixels (default 1080)" },
     { "samples", "number", false, "sub-frames per frame for antialiasing, 1 to 64 (default 16)" },
-    { "shutter", "number", false, "motion blur: the shutter open for this share of each frame's interval, 0 to 1 (0.5 = a film camera's 180 degrees; default 0, sharp); no slower: the samples are spread over it" },
+    { "shutter", "number", false, "motion blur: the shutter open for this share of each frame's interval, 0 to 1 (0.5 = a film camera's 180 degrees; default 0, sharp); the samples are spread over it, about a third slower" },
     { "video", "string", false, "an .mp4 or .mov file to write directly (needs ffmpeg on the PATH); the fast way" },
     { "out_dir", "string", false, "instead of video: a folder for frame_00000.png ... (default renders/shot next to the Studio)" },
 };

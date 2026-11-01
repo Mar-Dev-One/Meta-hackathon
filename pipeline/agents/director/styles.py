@@ -44,7 +44,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                   lighting=Lighting(preset="rim_dark", fade_in=2.5, glow=2)),
         title=TitleStyle(font="serif", color="#ECE4D2", size=0.075, tracking=0.25,
                          tagline_font="sans", tagline_color="#C9A45C"),
-        shot_seconds=(3, 4), moves=["reveal", "orbit", "dolly", "static"], aperture=2.8,
+        shot_seconds=(3, 4), moves=["reveal", "path", "orbit", "dolly", "static"], aperture=2.8,
         notes="near-black set, rim lights tracing the glass, lights rising from dark; slow, low camera; wide-spaced serif"),
     Style(
         name="clean_minimal", use_for="skincare, wellness, home, tech accessories: clean, calm, bright, minimal",
@@ -95,7 +95,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                   lighting=Lighting(preset="split", warmth=-0.5, intensity=1.4)),
         title=TitleStyle(font="sans", color="#E6EEF5", size=0.065, tracking=0.35,
                          tagline_font="sans", tagline_color="#7FA8C9"),
-        shot_seconds=(2, 2.5), moves=["truck", "dolly", "orbit", "static"], aperture=5.6,
+        shot_seconds=(2, 2.5), moves=["path", "truck", "dolly", "orbit", "static"], aperture=5.6,
         notes="blue-black glossy set, hard cool side light, crisp contrast; precise sideways and push moves; "
               "thin wide-spaced sans"),
     Style(
@@ -130,7 +130,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                   lighting=Lighting(preset="three_point", warmth=0.2, intensity=1.2)),
         title=TitleStyle(font="serif", color="#2E241C", size=0.075, tracking=0.25,
                          tagline_font="sans", tagline_color="#5A4632"),
-        shot_seconds=(3, 4), moves=["dolly", "orbit", "static"], aperture=2.8,
+        shot_seconds=(3, 4), moves=["path", "dolly", "orbit", "static"], aperture=2.8,
         notes="a polished marble slab in a warm, softly blurred room; clear even light that makes glass sparkle; "
               "slow, close moves; dark serif"),
     Style(
@@ -151,7 +151,7 @@ STYLES: dict[str, Style] = {s.name: s for s in [
                   lighting=Lighting(preset="rim_dark", warmth=0.5, intensity=1.4)),
         title=TitleStyle(font="serif", color="#F6E7C8", size=0.075, tracking=0.22,
                          tagline_font="sans", tagline_color="#E2B979"),
-        shot_seconds=(3, 4), moves=["orbit", "dolly", "static"], aperture=2.0,
+        shot_seconds=(3, 4), moves=["path", "orbit", "dolly", "static"], aperture=2.0,
         notes="dark wood before a glowing fire, deeply blurred; warm rims; slow and close, shallow focus; cream serif"),
     Style(
         name="city_nights", use_for="tech, sneakers, drinks, streetwear, nightlife: urban, bold, energetic, modern",

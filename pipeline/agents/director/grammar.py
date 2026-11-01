@@ -50,6 +50,9 @@ CRAFT = """\
 - Open strong: the product is on screen and readable within the first 2 seconds.
 - 3 to 6 shots for 15 seconds; no shot under 1.2 s or over 5 s (the style sets the pace).
 - Every shot moves differently from the one before (orbit, then dolly, then crane ...): cuts land on motion.
+- A `path` is the ad's signature move: at most one, usually the opening reveal or the move into the hero
+  (low from the side, round to the front, rising over it into a close-up); plain moves for the rest, so it
+  stands out. Its waypoints are framings like any shot's: keep its turns and rises to what a few seconds hold.
 - Every cut changes the picture clearly, not just the move: where a shot ends and the next begins, change the
   side by 30 degrees or more, the height by 12 or more, or the size clearly (wide 0.4, medium 0.6, close 0.9),
   or it's a jump cut that reads as a stutter. Vary the framings across the ad: wide, close, from the side, from

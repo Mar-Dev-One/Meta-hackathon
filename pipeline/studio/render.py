@@ -33,6 +33,10 @@ ASPECT_SIZES = {"16:9": (16, 9), "9:16": (9, 16), "1:1": (1, 1)}
 # still hero and a moving orbit (indistinguishable) in half the time: the
 # render was more than half of every ad's time.
 SAMPLES = 8
+# The shutter, as a share of each frame's interval: a film camera's 180
+# degrees, so fast motion (a drop, a whip of the camera) smears as on film.
+# The samples are spread over it (about a third slower than sharp).
+SHUTTER = 0.5
 
 
 def frame_size(aspect: str, short: int) -> tuple[int, int]:
@@ -68,10 +72,11 @@ async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samp
     width, height = frame_size(sb.aspect, short)
     raw = run.path("final", "raw.mp4")
     frames = round(sb.duration * sb.fps)
-    run.event("render", frames=frames, width=width, height=height, samples=samples)
+    run.event("render", frames=frames, width=width, height=height, samples=samples, shutter=SHUTTER)
     began = time.time()
     result = await studio.call("shot.render", _timeout=RENDER_SETUP + RENDER_PER_FRAME * frames, video=str(raw),
-                               end=sb.duration - 1e-3, fps=sb.fps, width=width, height=height, samples=samples)
+                               end=sb.duration - 1e-3, fps=sb.fps, width=width, height=height, samples=samples,
+                               shutter=SHUTTER)
     run.event("rendered", frames=result["frames"], seconds=round(time.time() - began, 1))
     sound = None
     if music:
