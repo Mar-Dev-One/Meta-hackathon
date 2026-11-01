@@ -100,6 +100,8 @@ the music's mood and a sentence about the film. Then answer in one sentence."""
 def _brand(profile: BrandProfile) -> str:
     brand = profile.model_dump(include={"brand", "product_name", "category", "height", "palette", "materials",
                                         "typography", "mood", "do_not"}, exclude_none=True)
+    if not profile.brand:
+        brand["brand"] = "(none known: name no brand, never invent one)"
     shape = "a 3D model of it" if profile.model else "its shape traced from its photo, with its label"
     return f"""The brand, as read from the product's photo (the product is {shape}; make_product puts it in the
 scene):

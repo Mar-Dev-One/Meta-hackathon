@@ -145,7 +145,8 @@ def _profile_text(p: BrandProfile | None) -> str:
         return "(none: the storyboard's product, colours and style stand for the brand)"
     height, width = product_size(p.product())
     edges = edge_on(p.product())
-    facts = {"brand": p.brand, "product_name": p.product_name, "category": p.category,
+    facts = {"brand": p.brand or "(none known: name no brand, never invent one; titles say what it is or how it "
+                                 "feels)", "product_name": p.product_name, "category": p.category,
              "size": f"{height * 100:.1f} cm tall, {width * 100:.1f} cm wide",
              **({"flat": f"it lies low and flat: seen from near level it's only its edge, so look down on it, every "
                          f"camera at least {FLAT_ELEVATION:g} degrees above it"} if lies_flat(p.product()) else {}),

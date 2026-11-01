@@ -20,15 +20,23 @@ theirs to it.
 from dataclasses import dataclass
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageChops, ImageFilter
+from scipy.ndimage import binary_erosion, gaussian_filter, label as label_pieces
 
+from .palette import to_lab
 from .profile import Traced, _median
-from .segment import Segmentation
+from .segment import Region, Segmentation
 
 MAX_ANGLE = np.radians(72)
 MAX_GAIN = 1.8      # the most a column is brightened to undo the shading
 INSET = 0.0005      # meters a label kept to its part stays inside the part's ends
 ON_PART = 0.5       # of the label's height: the least that must lie on a part's side to wrap it there
+PRINT = 30.0        # Lab distance (lightness counting half) from the body's colour that's print, not its shade
+FINE = 12.0         # the same from its neighbourhood (FINE_REACH of its height around): fine line art, gold leaf
+FINE_REACH = 0.01
+INSIDE = 0.005      # of its height: how far in from the body's edges print is looked for (not a cap's seam)
+BLOB = 0.0004       # of the body's pixels: a piece of print smaller than this is a speck (fabric, noise)
+PRINT_SHARE = (0.005, 0.7)   # of the body: less is specks, more is no body colour to tell print from
 
 
 @dataclass
@@ -86,8 +94,10 @@ def _round_the_back(rgba: np.ndarray, arc: float) -> np.ndarray:
     return out
 
 
-def unroll(seg: Segmentation, traced: Traced, flatten: bool = True) -> CutLabel | None:
-    """The label as printed (None if the photo has no label)."""
+def unroll(seg: Segmentation, traced: Traced, flatten: bool = True, whole: bool = False) -> CutLabel | None:
+    """The label as printed (None if the photo has no label). Its sides are
+    where most of its rows end (a paper label's, past its spill), or with
+    `whole` its widest (print: a logo's letters, few rows reaching across)."""
     region = seg.parts.get("label")
     if region is None:
         return None
@@ -102,9 +112,10 @@ def unroll(seg: Segmentation, traced: Traced, flatten: bool = True) -> CutLabel 
         r = max(traced.radius_at(y), 1.0)
         lefts.append(np.arcsin(np.clip((xs[0] - traced.axis) / r, -1, 1)))
         rights.append(np.arcsin(np.clip((xs[-1] + 1 - traced.axis) / r, -1, 1)))
-    wraps = np.median(lefts) <= -MAX_ANGLE and np.median(rights) >= MAX_ANGLE
-    start = max(float(np.median(lefts)), -MAX_ANGLE)
-    end = min(float(np.median(rights)), MAX_ANGLE)
+    left, right = (min(lefts), max(rights)) if whole else (np.median(lefts), np.median(rights))
+    wraps = left <= -MAX_ANGLE and right >= MAX_ANGLE
+    start = max(float(left), -MAX_ANGLE)
+    end = min(float(right), MAX_ANGLE)
     if end - start < np.radians(5):
         return None
 
@@ -127,6 +138,43 @@ def unroll(seg: Segmentation, traced: Traced, flatten: bool = True) -> CutLabel 
     m = traced.meters_per_pixel
     return CutLabel(Image.fromarray(rgba, "RGBA"), from_=(traced.bottom - bottom) * m, to=(traced.bottom - top) * m,
                     arc=arc)
+
+
+def printed(seg: Segmentation) -> Region | None:
+    """The print on the body itself, as a label region, for a product with
+    no paper label (a can's logo, a tube's lettering, SAM finds no "label"):
+    the body's pixels far from its own colour (big letters), or from their
+    neighbourhood's (fine line art), lightness counting half so a can's
+    darker edges and highlight stripes, which change slowly, stay body.
+    Wrapped, only the print shows (the region is the label's alpha) over
+    the body's material. None when there's too little to be print, or too
+    much to tell it from the body."""
+    product = np.asarray(seg.product.mask) > 127
+    cap = np.asarray(seg.parts["cap"].mask) > 127 if "cap" in seg.parts else np.zeros_like(product)
+    body = product & ~cap
+    if body.sum() < 100:
+        return None
+    weight = np.array([0.5, 1.0, 1.0])
+    lab = to_lab(np.asarray(seg.image, dtype=float).reshape(-1, 3)).reshape(*body.shape, 3)
+    far = np.linalg.norm((lab - np.median(lab[body], axis=0)) * weight, axis=2) > PRINT
+    reach = FINE_REACH * (seg.product.box[3] - seg.product.box[1])   # around, within the body only
+    near = gaussian_filter(body.astype(float), reach)
+    around = np.dstack([gaussian_filter(lab[..., k] * body, reach) for k in range(3)]) / np.maximum(near, 1e-6)[..., None]
+    fine = np.linalg.norm((lab - around) * weight, axis=2) > FINE
+    inside = binary_erosion(body, iterations=max(2, round(INSIDE * (seg.product.box[3] - seg.product.box[1]))))
+    big = Image.fromarray((far & inside).astype(np.uint8) * 255, "L").filter(ImageFilter.MinFilter(3))
+    thin = Image.fromarray((fine & inside).astype(np.uint8) * 255, "L").filter(ImageFilter.MedianFilter(3))
+    found = np.asarray(ImageChops.lighter(big, thin)) > 127
+    pieces, count = label_pieces(found)
+    sizes = np.bincount(pieces.ravel(), minlength=count + 1)
+    keep = sizes >= BLOB * body.sum()
+    keep[0] = False
+    image = Image.fromarray(keep[pieces].astype(np.uint8) * 255, "L").filter(ImageFilter.MaxFilter(3))   # whole edges
+    image = Image.fromarray(np.where(body, np.asarray(image), 0).astype(np.uint8), "L")
+    share = (np.asarray(image) > 127).sum() / body.sum()
+    if not PRINT_SHARE[0] <= share <= PRINT_SHARE[1]:
+        return None
+    return Region("label", "print on the body", image, image.getbbox())
 
 
 def onto(cut: CutLabel, parts) -> CutLabel | None:

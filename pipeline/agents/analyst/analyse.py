@@ -26,7 +26,7 @@ from pipeline.schemas import BrandProfile, Label, Storyboard, Swatch
 from pipeline.schemas.storyboard import Backdrop, CameraMove, Environment, Key, Lighting, Look, Shot, Track
 from pipeline.studio import PRODUCT, build
 
-from .label import CutLabel, onto, unroll
+from .label import CutLabel, onto, printed, unroll
 from .materials import Reading, dress, read
 from .palette import palette, strip
 from .profile import Traced, outline, trace
@@ -63,7 +63,12 @@ def analyse(run: Run, photo: Path | str, category: str = "product") -> Analysis:
     traced.parts = dress(traced.parts, reading)
     outline(seg, traced).save(run.path("outline.png"))
 
-    cut = unroll(seg, traced)
+    glass = any(m.transmission >= 0.5 for m in reading.materials)   # its refractions would pass for print
+    print_ = None
+    if "label" not in seg.parts and not glass and (print_ := printed(seg)):   # printed straight on: a can, a tube
+        seg.parts["label"] = print_
+        run.event("print_label", box=list(print_.box))
+    cut = unroll(seg, traced, whole=print_ is not None)
     cut = cut and onto(cut, traced.parts)
     label = None
     if cut:

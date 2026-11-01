@@ -44,6 +44,27 @@ FORMATS = {"horizontal": "16:9", "vertical": "9:16", "both": None}
 DIRECTORS = ("storyboard", "live")
 LIVE_REVISIONS = 2   # the live director's reviews that can send the film back, at most
 
+# A brand the photo doesn't show (a name too small to read, on a key): one
+# in capitals in the brief, else the photo's file name's first word, not
+# these (a camera's or a phone's names, the words of the ad trade).
+NOT_BRANDS = {"img", "image", "images", "photo", "pic", "picture", "dsc", "dcim", "pxl", "screenshot", "scan",
+              "product", "untitled", "copy", "final", "new", "test", "ad", "cgi", "spf", "led", "usb", "hdr",
+              "uhd", "diy", "asmr"}
+
+
+def brand_hint(brief: str, photo: Path | str, category: str) -> str | None:
+    """The brand's name from the brief ("... for MONO") or the photo's file
+    name (mono_keyboard.png): when the photo itself shows none. None if
+    neither has one (then the ad has no brand name, never an invented one)."""
+    for word in re.findall(r"\b[A-Z][A-Z0-9]{2,}\b", brief):
+        if word.casefold() not in NOT_BRANDS:
+            return word
+    first = re.split(r"[\s_\-.]+", Path(photo).stem)[0]
+    product = {w.casefold() for w in re.findall(r"[a-z]+", category, re.IGNORECASE)}
+    if len(first) >= 3 and first.isalpha() and first.casefold() not in NOT_BRANDS | product:
+        return first.upper()
+    return None
+
 
 async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str = "product", short: int = 1080,
                   video: bool = True, critic: bool = False, format: str = "both", model: Path | str | None = None,
@@ -84,6 +105,10 @@ async def _make(studio, run: Run, progress: Progress, brief: str, photo: Path | 
                 video: bool, critic: bool, format: str, model, credit, director: str) -> dict[str, Path] | None:
     progress.start("analyse")
     analysis = analyse(run, photo, category)
+    if not analysis.profile.brand and (hint := brand_hint(brief, photo, analysis.profile.category)):
+        analysis.profile = analysis.profile.model_copy(update={"brand": hint})
+        run.output("brand_profile", run.save_json("brand_profile.json", analysis.profile))
+        run.event("brand_hint", brand=hint, reason="the photo shows no brand name: the brief's or the file name's")
     box = analysis.seg.product.box
     aspect = (box[3] - box[1]) / max(box[2] - box[0], 1)   # the product's outline in the photo, height / width
     progress.start("model")
