@@ -58,11 +58,13 @@ def footprint(path: Path | str) -> tuple[float, float, float]:
     return float(np.ptp(along)), float(np.ptp(across)), azimuth
 
 
-def normalize(source: Path | str, out: Path | str, height: float, up: str = "+y", turn: float = 0.0) -> Path:
+def normalize(source: Path | str, out: Path | str, height: float, up: str = "+y", turn: float = 0.0,
+              strip: bool = False) -> Path:
     """`source` as a product: rotated so `up` ("+y", "+z", "-z", ...) points up
     and turned `turn` degrees about the vertical, centred over the origin,
     standing on y = 0 and scaled to `height` meters; written as a GLB with
-    vertex normals."""
+    vertex normals. With `strip`, a base it came standing on (a coaster, a
+    stand, a floor: strip_base) is taken off first."""
     scene = load(source)
     axis = {"x": 0, "y": 1, "z": 2}[up[1]]
     sign = -1.0 if up[0] == "-" else 1.0
@@ -78,14 +80,82 @@ def normalize(source: Path | str, out: Path | str, height: float, up: str = "+y"
     # Into the vertices themselves: trimesh keeps the moves above on the scene's nodes, and a glass's
     # thickness (KHR_materials_volume) is in its mesh's own units, so a mesh left in its file's units
     # (often hundreds of times too big) gets almost no thickness: no tint, no refraction.
+    meshes = scene.dump(concatenate=False)
+    if strip and strip_base(meshes):   # the product alone: stood on y = 0 and scaled to `height` again
+        meshes = [m for m in meshes if len(m.faces)]
+        lo, hi = trimesh.Scene(meshes).bounds
+        for m in meshes:
+            m.apply_translation([-(lo[0] + hi[0]) / 2, -lo[1], -(lo[2] + hi[2]) / 2])
+            m.apply_scale(height / max(hi[1] - lo[1], 1e-9))
     baked = trimesh.Scene()
-    for mesh in scene.dump(concatenate=False):
+    for mesh in meshes:
         baked.add_geometry(mesh)
     scene = baked
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     scene.export(str(out), file_type="glb", include_normals=True)   # without them the Studio can't light it
     return out
+
+
+def faces(path: Path | str) -> int:
+    """The model's faces, every placed copy of a mesh counted."""
+    scene = load(path)
+    return sum(len(scene.geometry[name].faces) for node in scene.graph.nodes_geometry
+               for name in [scene.graph[node][1]])
+
+
+BASE_THIN = 0.05   # of the model's height: a slab under it at most this thick is a base, not the product
+BASE_WIDE = 0.5    # of the product's narrower width: a base is at least this wide (a coaster, a stand; not feet)
+BASE_SOLID = 0.005 # of the height: a base this thick at least, or wider than the product (a floor); a flat
+                   # disc within its outline is its own bottom
+
+
+def _parts(mesh: trimesh.Trimesh) -> np.ndarray:
+    """Each face's connected part (faces sharing vertices, seams joined), as labels."""
+    joined = trimesh.Trimesh(mesh.vertices.copy(), mesh.faces.copy(), process=False)
+    joined.merge_vertices(merge_tex=True, merge_norm=True)
+    return trimesh.graph.connected_component_labels(joined.face_adjacency, node_count=len(joined.faces))
+
+
+def strip_base(meshes: list[trimesh.Trimesh]) -> int:
+    """Takes off (in place) what a model came standing on: the parts at its
+    very bottom, at most BASE_THIN of its height thick (and at least
+    BASE_SOLID, unless wider than the rest), at least BASE_WIDE of the
+    rest's narrower width across, with the rest standing on top of them (a coaster, a display stand, a patch of floor). Returns the faces
+    taken off: 0 when there's no such base. A flat disc within the
+    product's outline is its own bottom, and stays."""
+    lo, hi = trimesh.Scene(meshes).bounds
+    tall = hi[1] - lo[1]
+    parts = []   # (mesh, its faces' mask, lowest point, highest point)
+    for mesh in meshes:
+        if not len(mesh.faces):
+            continue
+        labels = _parts(mesh)
+        for k in range(labels.max() + 1):
+            mask = labels == k
+            points = mesh.vertices[np.unique(mesh.faces[mask])]
+            parts.append((mesh, mask, points.min(0), points.max(0)))
+    base = [p for p in parts if p[3][1] - lo[1] <= BASE_THIN * tall]
+    rest = [p for p in parts if p[3][1] - lo[1] > BASE_THIN * tall]
+    if not base or not rest:
+        return 0
+    top = max(p[3][1] for p in base)
+    rest_lo = np.min([p[2] for p in rest], axis=0)
+    rest_hi = np.max([p[3] for p in rest], axis=0)
+    base_lo = np.min([p[2] for p in base], axis=0)
+    base_hi = np.max([p[3] for p in base], axis=0)
+    stands_on = rest_lo[1] >= top - 0.01 * tall
+    across, rest_across = base_hi[[0, 2]] - base_lo[[0, 2]], rest_hi[[0, 2]] - rest_lo[[0, 2]]
+    wide = min(across) >= BASE_WIDE * min(rest_across)
+    a_thing = top - base_lo[1] >= BASE_SOLID * tall or max(across) > max(rest_across)
+    if not (stands_on and wide and a_thing):
+        return 0
+    removed = 0
+    for mesh, mask, _, _ in base:
+        mesh.update_faces(~mask)
+        mesh.remove_unreferenced_vertices()
+        removed += int(mask.sum())
+    return removed
 
 
 def _rotation_between(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -127,7 +197,7 @@ def fit(source: Path | str, out: Path | str, height: float, aspect: float | None
     attenuation, clear coat) if given."""
     if not up:
         up, turn = orient(source, aspect) if aspect else ("+y", 0.0)
-    out = normalize(source, out, height, up=up, turn=turn)
+    out = normalize(source, out, height, up=up, turn=turn, strip=True)
     if parts:
         dress(out, out, parts)
     if not (parts and any(p.get("transmission") for p in parts.values())):

@@ -281,7 +281,7 @@ function open(id, speed = Number($("speed").value)) {
   const kinds = ["started", "queued", "brief", "analyse", "segmented", "read", "output", "saved", "model", "draft", "studio",
     "preview", "critique", "ad_critique", "second_opinion", "round", "revision", "revised", "revision_failed", "refined",
     "render", "rendered", "music", "finished", "failed", "resumed", "critique_draft", "ad_critique_draft", "resumed_rounds",
-    "scouted", "model_pick", "scout_failed", "model_download", "model_audition", "staged", "model_fitted", "recoloured",
+    "scouted", "model_pick", "scout_failed", "model_download", "model_rejected", "model_audition", "staged", "model_fitted", "recoloured",
     "tool", "directed", "live_review", "render_retry", "unfinished", "progress", "balanced", "draft_warnings"];
   for (const k of kinds) source.addEventListener(k, (m) => handle(JSON.parse(m.data)));
   source.onerror = () => { if (source.readyState === EventSource.CLOSED) loadRuns(); };
@@ -391,6 +391,7 @@ const DETAILS = {
   draft_warnings: (e) => `kept with ${(e.problems || []).length} warning(s): ${(e.problems || []).map((p) => p.slice(0, 80)).join(" · ")}`,
   scouted: (e) => e.round ? `round: traced from the photo (${e.reason})` : `not round: searching ${(e.queries || []).join(", ")} (${e.reason})`,
   model_pick: (e) => e.name ? `${(e.finalists || [e.name]).join(", ")}: ${e.reason}` : `none fits, traced from the photo: ${e.reason}`,
+  model_rejected: (e) => `${e.name} left out: ${e.reason}`,
   model_audition: (e) => e.error ? `${e.name} (the renders failed: ${e.error})` : `${e.name} from ${e.source}, by its render: ${e.reason}`,
   scout_failed: (e) => `${e.error}; traced from the photo`, model_download: (e) => `${e.name} from ${e.source}`,
   staged: (e) => e.by === "spark" ? `${e.up}, turned ${e.turn}°: ${e.up_reason} ${e.side_reason}` : `${e.up}, turned ${e.turn}° (by proportions: ${e.error})`,

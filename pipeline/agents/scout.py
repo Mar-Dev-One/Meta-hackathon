@@ -30,6 +30,7 @@ from .stager import LETTERS, TILE as VIEW, _views, sheet as lettered
 CANDIDATES = 12   # thumbnails on the sheet Spark picks from, at most (4 x 3)
 FINALISTS = 3     # of them downloaded and rendered, for the pick by render
 AUDITION = ((30.0, 12.0), (120.0, 12.0), (30.0, 60.0))   # each finalist's views: (azimuth, elevation)
+FACES = (200, 1_000_000)   # a model's faces: fewer is too crude to pass for the product, more too heavy to render
 PER_SEARCH = 4    # from each source for each search
 TILE = 256
 
@@ -214,8 +215,14 @@ async def scout(run: Run, photo: Path | str, category: str = "product",
         for found in ranked if studio else ranked[:1]:
             run.event("model_download", source=found.source, name=found.name)
             try:
-                finalists.append((found, catalog.download(found)))
-            except (CatalogError, OSError) as e:   # one that won't download: the others still can
+                glb = catalog.download(found)
+                faces = models.faces(glb)
+                if not FACES[0] <= faces <= FACES[1]:
+                    run.event("model_rejected", name=found.name, faces=faces,
+                              reason=f"{faces} faces: {'too crude' if faces < FACES[0] else 'too heavy to render'}")
+                    continue
+                finalists.append((found, glb))
+            except (CatalogError, OSError, ValueError) as e:   # one that won't download or load: the others still can
                 run.event("scout_failed", error=f"{found.name}: {e}")
     except (MetaError, CatalogError, ValueError, OSError) as e:   # OSError: requests' network errors too
         run.event("scout_failed", error=str(e))
