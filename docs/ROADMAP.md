@@ -8,9 +8,10 @@ an agent-controllable PBR engine and checked frame by frame by a critic agent.
 Nov 3 is the last day for help with technical problems. Plan to be feature-complete on **Mon Nov 2**,
 polished on **Tue Nov 3**, and to spend **Wed Nov 4** on the video and the submission only.
 
-_Written 2026-10-27. Updated 2026-10-31: phases 1-7 done; what was built beyond the plan is in
-[Phase 10](#phase-10-built-beyond-the-plan-oct-29-31); what's left is in
-[Phase 11](#phase-11-enhancements-oct-31---nov-2) and phases 8-9._
+_Written 2026-10-27. Updated 2026-11-02: phases 1-7, 10 and 11 done; a 30-ad batch reviewed frame
+by frame and its flaws fixed in [Phase 12](#phase-12-the-30-ad-batch-and-its-fixes-nov-1-2); the
+README and [ARCHITECTURE.md](ARCHITECTURE.md) rewritten. What's left: the rest of Phase 12, then
+phases 8-9._
 
 ---
 
@@ -29,11 +30,12 @@ _Written 2026-10-27. Updated 2026-10-31: phases 1-7 done; what was built beyond 
 10. [Phase 7: Final cut and the app (Nov 2-3)](#phase-7-final-cut-and-the-app-nov-2-3)
 11. [Phase 8: Three ads, evaluation, freeze (Nov 3)](#phase-8-three-ads-evaluation-freeze-nov-3)
 12. [Phase 9: Demo video and submission (Nov 4)](#phase-9-demo-video-and-submission-nov-4)
-13. [Phase 10: Built beyond the plan (Oct 29-31)](#phase-10-built-beyond-the-plan-oct-29-31)
-14. [Phase 11: Enhancements (Oct 31 - Nov 2)](#phase-11-enhancements-oct-31---nov-2)
-15. [Risks and fallbacks](#risks-and-fallbacks)
-14. [Cut list if behind](#cut-list-if-behind)
-15. [After the hackathon: the engine's module system](#after-the-hackathon-the-engines-module-system)
+14. [Phase 10: Built beyond the plan (Oct 29-31)](#phase-10-built-beyond-the-plan-oct-29-31)
+15. [Phase 11: Enhancements (Oct 31 - Nov 2)](#phase-11-enhancements-oct-31---nov-2)
+16. [Phase 12: The 30-ad batch and its fixes (Nov 1-2)](#phase-12-the-30-ad-batch-and-its-fixes-nov-1-2)
+17. [Risks and fallbacks](#risks-and-fallbacks)
+18. [Cut list if behind](#cut-list-if-behind)
+19. [After the hackathon: the engine's module system](#after-the-hackathon-the-engines-module-system)
 
 ---
 
@@ -139,10 +141,10 @@ work stops for a report after each one.
 | ~~Wed Oct 28~~ | ~~1.6, 1.7a-1.7d, 2a-2c, 3a-3e, 4a-4e~~ done | ~~**First fully agent-made video**~~ |
 | ~~Thu Oct 29~~ | ~~6a-6e, 7a-7d, 10.1~~ done | ~~**Critic fixes a broken shot on its own**; the app; any-shape products~~ |
 | ~~Fri Oct 30~~ | ~~10.2-10.11~~ done | ~~Photo-only models; live director; sets, motion, painted backgrounds, beat cuts, end cards~~ |
-| Sat Oct 31 | ~~10.12-10.13~~ done; 11.1 quick wins | ~~Positioning of any-shape models; textured models~~ |
-| Sun Nov 1 | 11.2 quality, 11.3 reliability | Models in the product's colours; resumable runs |
-| Mon Nov 2 | 11.4 showcase; 8a demo ads | **Feature freeze at night** |
-| Tue Nov 3 | 8b evaluation, 8c README and PDF, clean clone; 9a video | Numbers; docs; the video recorded |
+| ~~Sat Oct 31~~ | ~~10.12-10.13, 11.1~~ done | ~~Positioning of any-shape models; textured models~~ |
+| ~~Sun Nov 1~~ | ~~11.2, 11.3, 11.4; 8a demo ads; the 30-ad batch~~ done | ~~Models in the product's colours; resumable runs; 30 ads overnight~~ |
+| Mon Nov 2 | ~~Phase 12 fixes from the batch; 8b evaluation; README and ARCHITECTURE.md~~ done; the rest of Phase 12 | **Feature freeze at night** |
+| Tue Nov 3 | 8c release zip, clean clone; 9a video | The video recorded |
 | Wed Nov 4 | 9b | Submitted by 6 PM ET (deadline 9 PM ET) |
 
 ### Step plan
@@ -215,10 +217,10 @@ Each step: what it delivers, and how it's checked. The phase sections below hold
 | ~~7c~~ done | The page: photo and brief in, format, director, 3D model; profile, storyboard, critic rounds, videos, log; progress bar | ~~A run from the browser~~ |
 | ~~7d~~ done | Replay: any run's events at 1×, 2× or 4× | ~~A recorded run replays~~ |
 
-**Phase 8: Freeze** -- 8a the demo ads end to end (see 8.1); 8b evaluation over 10 briefs (time,
-cost, first-draft pass rate, warnings, failures; critic loop on vs off); 8c README and
-`Studio_Architecture.pdf` brought up to date with Phase 10, licences (Poly Haven CC0, model
-credits), "built during the hackathon", clean-clone test.
+**Phase 8: Freeze** -- ~~8a the demo ads end to end~~ done Nov 1 (`scripts/demo_ads.py`, and 30
+more in the batch); ~~8b evaluation~~ done Nov 2 (`scripts/evaluate.py`: 72 runs, in the README);
+8c ~~README and the architecture doc~~ done Nov 2 (`docs/ARCHITECTURE.md` replaces
+`Studio_Architecture.pdf`), release zip, clean-clone test.
 
 **Phase 9: Submission** -- 9a the 3-minute demo video from replayed runs; 9b submission by
 6 PM ET, X post, gallery.
@@ -594,14 +596,20 @@ Nothing here needs rights we don't have: every brand is fictional, every photo m
 every set CC0, every model CC0 or CC-BY with its credit kept in the run (`model_credit.json`).
 The iPhone tests (real brand) stay out of the demo.
 
+Nov 1-2: `scripts/demo_ads.py` made the eight ads above, and `scripts/batch_ads.py` 30 more for 30
+new fictional products (Phase 12). The strongest for the demo: GROVE, BOLT, FROST, COVE, KOVA,
+RIPPLE, LUMEN. Kept out: ads whose catalogue model showed a real brand (PURA, RALLY, SNAPPA) or
+the wrong shape (AERO, DRIFT, HALO, QUILL, NOIR).
+
 ### 8.2 Evaluation (numbers for the demo and README)
-- [ ] 10 briefs × 3 products: pass rate, average critic iterations, average score before vs after
-      the loop, time and cost per ad.
+- [x] Done Nov 2: `scripts/evaluate.py` reads every run's log: ads made, time and cost per ad, the
+      director's drafts and the problems the next draft fixed, where the time goes, how the 3D
+      model was found (72 runs since Nov 1: in the README).
 - [ ] A small blind comparison: one-shot director vs director + critic, frames side by side.
 
 ### 8.3 Freeze
-- [ ] README: what it does, a GIF, how to run, architecture, Meta models used and where,
-      **built during the hackathon vs before**, licences.
+- [x] Done Nov 2: README (what it does, how to run, how it works, results and limits, Meta models,
+      **built during the hackathon vs before**, licences) and `docs/ARCHITECTURE.md`. Left: a GIF.
 - [ ] Prebuilt Windows release (zip with `Studio.exe`, assets, Python app instructions).
 - [ ] Clean clone + build + run on a second machine or a fresh folder.
 - [ ] Tag `submission`.
@@ -704,6 +712,43 @@ design, more transitions (match cuts, whip pans, light-flash cuts for energetic 
 check, animated titles, more environments and surfaces. Not this week: logo decals on 3D
 models, voice-over: big and risky this late. Done Nov 1: free camera paths (`path`: 2-8 waypoints on a
 monotone curve, no overshoot; offered in four styles: Spark opened AURELLE on one).
+
+---
+
+## Phase 12: The 30-ad batch and its fixes (Nov 1-2)
+
+To see how the pipeline does on products it had never met, `scripts/batch_ads.py` made **30 ads
+for 30 new fictional products** overnight, unattended: 15 seconds to 2 minutes, Muse Image photos
+(`Assets/photos/batch/`). Ads up to 2 minutes came first: up to 30 shots, shots up to 8 s past 30 s,
+minutes understood in briefs, long-form craft in the grammar. **23 of 30** were made in 4 h 44 min.
+Every ad was then reviewed frame by frame (16-frame contact sheets), and its flaws fixed one by one,
+each with a test, and the ads made again: **29 of 30** now.
+
+### 12.1 Fixed (Nov 2)
+| # | Flaw found | Fix | Where |
+|---|---|---|---|
+| ~~12.1a~~ | 7 ads failed with no reason kept | a failed run keeps its traceback (`traceback.txt`; where it broke in the event) | `runs.py` |
+| ~~12.1b~~ | Shiny products crashed (MAREA, BOLT, SPARK) | highlight clusters compared by identity, not by value | `analyst/palette.py` |
+| ~~12.1c~~ | A label past its part crashed (FROST into its lid; COVE called nearly all "cap") | the label goes on the part its band lies on most, kept to that part's side | `analyst/label.py` (`onto`) |
+| ~~12.1d~~ | A stand in two pieces crashed (BREVA) | each mesh's base pieces taken off at once | `studio/models.py` (`strip_base`) |
+| ~~12.1e~~ | **Real brands on catalogue models** (Colgate, Peugeot/Total, Polaroid) | the logo guard: Spark lists branded models (logo, lettering, title, a named real product) at the thumbnail pick and at the audition, and never uses one | `scout.py` |
+| ~~12.1f~~ | A drone became a mushroom: no model fitted, so it was traced | a product that isn't round with no usable model stops (`NoModel`), asking for a .glb | `scout.py` |
+| ~~12.1g~~ | An invented brand ("KEYCRAFT" for MONO) | the brand from the brief's capitals or the photo's file name; the directors told never to invent one | `producer.brand_hint`, `write.py`, `live.py` |
+| ~~12.1h~~ | **Printed products came out blank** (BOLT's can, GROVE's tin, MAREA's engraving): SAM finds no paper "label" | print on the body found by colour (far from the body's, or from its neighbourhood's), wrapped as a see-through decal; no specks, seams or shading; cut to its full width | `analyst/label.py` (`printed`) |
+| ~~12.1i~~ | **Colours washed out** (BOLT sky-pale, MAREA grey): `agx` was the default and Spark's choice in 27 of 47 storyboards | `aces` by default (measured closest to the photo on BOLT's hero); a taste rule against `agx` for a coloured product | `schemas/storyboard.py`, `write.py` |
+| ~~12.1j~~ | **Liquids in glass went black** (RIPPLE's honey, VELVET, ZEST, LUMEN): clear glass only tinted the dark set behind | a coloured liquid shows its own colour (transmission at most 0.7): honey golden on any set | `schemas/brand.py` (`surface`) |
+| ~~12.1k~~ | A model given with `--model` lost its CC BY credit | the `.credit.json` beside a catalogue model is used | `producer.py` |
+
+### 12.2 Left (Nov 2, before the freeze)
+| # | Flaw | Idea | Impact | Effort |
+|---|---|---|---|---|
+| 12.2a | Mid-ad dips to black look like glitches (6 ads) | dips at most ~0.4 s, only before the end card | Medium | S |
+| 12.2b | The audition rewards crude models (SABLE's flat card beat a detailed wallet) | tell it detail and craft beat small extras, which repainting covers | Medium | S |
+| 12.2c | SCARLA (lipstick) never gets a valid hero in 3 tries | read its drafts; likely the hero rule against a thin product | Medium | S-M |
+| 12.2d | Products stand as photographed, not as they'd rest (wallet, skateboard, knife, pen on end) | a resting-pose check: lie on the largest stable face unless the photo shows it standing | High | M-L |
+| 12.2e | Long ads (1-2 min) vary little: the product small, few close-ups | measured variety rules past 30 s (share of close-ups, elevation spread) | Medium | M |
+| 12.2f | Some recolourings miss (HAVEN tan, not olive) | look at the colourist's sheets for HAVEN | Low | S-M |
+| 12.2g | The crossfade into the end card shows two titles at once | fade the film's titles out before the card | Low | S |
 
 ---
 
