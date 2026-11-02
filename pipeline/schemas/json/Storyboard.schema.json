@@ -1499,7 +1499,7 @@
         },
         "transition": {
           "default": "cut",
-          "description": "how the ad comes into this shot from the one before: cut (straight in) or dip (a brief fade through black: a pause, a change of place or time)",
+          "description": "how the ad comes into this shot from the one before: cut (straight in) or dip (a brief fade through black, into the hero only: elsewhere it plays as a cut)",
           "enum": [
             "cut",
             "dip"

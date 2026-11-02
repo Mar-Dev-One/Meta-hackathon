@@ -64,9 +64,9 @@ CRAFT = """\
   or it's a jump cut that reads as a stutter. Vary the framings across the ad: wide, close, from the side, from
   above, not one medium shot after another.
   Cuts fall on the music's beats by themselves (shot lengths are nudged a little to meet them).
-- Most shots come in on a straight cut. A `dip` (a brief fade through black) is a breath: use one or two in a
-  slow, luxurious or calm ad, before the hero or where the film changes place, angle or time; none in a fast,
-  energetic one, where cuts are the rhythm.
+- Every shot comes in on a straight cut, except perhaps the hero: a `dip` (a brief fade through black) into
+  the last shot is a breath before the payoff, for a slow, luxurious or calm ad; none in a fast, energetic
+  one, where cuts are the rhythm. A dip anywhere else is played as a cut.
 - Keep the side of the product steady across cuts: don't jump more than about 90 degrees of azimuth
   between consecutive shots, unless the cut is meant to surprise.
 - Bring the product to life: give one to three shots a `motion` (a drop to open, a turn to bring the label

@@ -8,7 +8,8 @@ import json
 import subprocess
 from pathlib import Path
 
-DIP = 0.7        # seconds a dip to black takes, half out before its cut and half in after
+DIP = 0.4        # seconds a dip to black takes, half out before its cut and half in after: a blink;
+                 # 0.7 s mid-ad read as a glitch
 DISSOLVE = 0.8   # seconds the film takes to dissolve into the end card, before the film's end
 
 

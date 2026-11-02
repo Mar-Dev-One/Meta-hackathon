@@ -363,10 +363,11 @@ def jump_cuts(sb: Storyboard) -> list[str]:
     """Cuts between near-identical framings (the "30 degree rule"): the
     shot before ends and the one after starts at much the same size, side
     and height, so the cut reads as a stutter, not a new angle. A dip to
-    black between them is a pause, not a cut. Rules of taste."""
+    black into the hero is a pause, not a cut; a dip anywhere else plays as
+    a cut (Storyboard.dips). Rules of taste."""
     out = []
     for a, b in zip(sb.shots, sb.shots[1:]):
-        if b.transition == "dip":
+        if b is sb.shots[-1] and b.transition == "dip":
             continue
         (fa, aa, ea), (fb, ab, eb) = _framing(a.camera, end=True), _framing(b.camera, end=False)
         size = abs(math.log(max(fb, 1e-3) / max(fa, 1e-3)))

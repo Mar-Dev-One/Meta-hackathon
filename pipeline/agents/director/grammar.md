@@ -43,7 +43,7 @@ The settings, as the Studio describes them:
 - `id`: s1, s2, ...
 - `intent`: what the shot is for, in a sentence: the critic judges it against this
 - `duration` (>0.2 .. 30): seconds; shots run back to back from 0
-- `transition` (cut | dip, default cut): how the ad comes into this shot from the one before: cut (straight in) or dip (a brief fade through black: a pause, a change of place or time)
+- `transition` (cut | dip, default cut): how the ad comes into this shot from the one before: cut (straight in) or dip (a brief fade through black, into the hero only: elsewhere it plays as a cut)
 
 ## Product motion (`shots[].motion`)
 
@@ -183,9 +183,9 @@ Keys on any number field of an entity, eased between: for the lights (`light_*`)
   or it's a jump cut that reads as a stutter. Vary the framings across the ad: wide, close, from the side, from
   above, not one medium shot after another.
   Cuts fall on the music's beats by themselves (shot lengths are nudged a little to meet them).
-- Most shots come in on a straight cut. A `dip` (a brief fade through black) is a breath: use one or two in a
-  slow, luxurious or calm ad, before the hero or where the film changes place, angle or time; none in a fast,
-  energetic one, where cuts are the rhythm.
+- Every shot comes in on a straight cut, except perhaps the hero: a `dip` (a brief fade through black) into
+  the last shot is a breath before the payoff, for a slow, luxurious or calm ad; none in a fast, energetic
+  one, where cuts are the rhythm. A dip anywhere else is played as a cut.
 - Keep the side of the product steady across cuts: don't jump more than about 90 degrees of azimuth
   between consecutive shots, unless the cut is meant to surprise.
 - Bring the product to life: give one to three shots a `motion` (a drop to open, a turn to bring the label

@@ -83,11 +83,10 @@ async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samp
         sound = music_for(sb, run.path("final", "music.wav"))
         mood, bpm, key = tempo_of(sb)
         run.event("music", mood=mood, bpm=bpm, key=key, file=str(sound.relative_to(run.root)))
-    dip_at = [start for start, shot in zip(sb.shot_starts(), sb.shots) if shot.transition == "dip" and start > 0]
     end_card = card(sb.end_card, sb.packshot, width, height, run.path("final", f"{name}_card.png")) \
         if sb.end_card else None
     video = finish(raw, run.path("final", f"{name}.mp4"), fade_in=fade_in, fade_out=fade_out, audio=sound,
-                   dip_at=dip_at, end_card=end_card, card_seconds=sb.end_card.seconds if sb.end_card else 0.0,
+                   dip_at=sb.dips(), end_card=end_card, card_seconds=sb.end_card.seconds if sb.end_card else 0.0,
                    fps=sb.fps)
     raw.unlink(missing_ok=True)
     run.output(label, video)

@@ -277,7 +277,8 @@ class Shot(Strict):
     motion: ProductMotion | None = Field(None, description="the product moving in this shot; null: it stands still")
     transition: Literal["cut", "dip"] = Field("cut", description="how the ad comes into this shot from the one "
                                                                  "before: cut (straight in) or dip (a brief fade "
-                                                                 "through black: a pause, a change of place or time)")
+                                                                 "through black, into the hero only: elsewhere it "
+                                                                 "plays as a cut)")
 
 
 class Title(Strict):
@@ -382,6 +383,13 @@ class Storyboard(Strict):
             starts.append(round(t, 3))
             t += s.duration
         return starts
+
+    def dips(self) -> list[float]:
+        """When the film dips to black: only into the hero, if it asks for
+        one. A dip mid-ad read as a glitch, so any other plays as a cut."""
+        if len(self.shots) > 1 and self.shots[-1].transition == "dip":
+            return [self.shot_starts()[-1]]
+        return []
 
     @model_validator(mode="after")
     def _consistent(self):

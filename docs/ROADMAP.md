@@ -742,7 +742,7 @@ each with a test, and the ads made again: **29 of 30** now.
 ### 12.2 Left (Nov 2, before the freeze)
 | # | Flaw | Idea | Impact | Effort |
 |---|---|---|---|---|
-| 12.2a | Mid-ad dips to black look like glitches (6 ads) | dips at most ~0.4 s, only before the end card | Medium | S |
+| ~~12.2a~~ done | Mid-ad dips to black look like glitches (6 ads) | dips of 0.4 s (were 0.7), only into the hero (`Storyboard.dips`); any other plays as a cut, so the jump-cut rule catches it | Medium | S |
 | 12.2b | The audition rewards crude models (SABLE's flat card beat a detailed wallet) | tell it detail and craft beat small extras, which repainting covers | Medium | S |
 | 12.2c | SCARLA (lipstick) never gets a valid hero in 3 tries | read its drafts; likely the hero rule against a thin product | Medium | S-M |
 | 12.2d | Products stand as photographed, not as they'd rest (wallet, skateboard, knife, pen on end) | a resting-pose check: lie on the largest stable face unless the photo shows it standing | High | M-L |
