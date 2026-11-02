@@ -12,6 +12,7 @@ import trimesh
 from pipeline.catalog.common import CACHE
 from pipeline.catalog.props import prop_file
 from pipeline.catalog.sets import LIGHTS, SURFACES, install_hdri, surface_texture
+from pipeline.encode.finish import DISSOLVE
 from pipeline.meta import image
 from pipeline.schemas import Product, Storyboard
 
@@ -31,6 +32,7 @@ TEMPLATE_SIZES = {"perfume": (0.12, 0.08), "bottle": (0.30, 0.075), "jar": (0.07
 MOTION_AMOUNT = {"turn": 45.0, "float": 0.08, "drop": 0.35, "tilt": 8.0}
 DROP_LANDS = 0.4
 EDGE = 1e-3   # a shot's last key sits this far before the cut, so the next shot's first key has its own time
+TITLE_OUT = 0.4   # seconds the film's titles take to fade out before the end card dissolves in
 
 # A painted background (Environment.painted): what Muse Image is asked for around the director's place.
 PAINT = ("A photograph of {place}, as the background of a premium product photo: an empty place, nothing in the "
@@ -222,16 +224,31 @@ async def place_product_model(studio: Studio, product: Product, top: float) -> N
     await studio.call("place_model", **args)
 
 
+def title_opacity(sb: Storyboard, title) -> list[dict]:
+    """A title's opacity keys: hidden, faded in from its `start` over its
+    `fade` (and a breath), and, when an end card follows, faded out over
+    TITLE_OUT seconds before the card dissolves in, so the film's titles and
+    the card's never show at once."""
+    end = title.start + title.fade + 0.3
+    keys = [{"t": title.start, "value": 0, "ease": "out"}, {"t": end, "value": 1}]
+    if sb.end_card:
+        gone = max(sb.duration - DISSOLVE, end + 0.15)
+        keys += [{"t": max(gone - TITLE_OUT, end + 0.05), "value": 1, "ease": "in"}, {"t": gone, "value": 0}]
+    return keys
+
+
 async def add_titles(studio: Studio, sb: Storyboard) -> None:
     """Each title starts hidden and at its `start` fades in over `fade`
-    seconds while rising 2% of the frame and drawing its letters together."""
+    seconds while rising 2% of the frame and drawing its letters together;
+    before an end card it fades out (title_opacity)."""
     for i, t in enumerate(sb.titles):
         name = f"title_{i}"
         await studio.call("text.create", name=name, text=t.text, font=t.font, size=t.size, anchor="center",
                           offset=[0, t.y - 0.5], color=t.color, tracking=t.tracking, opacity=0)
         end = t.start + t.fade + 0.3
-        for field, a, b in (("opacity", 0, 1), ("offset", [0, t.y - 0.48], [0, t.y - 0.5]),
-                            ("tracking", t.tracking + 0.15, t.tracking)):
+        await studio.call("timeline.set_track", entity=name, component="Text", field="opacity",
+                          keys=title_opacity(sb, t))
+        for field, a, b in (("offset", [0, t.y - 0.48], [0, t.y - 0.5]), ("tracking", t.tracking + 0.15, t.tracking)):
             await studio.call("timeline.set_track", entity=name, component="Text", field=field,
                               keys=[{"t": t.start, "value": a, "ease": "out"}, {"t": end, "value": b}])
 

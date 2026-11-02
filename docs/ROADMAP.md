@@ -748,7 +748,7 @@ each with a test, and the ads made again: **29 of 30** now.
 | 12.2d | Products stand as photographed, not as they'd rest (wallet, skateboard, knife, pen on end) | a resting-pose check: lie on the largest stable face unless the photo shows it standing | High | M-L |
 | 12.2e | Long ads (1-2 min) vary little: the product small, few close-ups | measured variety rules past 30 s (share of close-ups, elevation spread) | Medium | M |
 | 12.2f | Some recolourings miss (HAVEN tan, not olive) | look at the colourist's sheets for HAVEN | Low | S-M |
-| 12.2g | The crossfade into the end card shows two titles at once | fade the film's titles out before the card | Low | S |
+| ~~12.2g~~ done | The crossfade into the end card shows two titles at once | the film's titles fade out over 0.4 s, gone when the card dissolves in (`build.title_opacity`) | Low | S |
 
 ---
 
