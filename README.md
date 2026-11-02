@@ -68,7 +68,12 @@ The batch behind most of these is **30 ads for 30 fictional products**, made una
 
 ## Quick start
 
-**Requirements:** Windows 10 or 11, an OpenGL 4.x GPU, Visual Studio 2022 (MSVC), CMake 3.26+, Python 3.11+ (developed on 3.13), and ffmpeg on the `PATH`.
+**Requirements:**
+- Windows 10 or 11, with an OpenGL 4.x GPU.
+- Visual Studio with "Desktop development with C++": any edition, or the free Build Tools. 2022 or newer is recommended; 2019 16.8 is the minimum, for C11, and may not link the engine's prebuilt libraries.
+- CMake 3.26+ (Visual Studio's own is fine).
+- Python 3.11+ (developed on 3.13).
+- ffmpeg on the `PATH`.
 
 **The quick way: run `start.bat`.** It checks each of these and sets up what's missing:
 - **Python and ffmpeg:** offers to install them with winget.

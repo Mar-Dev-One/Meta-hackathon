@@ -97,21 +97,56 @@ if not exist "build\Release\Studio.exe" goto :studio_build
 echo       built
 goto :keys
 :studio_build
-set "CMAKE=cmake"
-where cmake >nul 2>&1 && goto :build
-rem No cmake on the PATH: Visual Studio 2022 ships one.
+rem The newest Visual Studio with the C++ compiler, any edition (Community, Professional,
+rem Enterprise, Build Tools): 2019 16.8 or newer (C11), 2022, 2026, or later.
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 if not exist "%VSWHERE%" goto :no_vs
-for /f "usebackq delims=" %%p in (`"%VSWHERE%" -latest -property installationPath`) do set "VSDIR=%%p"
+set "VSDIR="
+set "VSVER="
+set "VSNAME="
+set "VC=-latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
+for /f "usebackq delims=" %%p in (`"%VSWHERE%" %VC% -property installationPath`) do set "VSDIR=%%p"
+if not defined VSDIR goto :no_vs
+for /f "usebackq tokens=1 delims=." %%v in (`"%VSWHERE%" %VC% -property installationVersion`) do set "VSVER=%%v"
+for /f "usebackq delims=" %%n in (`"%VSWHERE%" %VC% -property displayName`) do set "VSNAME=%%n"
+if not defined VSVER goto :no_vs
+echo       Found %VSNAME% (version %VSVER%)
+if %VSVER% LSS 16 goto :vs_too_old
+rem CMake's generator for it; a version newer than these is left to its own CMake, which knows it.
+set "GEN="
+if "%VSVER%"=="16" set "GEN=Visual Studio 16 2019"
+if "%VSVER%"=="17" set "GEN=Visual Studio 17 2022"
+if "%VSVER%"=="18" set "GEN=Visual Studio 18 2026"
+if "%VSVER%"=="16" echo       Note: the engine's libraries in Deps\Libs were built with Visual Studio 2022; 2019 may not link them.
+rem CMake: the one inside that Visual Studio (it always knows its own generator), else one on the PATH.
 set "CMAKE=%VSDIR%\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 if exist "%CMAKE%" goto :build
+set "CMAKE=cmake"
+where cmake >nul 2>&1 && goto :build
+echo       No CMake: add "C++ CMake tools for Windows" in the Visual Studio Installer, or install it from
+echo       https://cmake.org/download/  -- then run start.bat again.
+goto :stop
+:vs_too_old
+echo       Too old: the Studio is C11, which needs Visual Studio 2019 16.8 or newer.
 :no_vs
-echo       Building it needs Visual Studio 2022 with "Desktop development with C++" (it includes CMake):
-echo       https://visualstudio.microsoft.com/downloads/  -- then run start.bat again.
+echo       Building it needs Visual Studio 2019 16.8 or newer (2022 recommended), or the free Build Tools,
+echo       with "Desktop development with C++": https://visualstudio.microsoft.com/downloads/
+echo       Then run start.bat again.
 goto :stop
 :build
+rem A build folder made by another Visual Studio: its CMake cache would be refused, so it goes
+rem (only the cache: CMake makes it again).
+if not exist "build\CMakeCache.txt" goto :configure
+if not defined GEN goto :configure
+findstr /c:"CMAKE_GENERATOR:INTERNAL=%GEN%" build\CMakeCache.txt >nul && goto :configure
+echo       The build folder was made by another Visual Studio: clearing its CMake cache.
+del /q build\CMakeCache.txt
+rmdir /s /q build\CMakeFiles
+:configure
 echo       Building it (a few minutes, once)...
-"%CMAKE%" -S . -B build -G "Visual Studio 17 2022" -A x64 >build_studio.log 2>&1 || goto :build_failed
+set "GENARG="
+if defined GEN set GENARG=-G "%GEN%"
+"%CMAKE%" -S . -B build %GENARG% -A x64 -DCMAKE_GENERATOR_INSTANCE="%VSDIR%" >build_studio.log 2>&1 || goto :build_failed
 "%CMAKE%" --build build --config Release >>build_studio.log 2>&1 || goto :build_failed
 if not exist "build\Release\Studio.exe" goto :build_failed
 del build_studio.log >nul 2>&1

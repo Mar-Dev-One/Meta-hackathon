@@ -82,13 +82,16 @@ add_custom_command(TARGET Studio POST_BUILD
 set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
 include(InstallRequiredSystemLibraries)
 list(FILTER CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS INCLUDE REGEX "/vcruntime140\\.dll$")
-if(NOT CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
-    message(FATAL_ERROR "vcruntime140.dll not found in the MSVC redist folder")
+if(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+    add_custom_command(TARGET Studio POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
+                $<TARGET_FILE_DIR:Studio>
+    )
+else()
+    # Some Build Tools installs have no redist folder: the program then needs the Visual C++
+    # Redistributable on the PC that runs it (most have it).
+    message(WARNING "vcruntime140.dll not found in the MSVC redist folder: not copied next to Studio.exe")
 endif()
-add_custom_command(TARGET Studio POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
-            $<TARGET_FILE_DIR:Studio>
-)
 
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT Studio)
