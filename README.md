@@ -70,7 +70,15 @@ The batch behind most of these is **30 ads for 30 fictional products**, made una
 
 **Requirements:** Windows 10 or 11, an OpenGL 4.x GPU, Visual Studio 2022 (MSVC), CMake 3.26+, Python 3.11+ (developed on 3.13), and ffmpeg on the `PATH`.
 
-**API keys:** copy `.env.example` to `.env` and fill in:
+**The quick way: run `start.bat`.** It checks each of these and sets up what's missing:
+- **Python and ffmpeg:** offers to install them with winget.
+- **The environment:** creates `.venv` and installs the packages, again whenever `requirements.txt` changes.
+- **The Studio:** builds it with CMake and Visual Studio.
+- **API keys:** asks for them, typed hidden, and saves them to `.env`.
+
+Then it starts the app and opens the browser. Other modes: `start.bat keys` asks for the keys again, `start.bat setup` only sets up, and `start.bat hidden` runs without the Studio's window.
+
+**By hand.** API keys: copy `.env.example` to `.env` and fill in:
 - `MODEL_API_KEY`: the Meta Model API, from [dev.meta.ai](https://dev.meta.ai).
 - `BASETEN_API_KEY`: Muse Spark Open, for the critic.
 - `SKETCHFAB_API_TOKEN` (optional): downloads from Sketchfab. Without it the scout uses Objaverse and Poly Haven.
