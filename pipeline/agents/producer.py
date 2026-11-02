@@ -31,6 +31,7 @@ from .director import live
 from .director.write import write
 from .scout import scout
 from .stager import stage
+from .voiceover import voiceover
 
 
 # The ad's format: one frame, planned and judged in it, or both (the brief's
@@ -68,7 +69,7 @@ def brand_hint(brief: str, photo: Path | str, category: str) -> str | None:
 
 async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str = "product", short: int = 1080,
                   video: bool = True, critic: bool = False, format: str = "both", model: Path | str | None = None,
-                  credit: dict | None = None, director: str = "storyboard") -> dict[str, Path] | None:
+                  credit: dict | None = None, director: str = "storyboard", voice: bool = False) -> dict[str, Path] | None:
     """The ad for `brief` with the product in `photo`: its videos by aspect
     (None with video=False). `format` is "horizontal" (16:9), "vertical"
     (9:16) or "both": the director plans for the chosen frame, or, for both,
@@ -80,7 +81,8 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     (scout.NoModel) if none fits: traced, it would be a blob.
     Without the critic, the director's first storyboard is built and a few
     frames previewed (frames/). `director` is "live" (Spark makes the film
-    in the Studio with every command; live_ad) or "storyboard"."""
+    in the Studio with every command; live_ad) or "storyboard". `voice`
+    adds a voice-over (agents.voiceover; storyboard director only)."""
     if format not in FORMATS:
         raise ValueError(f"format must be one of {', '.join(FORMATS)}, not {format!r}")
     if director not in DIRECTORS:
@@ -89,11 +91,12 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
     if model:   # kept with the run, like the photo, so it can be made again (runs.inputs)
         run.add_file(model, "inputs/" + Path(model).name)
     run.event("brief", text=brief, photo=Path(photo).name, category=category, format=format,
-              model=Path(model).name if model else None, director=director, critic=critic, video=video, short=short)
-    progress = Progress(run, _plan(director, critic, video, format, bool(model), brief, short))
+              model=Path(model).name if model else None, director=director, critic=critic, video=video, short=short,
+              voice=voice)
+    progress = Progress(run, _plan(director, critic, video, format, bool(model), brief, short, voice))
     try:
         videos = await _make(studio, run, progress, brief, photo, category, short, video, critic, format, model,
-                             credit, director)
+                             credit, director, voice)
     except BaseException:
         progress.close(done=False)
         raise
@@ -102,7 +105,8 @@ async def make_ad(studio, run: Run, brief: str, photo: Path | str, category: str
 
 
 async def _make(studio, run: Run, progress: Progress, brief: str, photo: Path | str, category: str, short: int,
-                video: bool, critic: bool, format: str, model, credit, director: str) -> dict[str, Path] | None:
+                video: bool, critic: bool, format: str, model, credit, director: str,
+                voice: bool = False) -> dict[str, Path] | None:
     progress.start("analyse")
     analysis = analyse(run, photo, category)
     if not analysis.profile.brand and (hint := brand_hint(brief, photo, analysis.profile.category)):
@@ -138,15 +142,19 @@ async def _make(studio, run: Run, progress: Progress, brief: str, photo: Path | 
         await preview(studio, run, sb)
     if not video:
         return None
+    spoken = None
+    if voice:
+        progress.start("voice")
+        spoken = voiceover(run, sb, brief, profile)
     progress.start("render", label=f"Rendering {' and '.join(aspects)}")
     began = time.monotonic()
-    videos = await final_cut(studio, run, sb, Path(photo).stem, aspects=aspects, short=short)
+    videos = await final_cut(studio, run, sb, Path(photo).stem, aspects=aspects, short=short, voice=spoken)
     learn(time.monotonic() - began, frames * len(aspects), width, height, director, renders=len(aspects))
     return videos
 
 
 def _plan(director: str, critic: bool, video: bool, format: str, model: bool, brief: str,
-          short: int) -> list[tuple[str, str, float]]:
+          short: int, voice: bool = False) -> list[tuple[str, str, float]]:
     """The run's steps and about how long each takes (Progress): a render's
     length from the brief's ("15 seconds"), until the film is planned."""
     said = re.search(r"(\d+(?:\.\d+)?)\s*(?:s\b|sec|second)", brief.lower())
@@ -164,6 +172,8 @@ def _plan(director: str, critic: bool, video: bool, format: str, model: bool, br
     else:
         steps.append(("plan", "Spark is planning the storyboard", 40))
         steps.append(("critic", "Critic loop", 700) if critic else ("preview", "Previewing", 15))
+        if video and voice:
+            steps.append(("voice", "Writing and speaking the voice-over", 40))
         if video:
             steps.append(("render", "Rendering", render * (2 if format == "both" else 1)))
     return steps
@@ -283,13 +293,15 @@ if __name__ == "__main__":
     parser.add_argument("--model", help="a 3D model file (.glb) of the product, for shapes that aren't round")
     parser.add_argument("--director", choices=DIRECTORS, default="storyboard",
                         help="storyboard: Spark plans, code builds (default); live: Spark makes the film in the Studio")
+    parser.add_argument("--voice", action="store_true",
+                        help="add a voice-over: Spark writes it, Meta's MMS-TTS speaks it (pipeline/requirements-voice.txt)")
     args = parser.parse_args()
     if args.again:
         given = inputs(args.again)
     elif args.photo and args.brief:
         given = dict(brief=args.brief, photo=args.photo, category=args.category, short=args.size,
                      video=not args.preview, critic=args.critic, format=args.format, model=args.model,
-                     director=args.director)
+                     director=args.director, voice=args.voice)
         credit = Path(args.model).with_suffix(".credit.json") if args.model else None
         if credit and credit.exists():   # a catalogue's model keeps its licence's credit (CC BY)
             given["credit"] = json.loads(credit.read_text(encoding="utf-8"))

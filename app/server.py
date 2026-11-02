@@ -10,7 +10,7 @@ happens, open any run that's already done.
     POST /runs                       a photo (file) and a brief: queues an ad (pipeline.agents.producer);
                                      format = horizontal, vertical or both (default); director = storyboard
                                      (default: Spark plans, code builds) or live (Spark makes the film with
-                                     every Studio command);
+                                     every Studio command); voice = true adds a voice-over;
                                      optionally a 3D model of the product: model_pick (a search result's
                                      JSON) or model_file (a .glb)
     GET  /models/search?q=           3D models of a product online, ones we may use (pipeline.catalog)
@@ -74,6 +74,7 @@ class Job:
     director: str = "storyboard"
     model_pick: Candidate | None = None   # a search result, downloaded by the worker
     model_file: Path | None = None        # an uploaded model
+    voice: bool = False                   # a voice-over (agents.voiceover)
 
 
 jobs: "queue.Queue[Job]" = queue.Queue()
@@ -117,7 +118,7 @@ async def _make(job: Job) -> None:
                 model, credit = catalog.download(job.model_pick), job.model_pick.to_json()
             await make_ad(studio, job.run, job.brief, job.photo, job.category, job.size, video=job.video,
                           critic=job.critic, format=job.format, model=model, credit=credit,
-                          director=job.director)
+                          director=job.director, voice=job.voice)
 
 
 threading.Thread(target=_work, name="producer", daemon=True).start()
@@ -199,7 +200,7 @@ def _pick(text: str) -> Candidate:
 async def start(photo: UploadFile = File(...), brief: str = Form(...), category: str = Form("product"),
                 critic: bool = Form(False), video: bool = Form(True), size: int = Form(1080),
                 format: str = Form("both"), director: str = Form("storyboard"), model_pick: str = Form(""),
-                model_file: UploadFile | None = File(None)) -> dict:
+                model_file: UploadFile | None = File(None), voice: bool = Form(False)) -> dict:
     """Queues an ad: the photo and brief in, a run id back to follow."""
     name = Path(photo.filename or "photo.png").name
     if Path(name).suffix.lower() not in PHOTO_TYPES:
@@ -226,8 +227,9 @@ async def start(photo: UploadFile = File(...), brief: str = Form(...), category:
     rid = run.root.name
     waiting.append(rid)
     run.event("queued", position=len(waiting), brief=brief, category=category, critic=critic, video=video,
-              format=format, director=director, model=pick.name if pick else model_name or None)
-    jobs.put(Job(run, upload, brief.strip(), category, critic, video, size, format, director, pick, model_upload))
+              format=format, director=director, model=pick.name if pick else model_name or None, voice=voice)
+    jobs.put(Job(run, upload, brief.strip(), category, critic, video, size, format, director, pick, model_upload,
+                 voice))
     return {"id": rid, "status": "queued", "position": len(waiting), "events": f"/runs/{rid}/events"}
 
 
@@ -272,9 +274,9 @@ def again(rid: str, brief: str = Form(""), format: str = Form("")) -> dict:
     waiting.append(new)
     run.event("queued", position=len(waiting), brief=given["brief"], category=given["category"], critic=given["critic"],
               video=given["video"], format=given["format"], director=given["director"],
-              model=model.name if model else None, again=rid)
+              model=model.name if model else None, again=rid, voice=given["voice"])
     jobs.put(Job(run, photo, given["brief"], given["category"], given["critic"], given["video"], given["short"],
-                 given["format"], given["director"], None, model))
+                 given["format"], given["director"], None, model, given["voice"]))
     return {"id": new, "status": "queued", "position": len(waiting), "again": rid, "events": f"/runs/{new}/events"}
 
 

@@ -65,6 +65,7 @@ The batch behind most of these is **30 ads for 30 fictional products**, made una
 | **SAM 3.1** | Segmenting the product, cap and label: its silhouette becomes the 3D shape, its label the texture |
 | **Muse Voice** (`muse-voice-transcribe-1.0`) | The spoken brief: "Speak it" in the app |
 | **Muse Image** (`muse-image-1.0`) | The product photos of fictional brands used for testing (`Assets/photos`) |
+| **MMS-TTS** (`facebook/mms-tts-eng`, open weights, run locally) | The voice-over (optional): Muse Spark writes the lines, MMS speaks them. The Meta Model API has no text to speech |
 
 ## Quick start
 
@@ -139,7 +140,9 @@ API: `POST /runs` (photo, brief, `format`, optional `model_pick` or `model_file`
 .venv\Scripts\python -m pipeline.cleanup --days 7
 ```
 
-Other options: `--critic` adds the critic loop, `--director live` lets Spark drive the Studio command by command, and `--preview` stops at the storyboard.
+Other options: `--critic` adds the critic loop, `--voice` adds a voice-over, `--director live` lets Spark drive the Studio command by command, and `--preview` stops at the storyboard.
+
+**The voice-over** (`--voice`, or **voice-over** in the app). Muse Spark writes two to four short lines for the finished storyboard, each timed to its shots. Code checks them: each fits its time at the voice's pace, the last says the brand's name, numbers come as words. Spark also spells the brand's name as it sounds (Lumen: "Loomen"), so the voice says it right. Meta's MMS-TTS speaks the lines on the CPU, and the music ducks about 7 dB under the voice. It needs `pip install -r pipeline\requirements-voice.txt` (torch for the CPU and transformers, about 300 MB); if it can't run, the ad is made without a voice. The voice is clear but plain, not a voice actor's.
 
 ## The critic (optional)
 
@@ -206,9 +209,10 @@ pipeline/
   agents/director/          the director: shot grammar, style library, rules, drafts, revisions, live mode
   agents/critic/            the critic: measurements, cuts, shot and whole-ad judgment, the loop
   agents/brief.py           the spoken brief
+  agents/voiceover.py       the voice-over: lines written by Spark and checked
   agents/producer.py        the whole chain: photo + brief → ad
   studio/                   the Studio client; storyboard → commands; models, recolouring, reframing, rendering
-  encode/                   the final cut, the end card, the music
+  encode/                   the final cut, the end card, the music, the voice-over's speech and mix
   schemas/                  pydantic models: BrandProfile, Storyboard, Critique (JSON schemas in json/)
   runs.py, cleanup.py       run folders: log, outputs, replay; cleaning old ones
 app/                        the web app: FastAPI backend, one HTML page
@@ -222,7 +226,7 @@ docs/                       the architecture, the roadmap, two overview PDFs
 ```
 
 **Tests:**
-- `.venv\Scripts\python -m unittest discover -s tests -t .` runs the pipeline's 53 tests, with no GPU or network.
+- `.venv\Scripts\python -m unittest discover -s tests -t .` runs the pipeline's 69 tests, with no GPU or network.
 - `ctest --test-dir build -C Release` runs the Studio's timeline and text layout tests.
 - `pipeline/meta/smoke/run_all.py` makes one test call to each model.
 
@@ -248,5 +252,6 @@ The rendering engine (`PBR_Engine`, [AI-Powered-PBR-Renderer](https://github.com
 - **3D models:** downloaded per ad from Sketchfab, Objaverse and Poly Haven. Only CC0 and CC-BY models are used. Each CC-BY model's credit is saved with the run (`model_credit.json`) and shown in the app.
 - **Sets and props:** surfaces, HDRIs and prop models from [Poly Haven](https://polyhaven.com), CC0.
 - **Fonts:** Playfair Display, Montserrat, Oswald and Great Vibes, under the SIL Open Font License 1.1 (licences in `Assets/fonts`).
+- **Voice:** spoken by Meta's [MMS-TTS](https://huggingface.co/facebook/mms-tts-eng), CC BY-NC 4.0: non-commercial use only.
 - **Music:** synthesized note by note by `pipeline/encode/music.py`: original, with nothing to license. A track placed at `Assets/music/<mood>.mp3` is used instead.
 - **Brands:** every brand in the photos, ads and examples is fictional. Catalogue models showing a real brand are refused.

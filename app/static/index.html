@@ -163,6 +163,7 @@
       </select></label>
       <div class="row">
         <label class="toggle"><input id="critic" type="checkbox"> critic loop</label>
+        <label class="toggle"><input id="voice" type="checkbox"> voice-over</label>
         <label class="toggle"><input id="video" type="checkbox" checked> video</label>
       </div>
       <button class="btn" id="go" type="submit">Make the ad</button>
@@ -466,6 +467,9 @@ const DECISIONS = {
     { list: e.problems, tone: "warn" }),
   revised: (e) => decided("Revision", `${plural((e.changes || []).length, "change")} to answer the critic`, { list: (e.changes || []).slice(0, 12) }),
   directed: (e) => decided("Film", `${e.session}: ${e.shots} shots, ${e.duration} s, ${e.calls} Studio commands`, { why: e.summary }),
+  voiceover: (e) => decided("Voice-over", `${plural(e.lines.length, "line")}, spoken by MMS-TTS`,
+    { list: e.lines.map((l) => `${l.start} s: “${l.text}”`) }),
+  voiceover_failed: (e) => decided("Voice-over", "Left out: the ad is made without one", { why: e.error, tone: "warn" }),
   music: (e) => decided("Music", e.bpm ? `${e.mood}, ${e.bpm} bpm${e.key ? `, key ${e.key > 0 ? "+" : ""}${e.key}` : ""}` : e.mood),
   finished: (e) => decided("Result", e.status === "done" ? `Finished in ${duration(e.seconds)}${e.cost != null ? `, $${e.cost.toFixed(3)} on Meta models` : ""}`
     : `${e.status} after ${duration(e.seconds)}`, { tone: e.status === "done" ? "pass" : "fail" }),
@@ -764,6 +768,7 @@ $("form").onsubmit = async (e) => {
   data.append("brief", $("brief").value);
   data.append("category", $("category").value || "product");
   data.append("critic", $("critic").checked);
+  data.append("voice", $("voice").checked);
   data.append("video", $("video").checked);
   data.append("format", $("format").value);
   data.append("director", $("director").value);

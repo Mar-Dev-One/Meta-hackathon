@@ -182,7 +182,7 @@ def events(root: Path | str) -> list[dict]:
 
 def inputs(run: Path | str) -> dict:
     """What a run was given, as make_ad's arguments (brief, photo, category,
-    short, video, critic, format, model, director), to make it again: from
+    short, video, critic, format, model, director, voice), to make it again: from
     its brief event and inputs/ (`run` a folder, or a run's id). Older runs
     didn't log critic, video or size: the defaults then (off, on, 1080)."""
     root = Path(run) if Path(run).is_dir() else RUNS / str(run)
@@ -194,7 +194,8 @@ def inputs(run: Path | str) -> dict:
         raise ValueError(f"{root} was made with a model, {brief['model']}, that wasn't kept with it")
     return dict(brief=brief["text"], photo=root / "inputs" / brief["photo"], category=brief.get("category", "product"),
                 short=brief.get("short", 1080), video=brief.get("video", True), critic=brief.get("critic", False),
-                format=brief.get("format", "both"), model=model, director=brief.get("director", "storyboard"))
+                format=brief.get("format", "both"), model=model, director=brief.get("director", "storyboard"),
+                voice=brief.get("voice", False))
 
 
 def parse_event(line: str) -> dict | None:

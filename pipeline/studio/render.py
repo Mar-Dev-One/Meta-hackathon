@@ -19,6 +19,7 @@ from pathlib import Path
 from pipeline.encode import finish
 from pipeline.encode.endcard import card
 from pipeline.encode.music import music_for, tempo_of
+from pipeline.encode.speech import duck
 from pipeline.schemas import Storyboard
 
 from .build import build
@@ -65,10 +66,12 @@ async def preview(studio, run, sb: Storyboard, short: int = 360, samples: int = 
 
 
 async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samples: int = SAMPLES,
-                 fade_in: float = 0.4, fade_out: float = 0.6, music: bool = True, label: str = "video") -> Path:
+                 fade_in: float = 0.4, fade_out: float = 0.6, music: bool = True, label: str = "video",
+                 voice: Path | None = None) -> Path:
     """The built storyboard as final/<name>.mp4 in the run, faded from and to
     black, with music in the style's mood (pipeline.encode.music) unless
-    `music` is off; marked as the run's output `label`."""
+    `music` is off, and the voice-over track `voice` over it if given (the
+    music ducking under it); marked as the run's output `label`."""
     width, height = frame_size(sb.aspect, short)
     raw = run.path("final", "raw.mp4")
     frames = round(sb.duration * sb.fps)
@@ -83,6 +86,8 @@ async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samp
         sound = music_for(sb, run.path("final", "music.wav"))
         mood, bpm, key = tempo_of(sb)
         run.event("music", mood=mood, bpm=bpm, key=key, file=str(sound.relative_to(run.root)))
+    if voice:
+        sound = duck(sound, voice, run.path("final", f"{name}_mix.wav")) if sound else voice
     end_card = card(sb.end_card, sb.packshot, width, height, run.path("final", f"{name}_card.png")) \
         if sb.end_card else None
     video = finish(raw, run.path("final", f"{name}.mp4"), fade_in=fade_in, fade_out=fade_out, audio=sound,
@@ -94,9 +99,10 @@ async def render(studio, run, sb: Storyboard, name: str, short: int = 1080, samp
 
 
 async def final_cut(studio, run, sb: Storyboard, name: str, aspects: tuple[str, ...] = ("16:9", "9:16"),
-                    short: int = 1080, samples: int = SAMPLES) -> dict[str, Path]:
+                    short: int = 1080, samples: int = SAMPLES, voice: Path | None = None) -> dict[str, Path]:
     """The ad in every aspect, from the same storyboard (reframed: titles
-    fitted to each frame), as final/<name>_<w>x<h>.mp4 with the same music;
+    fitted to each frame), as final/<name>_<w>x<h>.mp4 with the same music
+    (and voice-over, if given: the reframing keeps the shots' times);
     each aspect's storyboard saved as storyboard_<w>x<h>.json, each video
     marked as the run's output video_<w>x<h>. Leaves the
     Studio built with the last aspect."""
@@ -110,11 +116,11 @@ async def final_cut(studio, run, sb: Storyboard, name: str, aspects: tuple[str, 
         await build(studio, framed)
         try:
             videos[aspect] = await render(studio, run, framed, f"{name}_{tag}", short=short, samples=samples,
-                                          label=f"video_{tag}")
+                                          label=f"video_{tag}", voice=voice)
         except StudioTimeout as e:   # hung: once more, in a new Studio
             run.event("render_retry", aspect=aspect, error=str(e))
             await studio.restart()
             await build(studio, framed)
             videos[aspect] = await render(studio, run, framed, f"{name}_{tag}", short=short, samples=samples,
-                                          label=f"video_{tag}")
+                                          label=f"video_{tag}", voice=voice)
     return videos

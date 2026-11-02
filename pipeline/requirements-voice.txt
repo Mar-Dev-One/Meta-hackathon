@@ -1,0 +1,4 @@
+# Only for the voice-over (--voice): Meta MMS-TTS, run locally on the CPU.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.4
+transformers>=4.44
