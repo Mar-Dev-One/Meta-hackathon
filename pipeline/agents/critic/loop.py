@@ -35,6 +35,7 @@ from dataclasses import dataclass
 
 from pipeline.agents.director.revise import revise
 from pipeline.agents.director.write import DirectorError
+from pipeline.meta.client import MetaError
 from pipeline.runs import Run, events
 from pipeline.schemas import AdCritique, BrandProfile, Critique, Storyboard
 from pipeline.studio import build
@@ -165,7 +166,7 @@ async def refine(studio, sb: Storyboard | None, profile: BrandProfile | None, ru
         try:
             revised, changes = await revise(last.storyboard, fix_text(last, history[:-1]), profile, studio=studio,
                                             run=run)
-        except DirectorError as e:
+        except (DirectorError, MetaError) as e:   # Spark out of turns, say: the best round so far still makes the ad
             run.event("revision_failed", round=last.index + 1, error=str(e))
             break
         if not changes:
