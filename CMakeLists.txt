@@ -49,7 +49,7 @@ add_subdirectory(Engine)
 
 # --- Studio -------------------------------------------------------------------
 
-add_executable(Studio src/main.c)
+add_executable(Studio Studio/main.c)
 target_link_libraries(Studio PRIVATE Meta_Engine)
 
 # Everything the program loads at runtime goes next to it, so the build

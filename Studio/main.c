@@ -1,4 +1,4 @@
-// src/main.c
+// Studio/main.c
 //
 // The Studio: the renderer the agents drive. It starts on an empty stage and
 // runs the command server (Net/CommandServer.h): other processes build the

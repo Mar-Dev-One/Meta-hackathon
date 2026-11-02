@@ -10,7 +10,7 @@ photo, brief ──► analyst ──► scout ──► stager ──► colour
 
 Two processes do the work:
 - **The pipeline**, in Python (`pipeline/`): the agents, the Meta model clients, the catalogues and the final cut.
-- **The Studio**, in C (`Engine/`, `src/main.c`): the renderer. It takes commands as JSON-RPC over WebSocket.
+- **The Studio**, in C (`Engine/`, `Studio/main.c`): the renderer. It takes commands as JSON-RPC over WebSocket.
 
 The pipeline starts a hidden Studio for each ad and drives it. Everything an ad does is written to its run folder.
 
@@ -149,7 +149,7 @@ Each draft is built in the Studio and previewed (`drafts/`). What's wrong goes b
 
 ## 5. The Studio
 
-`Engine/src/`, a C library on the prebuilt PBR engine (`Deps/`), and `src/main.c`.
+`Engine/src/`, a C library on the prebuilt PBR engine (`Deps/`), and `Studio/main.c`.
 
 | Module | What it does |
 |---|---|

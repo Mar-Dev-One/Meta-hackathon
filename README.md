@@ -189,7 +189,7 @@ Frames render offscreen at any size, each from scratch at its time, so a frame l
 ## Repository layout
 
 ```
-src/main.c                  the Studio program
+Studio/main.c               the Studio program
 Engine/                     the Studio library (C): commands, timeline, camera moves, paths and framing,
                             lighting presets, products and backdrops (glTF), labels, titles (SDF fonts),
                             offscreen shot rendering with motion blur; tests/
@@ -231,7 +231,7 @@ The rendering engine (`PBR_Engine`, [AI-Powered-PBR-Renderer](https://github.com
 **Everything in this repository was written during the hackathon**, from 2026-10-27:
 
 - **`Engine/`:** the Studio library: commands, the timeline and its tests, camera moves, paths and framing, lighting presets, procedural products and backdrops, labels, titles with SDF fonts and kerning, offscreen rendering to PNG and video, motion blur.
-- **`src/main.c`:** the Studio program.
+- **`Studio/main.c`:** the Studio program.
 - **`pipeline/`:** every agent, the Meta model clients, the catalogues, the schemas, run folders, the final cut and its music.
 - **`app/`:** the web app.
 - **`scripts/`, `tests/` and `Assets/photos`:** the scripts, the tests and the test product photos (generated with Muse Image).

@@ -47,7 +47,7 @@ tell new work from old, or the project is disqualified.
 - **The engine predates the hackathon.** `AI-Powered-PBR-Renderer` has commits from 2026-07-21.
   It is used here as a **prebuilt dependency** (`Deps/`) and is **not modified during the event**.
 - **This repository is the hackathon work.** First commit 2026-10-27 11:15. Everything new goes here:
-  `Engine/` (the studio: timeline, text, products, shot rendering), `src/` (the renderer app),
+  `Engine/` (the studio: timeline, text, products, shot rendering), `Studio/` (the renderer app),
   `pipeline/` (the agents) and `app/` (the UI).
 - **Don't reuse the engine's removed `pbr_agent` code** from its git history. The agents are written new.
 - **Ask in #questions** whether a solo participant may use their own pre-existing engine as a
@@ -98,7 +98,7 @@ Meta-hackathon/
     src/Shot/                 deterministic offscreen rendering of frames
     shaders/                  text.vert/frag, ...
     deps/                     stb_truetype.h
-  src/main.c                  the renderer app ("Studio"): hidden or windowed, command server
+  Studio/main.c               the renderer app ("Studio"): hidden or windowed, command server
   pipeline/                   Python 3.11+ package (all new)
     studio/                   JSON-RPC client, typed wrappers for every command
     meta/                     clients: Muse Spark, Muse Spark Open, Muse Image, SAM 3.1, Voice
@@ -258,12 +258,12 @@ Office hours in Discord every weekday 10-11 AM ET: bring API questions there.
 
 ## Phase 1: The studio renderer (Oct 27-29)
 
-All C work, in `Engine/` (library `Meta_Engine`) and `src/main.c`. No engine changes.
+All C work, in `Engine/` (library `Meta_Engine`) and `Studio/main.c`. No engine changes.
 
 ### 1.1 Library and app setup (Oct 27)
 - [x] `Engine/CMakeLists.txt`: static library `Meta_Engine`, links `PBR_Engine`; `Testbed` links it.
 - [ ] Post-build copy of `Engine/shaders` and `Assets/fonts` next to the exe.
-- [x] Rename the program to **Studio** (`src/main.c`): an empty scene by default (the material grid
+- [x] Rename the program to **Studio** (`Studio/main.c`): an empty scene by default (the material grid
       moves behind `--demo-scene`); `--hidden` for running as the agents' renderer;
       `--width/--height` for the output resolution, independent of the window.
 - [x] Register host commands through `command_context.host_commands`: one table per area
