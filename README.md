@@ -30,7 +30,7 @@ Built for the **Meta Global AI Developer Hackathon** (October 27 to November 4, 
 
    Code then checks the craft rules: lengths add up, consecutive shots move differently, the last shot is a hero with the brand's name, titles are readable and stay off the product, props don't float or hide it. It also checks that a coloured product isn't greyed by the tonemapper. Problems go back to Spark for the next draft; most ads need 2–3 drafts.
 5. **Studio** (storyboard → frames). The C renderer builds the set and the product as glTF, keys every move on a timeline, draws titles with signed-distance-field fonts, and renders frames offscreen at any size, with a 180° shutter's motion blur.
-6. **Final cut.** Shots are cut to the music's beat. The music is synthesized for the chosen mood and tempo, mastered to -16 LUFS. The end card shows the product's photo with the brand's name, and the film is encoded as H.264 and AAC. A second format (9:16 from a 16:9 plan) is reframed from the same storyboard.
+6. **Final cut.** Shots are cut to the music's beat. The music is synthesized for the chosen mood and tempo, mastered to -16 LUFS. The end card shows the product's photo with the brand's name on a calm colour, and the film is encoded as H.264 and AAC. A second format (9:16 from a 16:9 plan) is reframed from the same storyboard.
 
 Every run is a folder (`runs/<time>-<name>/`) holding its inputs, the brand profile, each storyboard draft, the model sheets Spark chose from, the videos, and a timed log of every model call and renderer command. A failed run also keeps its traceback. Any run can be made again from its inputs (`--again`) or replayed in the app at its real pace.
 
