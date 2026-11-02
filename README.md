@@ -77,11 +77,13 @@ The batch behind most of these is **30 ads for 30 fictional products**, made una
 
 **The quick way: run `start.bat`.** It checks each of these and sets up what's missing:
 - **Python and ffmpeg:** offers to install them with winget.
-- **The environment:** creates `.venv` and installs the packages, again whenever `pipelineequirements.txt` changes.
+- **The environment:** creates `.venv` and installs the packages, again whenever `pipeline\requirements.txt` changes.
 - **The Studio:** builds it with CMake and Visual Studio (found with vswhere; any edition 2019 16.8+ or the Build Tools).
 - **API keys:** asks for them, typed hidden, and saves them to `.env` (`scripts/setup_env.py`).
 
 Each step acts only if something is missing, so the second run goes straight to the app. Then it starts the app on http://127.0.0.1:8000 and opens the browser; its window shows the app's log, and the Studio's window shows each shot rendering. Other modes: `start.bat keys` asks for the keys again, `start.bat setup` only sets up, and `start.bat hidden` runs without the Studio's window.
+
+**No Visual Studio?** Download the release zip (`Studio-…-windows-x64.zip`): the Studio comes prebuilt in `build\Release`, so `start.bat` skips the build and needs only Python and ffmpeg. `scripts/release.py` makes it from the commit checked out.
 
 **By hand.** API keys: copy `.env.example` to `.env` and fill in:
 - `MODEL_API_KEY`: the Meta Model API, from [dev.meta.ai](https://dev.meta.ai).
