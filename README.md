@@ -50,7 +50,7 @@ The batch behind most of these is **30 ads for 30 fictional products**, made una
 
 ### Known limits
 
-- A product with no suitable free 3D model needs one uploaded; the scout won't guess its shape.
+- A product with no suitable free 3D model needs one given (`--model`); the scout won't guess its shape.
 - A model stands the way the photo shows the product, not always the way it would rest: a wallet or a knife can stand on end.
 - A label wraps only a round, traced body; a model keeps its own surface.
 - Glass and the liquid it holds are one surface, so a bottle can look like coloured plastic.
@@ -108,7 +108,7 @@ python -m venv .venv
 
 ### The app
 
-Drop a product photo, type a brief or press **Speak it**, choose the format and press **Make the ad**. You can also search the catalogues for a 3D model, or upload your own `.glb`. The page fills in as the agents work:
+Drop a product photo, type a brief or press **Speak it**, choose the format and press **Make the ad**. The 3D model is found automatically; to give your own `.glb`, use the command line's `--model`. The page fills in as the agents work:
 - the brand profile and the 3D model with its credit;
 - each storyboard draft, with what the checks found and what changed;
 - **How Spark decided**: every choice in order, with the sheet it chose from;

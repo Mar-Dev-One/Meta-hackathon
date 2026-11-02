@@ -43,7 +43,7 @@ class NoModel(Exception):
     ad stops here and asks for a model instead."""
 
     def __init__(self, category: str, why: str):
-        super().__init__(f"no 3D model fits this {category}: {why}. Upload a model of it (.glb) to make its ad")
+        super().__init__(f"no 3D model fits this {category}: {why}. Give a model of it (.glb, the command line's --model) to make its ad")
 
 
 class Shape(BaseModel):
