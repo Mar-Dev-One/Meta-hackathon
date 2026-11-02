@@ -77,11 +77,11 @@ The batch behind most of these is **30 ads for 30 fictional products**, made una
 
 **The quick way: run `start.bat`.** It checks each of these and sets up what's missing:
 - **Python and ffmpeg:** offers to install them with winget.
-- **The environment:** creates `.venv` and installs the packages, again whenever `requirements.txt` changes.
-- **The Studio:** builds it with CMake and Visual Studio.
-- **API keys:** asks for them, typed hidden, and saves them to `.env`.
+- **The environment:** creates `.venv` and installs the packages, again whenever `pipelineequirements.txt` changes.
+- **The Studio:** builds it with CMake and Visual Studio (found with vswhere; any edition 2019 16.8+ or the Build Tools).
+- **API keys:** asks for them, typed hidden, and saves them to `.env` (`scripts/setup_env.py`).
 
-Then it starts the app and opens the browser. Other modes: `start.bat keys` asks for the keys again, `start.bat setup` only sets up, and `start.bat hidden` runs without the Studio's window.
+Each step acts only if something is missing, so the second run goes straight to the app. Then it starts the app on http://127.0.0.1:8000 and opens the browser; its window shows the app's log, and the Studio's window shows each shot rendering. Other modes: `start.bat keys` asks for the keys again, `start.bat setup` only sets up, and `start.bat hidden` runs without the Studio's window.
 
 **By hand.** API keys: copy `.env.example` to `.env` and fill in:
 - `MODEL_API_KEY`: the Meta Model API, from [dev.meta.ai](https://dev.meta.ai).
@@ -210,11 +210,13 @@ pipeline/
   schemas/                  pydantic models: BrandProfile, Storyboard, Critique (JSON schemas in json/)
   runs.py, cleanup.py       run folders: log, outputs, replay; cleaning old ones
 app/                        the web app: FastAPI backend, one HTML page
-scripts/                    the demo ads, the 30-product batch, the evaluation, test photos, font kerning
+scripts/                    the demo ads, the 30-product batch, the evaluation, test photos, font kerning,
+                            the API key setup
+start.bat                   one-click setup and launch
 tests/                      the pipeline's regression tests
 Assets/                     fonts (OFL), HDRIs (CC0), shaders, test product photos
 Deps/                       the engine (PBR_Engine) as headers and prebuilt libraries
-docs/                       the architecture, the roadmap
+docs/                       the architecture, the roadmap, two overview PDFs
 ```
 
 **Tests:**
@@ -222,7 +224,10 @@ docs/                       the architecture, the roadmap
 - `ctest --test-dir build -C Release` runs the Studio's timeline and text layout tests.
 - `pipeline/meta/smoke/run_all.py` makes one test call to each model.
 
-More detail on each agent, the Studio and the rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**More documentation:**
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): each agent, the Studio and the rules in detail.
+- [docs/ROADMAP.md](docs/ROADMAP.md): the plan, phase by phase, with what was done and what's left.
+- [docs/Project_Overview.pdf](docs/Project_Overview.pdf) and [docs/Studio_Architecture.pdf](docs/Studio_Architecture.pdf): overviews of the project and the Studio.
 
 ## Built during the hackathon
 
