@@ -81,6 +81,18 @@ class Hero(unittest.TestCase):
             self.assertEqual(repaired.shots[-1].camera.azimuth, turned)
             self.assertFalse(any("must be the hero" in p for p in write.problems(repaired, None, repaired.length)))
 
+    @mock.patch.object(write, "edge_on", lambda product: [359.0, 179.0])   # VANTA's motorbike, photographed head-on
+    def test_a_product_end_on_from_the_front_gets_a_three_quarter_hero(self):
+        sb = storyboard()
+        for azimuth, turned in ((35, 35), (25, 30), (80, 60)):   # kept; out of the end-on view; into the window
+            shots = sb.shots[:-1] + [sb.shots[-1].model_copy(update={"camera": CameraMove(move="static",
+                                                                                          azimuth=azimuth)})]
+            repaired, _ = write.repair(sb.model_copy(update={"shots": shots}))
+            self.assertEqual(repaired.shots[-1].camera.azimuth, turned)
+            hero = [p for p in write.problems(repaired, None, repaired.length)
+                    if "must be the hero" in p or (f"shot {repaired.shots[-1].id} puts" in p and "edge-on" in p)]
+            self.assertEqual(hero, [])
+
     def test_a_hero_from_the_front_is_left(self):
         sb = storyboard()
         shots = sb.shots[:-1] + [sb.shots[-1].model_copy(update={"camera": CameraMove(move="static", azimuth=10)})]

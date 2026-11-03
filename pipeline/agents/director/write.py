@@ -41,6 +41,7 @@ LONG, LONG_SHOT_MAX = 30.0, 8.0   # an ad longer than this many seconds may hold
 MAX_SHOTS = 30            # a 2-minute ad: 15 to 25 shots
 HERO_MIN = 2.5            # the last shot, seconds
 HERO_AZIMUTH = 25         # degrees from the front
+HERO_THREE_QUARTER = 60   # the same, for a thin product edge-on from near the front (hero_limit)
 FLAT, FLAT_ELEVATION = 0.75, 30   # a model lower than this share of its narrower width (from above) lies flat:
                                   # look down on it from at least this high
 THIN, THIN_AZIMUTH = 0.45, 30   # a model thinner than this share of its length (from above): keep cameras this
@@ -155,7 +156,10 @@ def _profile_text(p: BrandProfile | None) -> str:
                          f"camera at least {FLAT_ELEVATION:g} degrees above it"} if lies_flat(p.product()) else {}),
              **({"thin": f"seen from above it's much thinner one way than the other: from azimuth "
                          f"{edges[0] % 360:.0f} or {edges[1] % 360:.0f} it's seen edge-on, so keep every camera at "
-                         f"least {THIN_AZIMUTH:g} degrees from those (azimuth, and an orbit's to_azimuth)"}
+                         f"least {THIN_AZIMUTH:g} degrees from those (azimuth, and an orbit's to_azimuth)" +
+                         (f"; from the front it's end-on, so its hero is a three-quarter view: {THIN_AZIMUTH:g} to "
+                          f"{HERO_THREE_QUARTER:g} degrees to one side" if hero_limit(p.product()) > HERO_AZIMUTH
+                          else "")}
                 if edges else {}),
              "materials": [f"{m.name}: {m.looks_like} ({m.color})" for m in p.materials],
              "palette": [f"{s.hex} {s.role} {s.share:.0%}" for s in p.palette],
@@ -238,17 +242,39 @@ def from_front(azimuth: float) -> float:
     return (azimuth + 180) % 360 - 180
 
 
+def hero_limit(product) -> float:
+    """How far from the front the hero may be, in degrees: HERO_AZIMUTH, or
+    for a thin product edge-on from near the front (a motorbike, a bicycle,
+    a scooter photographed head-on: from the front it's end-on), a three
+    quarter view out to HERO_THREE_QUARTER, the edge-on rule keeping it
+    THIN_AZIMUTH clear of the end. Within HERO_AZIMUTH of the front none
+    was clear of it: the two rules failed every draft of five ads."""
+    edges = edge_on(product)
+    if edges and min(abs(from_front(e)) for e in edges) < HERO_AZIMUTH + THIN_AZIMUTH:
+        return HERO_THREE_QUARTER
+    return HERO_AZIMUTH
+
+
 def repair(sb: Storyboard) -> tuple[Storyboard, list[str]]:
     """The craft rules code can keep for Spark, kept, with what was changed:
-    a static hero turned to within HERO_AZIMUTH of the front, on its side
-    (Spark gave a motorbike, a bicycle, a scooter, boots and a vacuum a three
-    quarter hero, 30 to 60 degrees, in every draft: five ads failed on it);
-    props with nothing to stand on (no backdrop's floor, no room on the
-    pedestal) taken out (a kettle's wooden bowl failed its ad)."""
+    a static hero turned to within hero_limit of the front, on its side, and
+    clear of an edge-on view (Spark gave a motorbike, a bicycle, a scooter,
+    boots and a vacuum a three quarter hero, 30 to 60 degrees, in every
+    draft: five ads failed on it); props with nothing to stand on (no
+    backdrop's floor, no room on the pedestal) taken out (a kettle's wooden
+    bowl failed its ad)."""
     notes = []
     hero = sb.shots[-1]
-    if hero.camera.move == "static" and abs(from_front(hero.camera.azimuth)) > HERO_AZIMUTH:
-        azimuth = math.copysign(HERO_AZIMUTH, from_front(hero.camera.azimuth))
+    azimuth = hero.camera.azimuth   # as Spark wrote it (340, not -20) unless it breaks a rule
+    if hero.camera.move == "static":
+        off = from_front(azimuth)
+        limit, edges = hero_limit(sb.product), edge_on(sb.product)
+        if abs(off) > limit:
+            azimuth = math.copysign(limit, off)
+        if edges and _from_edge(azimuth, edges) < THIN_AZIMUTH:   # out of the end-on view, on its side
+            edge = min((from_front(e) for e in edges), key=lambda e: abs(from_front(azimuth - e)))
+            azimuth = round(edge + math.copysign(THIN_AZIMUTH + 1, from_front(azimuth - edge) or off or 1), 1)
+    if azimuth != hero.camera.azimuth:
         notes.append(f"the hero ({hero.id}) turned from azimuth {hero.camera.azimuth:g} to {azimuth:g}")
         shots = sb.shots[:-1] + [hero.model_copy(update={"camera": hero.camera.model_copy(update={"azimuth": azimuth})})]
         sb = sb.model_copy(update={"shots": shots})
@@ -299,9 +325,10 @@ def problems(sb: Storyboard, profile: BrandProfile | None, seconds: float) -> li
                        f"those")
 
     hero, hero_start = sb.shots[-1], sb.shot_starts()[-1]
-    if hero.camera.move != "static" or abs(from_front(hero.camera.azimuth)) > HERO_AZIMUTH or hero.duration < HERO_MIN:
+    limit = hero_limit(sb.product)
+    if hero.camera.move != "static" or abs(from_front(hero.camera.azimuth)) > limit or hero.duration < HERO_MIN:
         out.append(f"the last shot ({hero.id}) must be the hero: a static move from the front (azimuth within "
-                   f"{HERO_AZIMUTH} degrees of 0), at least {HERO_MIN:g} s long")
+                   f"{limit:g} degrees of 0), at least {HERO_MIN:g} s long")
 
     if profile and profile.brand:
         brand = profile.brand.casefold().replace(" ", "")
