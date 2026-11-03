@@ -100,6 +100,28 @@ class Recolour(unittest.TestCase):
             self.assertLess(body(made["lightness"]).mean(), 40)       # the darkest took the darkest
 
 
+class Caps(unittest.TestCase):
+    GLASS = {"color": "#383737", "roughness": 0.05, "transmission": 0.9}
+    GOLD = {"color": "#D6BD94", "metallic": 1.0, "roughness": 0.15}
+
+    def dressed(self, *meshes):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder, "model.glb")
+            trimesh.Scene(list(meshes)).export(str(path))
+            models.dress(path, path, {"body": self.GLASS, "cap": self.GOLD})
+            scene = trimesh.load(str(path), force="scene")
+            return sorted((round(float(m.bounds[0][1]), 3), m.visual.material.metallicFactor)
+                          for m in scene.geometry.values())
+
+    def test_a_stopper_in_the_bottles_mesh_is_the_cap(self):   # NOCTIS's: its gold cap came out smoked glass
+        bottle = trimesh.util.concatenate([box((0.09, 0.107, 0.03), (0, 0.0535, 0)),
+                                           box((0.05, 0.017, 0.05), (0, 0.1315, 0))])
+        self.assertEqual(self.dressed(bottle), [(0.0, 0.0), (0.123, 1.0)])
+
+    def test_a_mesh_all_of_the_body_stays_whole(self):
+        self.assertEqual(self.dressed(box((0.09, 0.14, 0.03), (0, 0.07, 0))), [(0.0, 0.0)])
+
+
 class Reframe(unittest.TestCase):
     def test_fills_scaled_close_ups_kept(self):
         sb = storyboard([3.0, 3.0, 3.5]).model_copy()

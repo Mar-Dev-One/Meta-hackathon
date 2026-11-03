@@ -42,6 +42,10 @@ PAINT_SIZE = "1536x1024"
 
 PROP_CACHE = CACHE / "props"   # the props, stood and centred for placing
 PROP_CLEAR = 0.005             # meters between a prop on the floor and the pedestal's side
+# A pedestal at least MATTE rough is matte like flocked paper or velvet: it reflects MATTE_SPECULAR of the lights.
+# At full specular, rims from behind glared off its top at a grazing view, whatever its colour: a black plinth
+# came out the brightest thing in NOCTIS's frames, over the black bottle it held.
+MATTE, MATTE_SPECULAR = 0.7, 0.1
 TRUCK_ROOM = 0.8   # a truck slides at most this share of the room beside the product (as the Studio's default)
 
 
@@ -93,6 +97,14 @@ def _surfaced(model) -> dict:
     return args
 
 
+def pedestal_args(pedestal) -> dict:
+    """The pedestal as backdrop.create's arguments: a rough one matte (MATTE)."""
+    args = _surfaced(pedestal)
+    if args.get("roughness", 0.0) >= MATTE:
+        args["specular"] = MATTE_SPECULAR
+    return args
+
+
 async def build_scene(studio: Studio, sb: Storyboard) -> dict:
     """Environment, backdrop, pedestal, product and lights (the light
     environment and surfaces from the set library, by name). Returns the
@@ -113,7 +125,7 @@ async def build_scene(studio: Studio, sb: Storyboard) -> dict:
         await studio.call("backdrop.create", kind="cyclorama", **_surfaced(look.backdrop))
     top = 0.0
     if look.pedestal:
-        await studio.call("backdrop.create", kind="pedestal", **_surfaced(look.pedestal))
+        await studio.call("backdrop.create", kind="pedestal", **pedestal_args(look.pedestal))
         top = look.pedestal.height
 
     product = sb.product

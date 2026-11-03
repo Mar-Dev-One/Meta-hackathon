@@ -599,6 +599,8 @@ static const cmd_arg BACKDROP_ARGS[] = {
     { "color", "string", false, "\"#RRGGBB\" or [r, g, b] linear (default near black)" },
     { "roughness", "number", false, "0..1" },
     { "metallic", "number", false, "0..1" },
+    { "specular", "number", false, "0..1: how much it reflects the lights (1, any surface; low for velvet or flocked "
+                                   "paper: rims from behind glare off a rough top at a grazing view)" },
     { "texture", "string", false, "an image to cover it with (e.g. from Muse Image)" },
     { "texture_tile", "number", false, "meters per repeat of the texture (default: once across)" },
     { "position", "vec3", false, "where it goes (a cyclorama's floor centre; a pedestal's base centre)" },

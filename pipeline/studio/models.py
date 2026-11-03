@@ -236,7 +236,8 @@ def _inside(a: dict, b: dict, margin: float = 0.02) -> bool:
 
 def dress(source: Path | str, out: Path | str, parts: dict[str, dict]) -> Path:
     """Each piece of the model in its part's finish. Pieces centred in the
-    top third are the cap (if there's a cap), the rest the body. A texture
+    top third are the cap (if there's a cap; a mesh with pieces on both
+    sides split first, split_caps), the rest the body. A texture
     is kept as detail, turned grey and tinted with the part's colour.
 
     A glass body (its finish has transmission) is dressed as the Studio's
@@ -247,6 +248,8 @@ def dress(source: Path | str, out: Path | str, parts: dict[str, dict]) -> Path:
     the glass, given the liquid's colour, and the body pieces inside it go."""
     scene = load(source)
     top = scene.bounds[1][1]
+    if "cap" in parts:
+        split_caps(scene, CAP_FROM * top)
     pieces = _pieces(scene)
     body = parts.get("body") or next(iter(parts.values()))
     for p in pieces:
@@ -274,6 +277,42 @@ def dress(source: Path | str, out: Path | str, parts: dict[str, dict]) -> Path:
     scene.export(str(out), file_type="glb", include_normals=True)
     _add_extensions(Path(out), names)
     return Path(out)
+
+
+def split_caps(scene: trimesh.Scene, cap_from: float) -> int:
+    """Splits (in place) each mesh holding both a cap and some of the body
+    in two: its connected pieces centred above `cap_from` (a height in the
+    scene) apart from the rest. A modeller often makes a bottle and its
+    stopper one mesh (NOCTIS's), which, centred low, was dressed all as the
+    body: a gold cap came out smoked glass. Returns the meshes split; a mesh
+    placed more than once is left whole."""
+    nodes: dict[str, list] = {}
+    for node in scene.graph.nodes_geometry:
+        transform, name = scene.graph[node]
+        nodes.setdefault(name, []).append(transform)
+    split = 0
+    for name, transforms in nodes.items():
+        mesh = scene.geometry[name]
+        if len(transforms) > 1 or not len(mesh.faces):
+            continue
+        labels = _parts(mesh)
+        if labels.max() == 0:
+            continue
+        heights = trimesh.transform_points(mesh.vertices, transforms[0])[:, 1]
+        cap = np.zeros(len(mesh.faces), bool)
+        for k in range(labels.max() + 1):
+            mask = labels == k
+            ys = heights[np.unique(mesh.faces[mask])]
+            cap[mask] = (ys.min() + ys.max()) / 2 >= cap_from
+        if cap.all() or not cap.any():
+            continue
+        halves = {"cap": mesh.submesh([np.flatnonzero(cap)], append=True),
+                  "body": mesh.submesh([np.flatnonzero(~cap)], append=True)}
+        scene.delete_geometry(name)
+        for part, half in halves.items():
+            scene.add_geometry(half, geom_name=f"{name}_{part}", transform=transforms[0])
+        split += 1
+    return split
 
 
 def _dressed(mesh: trimesh.Trimesh, finish: dict, name: str) -> trimesh.visual.material.PBRMaterial:

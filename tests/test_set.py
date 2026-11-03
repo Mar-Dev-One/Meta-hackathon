@@ -55,6 +55,14 @@ class Props(unittest.TestCase):
         self.assertFalse(any("would float" in p for p in write.problems(standing, None, standing.length)))
 
 
+class Matte(unittest.TestCase):
+    def test_a_rough_pedestal_hardly_reflects_the_lights(self):   # NOCTIS's black plinth glared white
+        self.assertEqual(build.pedestal_args(Pedestal(roughness=0.85))["specular"], build.MATTE_SPECULAR)
+
+    def test_a_sheen_keeps_its_reflections(self):
+        self.assertNotIn("specular", build.pedestal_args(Pedestal(roughness=0.3)))
+
+
 class Rules(unittest.TestCase):
     def test_length_and_shot_limits(self):
         sb = storyboard([0.8, 3.0, 3.0])

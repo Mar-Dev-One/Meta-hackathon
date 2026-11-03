@@ -70,7 +70,8 @@ class Pedestal(Strict):
     width: float = Field(0.32, gt=0.02, le=3, description="diameter, meters; a little wider than the product")
     height: float = Field(0.2, gt=0.01, le=2, description="meters; the product stands on it")
     color: str = Field("#0E0E10", pattern=HEX)
-    roughness: float = Field(0.85, ge=0, le=1, description="keep high (0.8+) under rim lights, or its top glares")
+    roughness: float = Field(0.85, ge=0, le=1, description="0.7+ is matte (velvet, flocked): rim lights don't glare "
+                                                                 "off its top; lower is a sheen that catches them")
     surface: Surface_ | None = Field(None, description="null: plain `color`. Or a material (see look.backdrop.surface); "
                                                        "a low wide pedestal of one is a slab to stand the product on")
 

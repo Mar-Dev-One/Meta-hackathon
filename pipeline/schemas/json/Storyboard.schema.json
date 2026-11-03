@@ -992,7 +992,7 @@
         },
         "roughness": {
           "default": 0.85,
-          "description": "keep high (0.8+) under rim lights, or its top glares",
+          "description": "0.7+ is matte (velvet, flocked): rim lights don't glare off its top; lower is a sheen that catches them",
           "maximum": 1,
           "minimum": 0,
           "title": "Roughness",
