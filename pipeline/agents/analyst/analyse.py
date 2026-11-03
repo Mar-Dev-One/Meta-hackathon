@@ -23,10 +23,11 @@ from PIL import Image, ImageDraw, ImageFont
 from pipeline.encode import finish
 from pipeline.runs import Run
 from pipeline.schemas import BrandProfile, Label, Storyboard, Swatch
+from pipeline.schemas.brand import Decal
 from pipeline.schemas.storyboard import Backdrop, CameraMove, Environment, Key, Lighting, Look, Shot, Track
 from pipeline.studio import PRODUCT, build
 
-from .label import CutLabel, onto, printed, unroll
+from .label import CutLabel, decal, onto, printed, unroll
 from .materials import Reading, dress, read
 from .palette import palette, strip
 from .profile import Traced, outline, trace
@@ -76,11 +77,17 @@ def analyse(run: Run, photo: Path | str, category: str = "product") -> Analysis:
     if cut:
         cut.image.save(run.path("label.png"))
         label = Label.model_validate(cut.command(str(run.root / "label.png")))
+    flat = decal(seg)   # for a 3D model, if the scout finds one: the label is wrapped only round a spun shape
+    stuck = None
+    if flat:
+        flat[0].save(run.path("decal.png"))
+        stuck = Decal(image=str(run.root / "decal.png"), **dict(zip(("left", "top", "right", "bottom"), flat[1])))
 
     profile = BrandProfile(
         brand=reading.brand, product_name=reading.product_name, category=reading.category, template=None,
         height=reading.height, depth=reading.depth, profile_parts=traced.parts, materials=reading.materials, palette=swatches,
-        typography=reading.typography, mood=reading.mood, do_not=reading.do_not, label=label, photos=[str(kept)],
+        typography=reading.typography, mood=reading.mood, do_not=reading.do_not, label=label, decal=stuck,
+        photos=[str(kept)],
         packshot=str(run.root / "packshot.png"))
     run.output("brand_profile", run.save_json("brand_profile.json", profile))
     return Analysis(profile, seg, swatches, reading, traced, cut)

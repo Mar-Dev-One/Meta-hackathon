@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from pipeline.agents.analyst.label import CutLabel, onto, printed
+from pipeline.agents.analyst.label import CutLabel, decal, onto, printed
 from pipeline.agents.analyst.segment import Region, Segmentation
 from pipeline.schemas import ProfilePart
 
@@ -82,6 +82,21 @@ class Printed(unittest.TestCase):
 
     def test_on_glass_part_of_a_word_is_none(self):   # LUNE's hairline silver: only "NE" was found
         self.assertIsNone(printed(glass(), within=(80, 240, 380, 340)))   # the strokes span under half the box
+
+
+class Decal(unittest.TestCase):
+    def test_the_label_as_the_photo_shows_it(self):   # for a 3D model's front: Maison Héritage's went without
+        seg = can(letters=True)
+        mask = np.zeros((600, 300), np.uint8)
+        mask[250:330, 90:210] = 255
+        seg.parts["label"] = Region("label", "label", Image.fromarray(mask), (90, 250, 210, 330))
+        image, box = decal(seg)
+        self.assertEqual(image.size, (120, 80))
+        self.assertEqual(image.getpixel((5, 5))[3], 255)   # the label, opaque
+        self.assertEqual(box, (0.2, 0.375, 0.8, 0.575))     # within the can's box (50, 100, 250, 500)
+
+    def test_no_label_no_decal(self):
+        self.assertIsNone(decal(can(letters=False)))
 
 
 def glass() -> Segmentation:

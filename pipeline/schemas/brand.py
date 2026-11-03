@@ -61,6 +61,18 @@ class Typography(Strict):
     tracking: float = Field(ge=-0.2, le=1.5, description="letter spacing in ems, judged from the label")
 
 
+class Decal(Strict):
+    """The label as the photo shows it, for a 3D model (a label is wrapped
+    only round a spun shape): its pixels, transparent off the label, and
+    where it is on the product's front, as shares of the product's box in
+    the photo (0 its left or top edge, 1 its right or bottom)."""
+    image: str = Field(description="path to the label as cut from the photo (PNG, transparent off it)")
+    left: float = Field(ge=0, le=1)
+    top: float = Field(ge=0, le=1)
+    right: float = Field(ge=0, le=1)
+    bottom: float = Field(ge=0, le=1)
+
+
 class BrandProfile(Strict):
     brand: str = Field(description="the brand name as written on the product")
     product_name: str = Field("", description="the product's own name, if any")
@@ -78,6 +90,7 @@ class BrandProfile(Strict):
     mood: list[str] = Field(min_length=1, max_length=6, description="a few words: luxurious, warm, minimal, ...")
     do_not: list[str] = Field(default_factory=list, description="things every shot must avoid, e.g. 'bright saturated colours'")
     label: Label | None = Field(None, description="the label cut from the photo and unrolled, and where it wraps")
+    decal: Decal | None = Field(None, description="the label as the photo shows it, laid on a 3D model's front")
     logo_image: str | None = Field(None, description="path to the logo cut from the photo")
     packshot: str | None = Field(None, description="path to the product cut out of its photo (a PNG, transparent "
                                                    "around it), for the end card")

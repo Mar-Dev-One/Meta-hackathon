@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import trimesh
+from PIL import Image
 
 from pipeline.agents.analyst.palette import to_lab
 from pipeline.schemas import CameraMove
@@ -120,6 +121,28 @@ class Caps(unittest.TestCase):
 
     def test_a_mesh_all_of_the_body_stays_whole(self):
         self.assertEqual(self.dressed(box((0.09, 0.14, 0.03), (0, 0.07, 0))), [(0.0, 0.0)])
+
+
+class Decal(unittest.TestCase):   # Maison Héritage's label: a 3D model's product went without one
+    def test_it_lies_on_the_front_and_glass_stays_glass(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path, image = Path(folder, "model.glb"), Path(folder, "decal.png")
+            trimesh.Scene([box((0.06, 0.14, 0.04), (0, 0.07, 0), [200, 200, 200, 120])]).export(str(path))
+            models.dress(path, path, {"body": Caps.GLASS})
+            Image.new("RGBA", (40, 30), (255, 255, 255, 255)).save(image)
+            self.assertTrue(models.add_decal(path, image, (0.1, 0.3, 0.9, 0.6)))
+            scene = trimesh.load(str(path), force="scene")
+            decal = scene.geometry["decal"]
+            (x0, y0, z0), (x1, y1, z1) = decal.bounds
+            self.assertAlmostEqual(z0, 0.02 + models.DECAL_LIFT, places=5)   # on the front face, just off it
+            self.assertAlmostEqual(z1, 0.02 + models.DECAL_LIFT, places=5)
+            self.assertAlmostEqual(x0, -0.024, places=4)
+            self.assertAlmostEqual(y1, 0.14 * 0.7, places=4)               # the photo's top is the model's top
+            self.assertGreater(decal.face_normals[:, 2].mean(), 0.99)       # facing the camera
+            gltf, _ = models._read_glb(path)
+            glass = [m for m in gltf["materials"] if m.get("name", "").startswith("glass")]
+            self.assertIn("KHR_materials_transmission", glass[0].get("extensions", {}))
+            self.assertEqual(next(m for m in gltf["materials"] if m.get("name") == "decal")["alphaMode"], "BLEND")
 
 
 class Reframe(unittest.TestCase):
