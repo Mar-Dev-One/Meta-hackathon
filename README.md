@@ -76,13 +76,14 @@ The batch behind most of these is **30 ads for 30 fictional products**, made una
 - Python 3.11+ (developed on 3.13).
 - ffmpeg on the `PATH`.
 
-**The quick way: run `start.bat`.** It checks each of these and sets up what's missing:
+**The quick way: run `start.bat`.** It checks each of these and sets up what's missing or out of date:
 - **Python and ffmpeg:** offers to install them with winget.
 - **The environment:** creates `.venv` and installs the packages, again whenever `pipeline\requirements.txt` changes.
-- **The Studio:** builds it with CMake and Visual Studio (found with vswhere; any edition 2019 16.8+ or the Build Tools).
+- **The voice-over:** installs `pipeline\requirements-voice.txt` (torch for the CPU and transformers, about 300 MB) and fetches Meta's MMS voice (about 150 MB), once. If it can't, the app still runs, and its ads are made without a voice-over.
+- **The Studio:** builds it with CMake and Visual Studio (found with vswhere; any edition 2019 16.8+ or the Build Tools), and on every run brings it up to date with its code, compiling only what changed (seconds when nothing has). A Studio just built renders its test frame as a check. A release zip's prebuilt Studio is used as it is.
 - **API keys:** asks for them, typed hidden, and saves them to `.env` (`scripts/setup_env.py`).
 
-Each step acts only if something is missing, so the second run goes straight to the app. Then it starts the app on http://127.0.0.1:8000 and opens the browser; its window shows the app's log, and the Studio's window shows each shot rendering. Other modes: `start.bat keys` asks for the keys again, `start.bat setup` only sets up, and `start.bat hidden` runs without the Studio's window.
+Each step acts only if something is missing or changed, so the second run goes straight to the app. Then it starts the app on http://127.0.0.1:8000 and opens the browser; its window shows the app's log, and the Studio's window shows each shot rendering. Other modes: `start.bat keys` asks for the keys again, `start.bat setup` only sets up, and `start.bat hidden` runs without the Studio's window.
 
 **No Visual Studio?** Download the release zip (`Studio-…-windows-x64.zip`): the Studio comes prebuilt in `build\Release`, so `start.bat` skips the build and needs only Python and ffmpeg. `scripts/release.py` makes it from the commit checked out.
 
@@ -142,7 +143,7 @@ API: `POST /runs` (photo, brief, `format`, optional `model_pick` or `model_file`
 
 Other options: `--critic` adds the critic loop, `--voice` adds a voice-over, `--director live` lets Spark drive the Studio command by command, and `--preview` stops at the storyboard.
 
-**The voice-over** (`--voice`, or **voice-over** in the app). Muse Spark writes two to four short lines for the finished storyboard, each timed to its shots. Code checks them: each fits its time at the voice's pace, the last says the brand's name, numbers come as words. Spark also spells the brand's name as it sounds (Lumen: "Loomen"), so the voice says it right. Meta's MMS-TTS speaks the lines on the CPU, and the music ducks about 7 dB under the voice. It needs `pip install -r pipeline\requirements-voice.txt` (torch for the CPU and transformers, about 300 MB); if it can't run, the ad is made without a voice. The voice is clear but plain, not a voice actor's.
+**The voice-over** (`--voice`, or **voice-over** in the app). Muse Spark writes two to four short lines for the finished storyboard, each timed to its shots. Code checks them: each fits its time at the voice's pace, the last says the brand's name, numbers come as words. Spark also spells the brand's name as it sounds (Lumen: "Loomen"), so the voice says it right. Meta's MMS-TTS speaks the lines on the CPU, and the music ducks about 7 dB under the voice. It needs `pip install -r pipeline\requirements-voice.txt` (torch for the CPU and transformers, about 300 MB; `start.bat` does it); if it can't run, the ad is made without a voice. The voice is clear but plain, not a voice actor's.
 
 ## The critic (optional)
 
