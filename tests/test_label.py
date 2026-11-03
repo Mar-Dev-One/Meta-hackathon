@@ -80,6 +80,9 @@ class Printed(unittest.TestCase):
         self.assertTrue(85 <= left <= 92 and 205 <= right <= 215 and 245 <= top <= 252 and 328 <= bottom <= 335)
         self.assertGreater(printed(glass()).box[2] - printed(glass()).box[0], 150)   # unboxed: the refractions too
 
+    def test_on_glass_part_of_a_word_is_none(self):   # LUNE's hairline silver: only "NE" was found
+        self.assertIsNone(printed(glass(), within=(80, 240, 380, 340)))   # the strokes span under half the box
+
 
 def glass() -> Segmentation:
     """An amber glass bottle with bright refractions down its sides, and gold

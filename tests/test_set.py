@@ -72,6 +72,15 @@ class Hero(unittest.TestCase):
         self.assertEqual(repaired.shots[-1].camera.azimuth, -write.HERO_AZIMUTH)   # on the side Spark chose
         self.assertFalse(any("must be the hero" in p for p in write.problems(repaired, None, repaired.length)))
 
+    def test_round_the_back_way_is_still_the_front(self):   # 340 is 20 to the left: it read as 340 off the front
+        sb = storyboard()
+        for azimuth, turned in ((340, 340), (300, -write.HERO_AZIMUTH)):
+            shots = sb.shots[:-1] + [sb.shots[-1].model_copy(update={"camera": CameraMove(move="static",
+                                                                                          azimuth=azimuth)})]
+            repaired, _ = write.repair(sb.model_copy(update={"shots": shots}))
+            self.assertEqual(repaired.shots[-1].camera.azimuth, turned)
+            self.assertFalse(any("must be the hero" in p for p in write.problems(repaired, None, repaired.length)))
+
     def test_a_hero_from_the_front_is_left(self):
         sb = storyboard()
         shots = sb.shots[:-1] + [sb.shots[-1].model_copy(update={"camera": CameraMove(move="static", azimuth=10)})]

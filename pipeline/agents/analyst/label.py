@@ -41,6 +41,8 @@ LETTER = 8.0        # Lab distance (lightness counting half) from the glass roun
                     # (at 12, SOLARE's gold E lost its arms to the amber glass)
 LETTER_SHARE = (0.03, 0.7)   # of the lettering's box: letters fill a good part of it, and leave some glass
 LETTER_SPECK = 0.002         # of the lettering's box: a smaller piece is a speck (NOCTIS's "I" is 0.011)
+LETTER_SPAN = 0.8            # of the lettering's box's width: the print found spans at least this, or it's a
+                             # fragment (LUNE's hairline silver on frosted glass kept only "NE": 0.3; whole words 0.95)
 
 
 @dataclass
@@ -194,7 +196,10 @@ def printed(seg: Segmentation, within: tuple[int, int, int, int] | None = None) 
     share = (np.asarray(image) > 127).sum() / area.sum()
     if not shares[0] <= share <= shares[1]:
         return None
-    return Region("label", "print on the body", image, image.getbbox())
+    box = image.getbbox()
+    if within and (box[2] - box[0]) < LETTER_SPAN * (within[2] - within[0]):
+        return None   # part of the word: wrapped, a fragment reads worse than none
+    return Region("label", "print on the body", image, box)
 
 
 def onto(cut: CutLabel, parts) -> CutLabel | None:

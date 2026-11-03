@@ -29,8 +29,9 @@
 #define MAX_PROFILE_POINTS 64
 #define LABEL_LIFT         0.0006f   // meters the label stands off the glass, so it doesn't flicker into it
 // What a request builds, as a version in its file's name: bumped when the same request builds something else
-// (2: a label on glass is blended), so the files made before aren't loaded in its place.
-#define PRODUCT_FORMAT     2
+// (2: a label on glass is blended; 3: a flattened label kept off its body), so the files made before aren't
+// loaded in its place.
+#define PRODUCT_FORMAT     3
 
 // --- Templates ------------------------------------------------------------------------
 // Profiles in units of the product's radius (r) and height (y), bottom to top.
@@ -166,12 +167,15 @@ default_thickness(product_part* part)
 // is round from the front and flat from the side, which spinning its outline
 // made a ball (SMERALDA's, SOLARE's). Normals are scaled the other way
 // (the inverse transpose) and tangents with the surface, and a glass's
-// thickness, the light's way through it from the front, with it.
+// thickness, the light's way through it from the front, with it. The label
+// is pushed back out along its normal: squeezed, its LABEL_LIFT off the body
+// shrank to depth of itself at the front, where it is, and flickered in.
 static void
 flatten(geo_part* parts, uint32 count, f32 depth)
 {
     for (uint32 p = 0; p < count; ++p)
     {
+        f32 lift = strcmp(parts[p].name, "label") == 0 ? LABEL_LIFT * (1.0f - depth) : 0.0f;
         for (uint32 i = 0; i < parts[p].vertex_count; ++i)
         {
             geo_vertex* v = &parts[p].vertices[i];
@@ -180,6 +184,7 @@ flatten(geo_part* parts, uint32 count, f32 depth)
             glm_vec3_normalize(v->normal);
             v->tangent[2] *= depth;
             glm_vec3_normalize(v->tangent);
+            glm_vec3_muladds(v->normal, lift, v->position);
         }
         parts[p].material.thickness *= depth;
     }

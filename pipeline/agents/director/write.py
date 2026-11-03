@@ -232,6 +232,12 @@ def _azimuths(camera) -> list[float]:
     return [camera.azimuth]
 
 
+def from_front(azimuth: float) -> float:
+    """An azimuth as degrees from the front, -180 to 180: 340 is 20 to the
+    left, as -20 is (the schema allows -360 to 360)."""
+    return (azimuth + 180) % 360 - 180
+
+
 def repair(sb: Storyboard) -> tuple[Storyboard, list[str]]:
     """The craft rules code can keep for Spark, kept, with what was changed:
     a static hero turned to within HERO_AZIMUTH of the front, on its side
@@ -241,8 +247,8 @@ def repair(sb: Storyboard) -> tuple[Storyboard, list[str]]:
     pedestal) taken out (a kettle's wooden bowl failed its ad)."""
     notes = []
     hero = sb.shots[-1]
-    if hero.camera.move == "static" and abs(hero.camera.azimuth) > HERO_AZIMUTH:
-        azimuth = math.copysign(HERO_AZIMUTH, hero.camera.azimuth)
+    if hero.camera.move == "static" and abs(from_front(hero.camera.azimuth)) > HERO_AZIMUTH:
+        azimuth = math.copysign(HERO_AZIMUTH, from_front(hero.camera.azimuth))
         notes.append(f"the hero ({hero.id}) turned from azimuth {hero.camera.azimuth:g} to {azimuth:g}")
         shots = sb.shots[:-1] + [hero.model_copy(update={"camera": hero.camera.model_copy(update={"azimuth": azimuth})})]
         sb = sb.model_copy(update={"shots": shots})
@@ -293,7 +299,7 @@ def problems(sb: Storyboard, profile: BrandProfile | None, seconds: float) -> li
                        f"those")
 
     hero, hero_start = sb.shots[-1], sb.shot_starts()[-1]
-    if hero.camera.move != "static" or abs(hero.camera.azimuth) > HERO_AZIMUTH or hero.duration < HERO_MIN:
+    if hero.camera.move != "static" or abs(from_front(hero.camera.azimuth)) > HERO_AZIMUTH or hero.duration < HERO_MIN:
         out.append(f"the last shot ({hero.id}) must be the hero: a static move from the front (azimuth within "
                    f"{HERO_AZIMUTH} degrees of 0), at least {HERO_MIN:g} s long")
 
