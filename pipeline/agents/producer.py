@@ -238,9 +238,8 @@ async def with_model(studio, run: Run, profile: BrandProfile, model: Path | str,
     """The brand profile with `model` as its product (run's product.glb):
     stood and turned the way Muse Spark sees the product in `photo` (the
     stager; the photo's `aspect` if it can't answer), fitted to its real
-    height, in place of the traced shape. The label, which is wrapped only
-    round a spun shape, is laid on its front as the photo shows it
-    (models.add_decal). It keeps its own textures, repainted in the
+    height, in place of the traced shape and the label (a label can't be
+    wrapped onto any shape). It keeps its own textures, repainted in the
     photo's colours region by region if Spark sees that closer (the
     colourist; one brand colour over everything lost a shoe's sole, a
     watch's dial). A glass
@@ -260,10 +259,6 @@ async def with_model(studio, run: Run, profile: BrandProfile, model: Path | str,
         if given:
             run.event("material_finish", materials=given, looks_like=main.looks_like, metallic=main.metallic,
                       roughness=main.roughness)
-    if profile.decal:   # the label, which can't be wrapped round a model, laid on its front as the photo shows it
-        d = profile.decal
-        laid = models.add_decal(fitted, d.image, (d.left, d.top, d.right, d.bottom))
-        run.event("decal", laid=laid, box=[round(v, 3) for v in (d.left, d.top, d.right, d.bottom)])
     height, width = models.size(fitted)
     profile = profile.model_copy(update={"model": str(fitted), "profile_parts": None, "template": None, "label": None})
     run.output("brand_profile", run.save_json("brand_profile.json", profile))

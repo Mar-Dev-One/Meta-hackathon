@@ -1,49 +1,5 @@
 {
   "$defs": {
-    "Decal": {
-      "additionalProperties": false,
-      "description": "The label as the photo shows it, for a 3D model (a label is wrapped\nonly round a spun shape): its pixels, transparent off the label, and\nwhere it is on the product's front, as shares of the product's box in\nthe photo (0 its left or top edge, 1 its right or bottom).",
-      "properties": {
-        "image": {
-          "description": "path to the label as cut from the photo (PNG, transparent off it)",
-          "title": "Image",
-          "type": "string"
-        },
-        "left": {
-          "maximum": 1,
-          "minimum": 0,
-          "title": "Left",
-          "type": "number"
-        },
-        "top": {
-          "maximum": 1,
-          "minimum": 0,
-          "title": "Top",
-          "type": "number"
-        },
-        "right": {
-          "maximum": 1,
-          "minimum": 0,
-          "title": "Right",
-          "type": "number"
-        },
-        "bottom": {
-          "maximum": 1,
-          "minimum": 0,
-          "title": "Bottom",
-          "type": "number"
-        }
-      },
-      "required": [
-        "image",
-        "left",
-        "top",
-        "right",
-        "bottom"
-      ],
-      "title": "Decal",
-      "type": "object"
-    },
     "Label": {
       "additionalProperties": false,
       "properties": {
@@ -612,18 +568,6 @@
       ],
       "default": null,
       "description": "the label cut from the photo and unrolled, and where it wraps"
-    },
-    "decal": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Decal"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "the label as the photo shows it, laid on a 3D model's front"
     },
     "logo_image": {
       "anyOf": [

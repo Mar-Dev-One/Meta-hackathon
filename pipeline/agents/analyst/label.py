@@ -202,23 +202,6 @@ def printed(seg: Segmentation, within: tuple[int, int, int, int] | None = None) 
     return Region("label", "print on the body", image, box)
 
 
-def decal(seg: Segmentation) -> tuple[Image.Image, tuple[float, float, float, float]] | None:
-    """The label as the photo shows it, for laying on a 3D model's front
-    (models.add_decal): its pixels inside its box, transparent where it
-    isn't the label (its mask), and its box as shares of the product's box
-    (left, top, right, bottom). None if there's no label."""
-    region = seg.parts.get("label")
-    if region is None or region.box is None:
-        return None
-    left, top, right, bottom = region.box
-    rgba = seg.image.convert("RGBA").crop(region.box)
-    rgba.putalpha(region.mask.crop(region.box))
-    pl, pt, pr, pb = seg.product.box
-    w, h = max(pr - pl, 1), max(pb - pt, 1)
-    clamp = lambda v: min(max(v, 0.0), 1.0)
-    return rgba, (clamp((left - pl) / w), clamp((top - pt) / h), clamp((right - pl) / w), clamp((bottom - pt) / h))
-
-
 def onto(cut: CutLabel, parts) -> CutLabel | None:
     """The label on the part its band lies on most (segmentation can call
     most of a tube its cap), kept to that part's side: a band reaching past
