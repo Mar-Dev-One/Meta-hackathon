@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -49,14 +50,21 @@ class Studio:
 
     @property
     def server_json(self) -> Path:
-        return self.exe.parent / "server.json"
+        """Where the Studio writes its address: a running one's server.json
+        (attached), else this launch's own (--server-json). Two Studios
+        started at once shared one: each launch deleted it for its own, one
+        deleted the other's, which then waited for it until it timed out."""
+        if self.attach:
+            return self.exe.parent / "server.json"
+        return Path(tempfile.gettempdir()) / f"studio-server-{os.getpid()}-{id(self)}.json"
 
     async def start(self, timeout: float = 30.0) -> "Studio":
         if not self.attach:
             if not self.exe.exists():
                 raise FileNotFoundError(f"no Studio at {self.exe}: build it (README.md) or set STUDIO_EXE")
             self.server_json.unlink(missing_ok=True)   # so the one we wait for is this run's
-            args = [str(self.exe), "--width", str(self.width), "--height", str(self.height)]
+            args = [str(self.exe), "--width", str(self.width), "--height", str(self.height),
+                    "--server-json", str(self.server_json)]
             if self.hidden:
                 args.append("--hidden")
             if self.port:
@@ -132,6 +140,7 @@ class Studio:
             except subprocess.TimeoutExpired:
                 self.process.kill()
             self.process = None
+            self.server_json.unlink(missing_ok=True)   # stopped, it can't take its own away
 
     async def __aenter__(self) -> "Studio":
         return await self.start()

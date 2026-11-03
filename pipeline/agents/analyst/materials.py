@@ -24,7 +24,15 @@ class Reading(Strict):
     brand: str = Field(description="the brand name as written on the product; '' if none is legible")
     product_name: str = Field(description="the product's own name if one is written, else ''")
     category: str = Field(description="what it is in a few words: 'eau de parfum', 'olive oil', 'face cream'")
-    height: float = Field(gt=0.02, le=0.6, description="its real height in meters, judged from what it is and its proportions")
+    # As BrandProfile.height allows: at gt 0.02 a ring (0.02) failed its ad; at le 0.6 a piano, a fridge, a sofa
+    # and a motorbike were all made 0.6 m or less.
+    height: float = Field(gt=0.005, le=5, description="its real height in meters, judged from what it is and its "
+                                                      "proportions (a ring 0.02, a perfume 0.12, a fridge 1.5)")
+    # The photo shows its front only: a flask and a ball have the same outline, and spinning it made SMERALDA's
+    # and SOLARE's flat round flasks spheres.
+    depth: float = Field(ge=0.1, le=1, description="how deep it is front to back, as a share of its width across "
+                                                   "the front: 1 for a round bottle, jar or can; a flat flask about "
+                                                   "0.4; judged from what it is and the shading at its sides")
     materials: list[PartMaterial] = Field(description="one per part named in the request, by that name")
     typography: Typography
     mood: list[str] = Field(min_length=2, max_length=5, description="words for how the brand feels: luxurious, warm, minimal, ...")

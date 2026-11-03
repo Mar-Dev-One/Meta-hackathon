@@ -209,9 +209,10 @@ def edge_on(product) -> list[float] | None:
     """For a thin product (a 3D model much thinner one way than the other
     seen from above: a watch, a phone, a controller, a shoe), the two
     azimuths a camera sees it edge-on from (looking along its length); None
-    for one that reads from any side."""
+    for one that reads from any side. A spun product made flat (depth: a
+    flask) is edge-on from either side."""
     if not product.model:
-        return None
+        return [90.0, 270.0] if product.depth is not None and product.depth < THIN else None
     length, thickness, azimuth = models.footprint(product.model)
     return [azimuth, azimuth + 180] if thickness < THIN * length else None
 
@@ -229,6 +230,29 @@ def _azimuths(camera) -> list[float]:
     if camera.move == "orbit":
         return [camera.azimuth, camera.to_azimuth if camera.to_azimuth is not None else camera.azimuth + 60]
     return [camera.azimuth]
+
+
+def repair(sb: Storyboard) -> tuple[Storyboard, list[str]]:
+    """The craft rules code can keep for Spark, kept, with what was changed:
+    a static hero turned to within HERO_AZIMUTH of the front, on its side
+    (Spark gave a motorbike, a bicycle, a scooter, boots and a vacuum a three
+    quarter hero, 30 to 60 degrees, in every draft: five ads failed on it);
+    props with nothing to stand on (no backdrop's floor, no room on the
+    pedestal) taken out (a kettle's wooden bowl failed its ad)."""
+    notes = []
+    hero = sb.shots[-1]
+    if hero.camera.move == "static" and abs(hero.camera.azimuth) > HERO_AZIMUTH:
+        azimuth = math.copysign(HERO_AZIMUTH, hero.camera.azimuth)
+        notes.append(f"the hero ({hero.id}) turned from azimuth {hero.camera.azimuth:g} to {azimuth:g}")
+        shots = sb.shots[:-1] + [hero.model_copy(update={"camera": hero.camera.model_copy(update={"azimuth": azimuth})})]
+        sb = sb.model_copy(update={"shots": shots})
+    if sb.look.props and not sb.look.backdrop:
+        kept = [p for p, spot in zip(sb.look.props, prop_spots(sb)) if spot["on"] == "pedestal"]
+        if len(kept) < len(sb.look.props):
+            gone = [p.prop for p in sb.look.props if p not in kept]
+            notes.append(f"props with nothing to stand on taken out: {', '.join(gone)}")
+            sb = sb.model_copy(update={"look": sb.look.model_copy(update={"props": kept})})
+    return sb, notes
 
 
 def problems(sb: Storyboard, profile: BrandProfile | None, seconds: float) -> list[str]:
@@ -659,10 +683,12 @@ async def write(brief: str, profile: BrandProfile, *, studio=None, run=None, sec
         sb, must = None, []
         try:
             plan = Plan.model_validate(answer.data)
-            sb = on_beat(assemble(plan, profile, brief, aspect))
+            sb, repaired = repair(on_beat(assemble(plan, profile, brief, aspect)))
         except ValidationError as e:
             found = must = _errors(e)
         else:
+            if run and repaired:
+                run.event("repaired", attempt=attempt, changes=repaired)
             must = problems(sb, profile, seconds) + (await title_problems(studio, sb) if studio else [])
             if studio and not must:   # a bright background brought down first: the titles are judged against it
                 sb, balanced = await balance(studio, sb)

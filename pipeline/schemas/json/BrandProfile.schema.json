@@ -483,6 +483,14 @@
       "title": "Height",
       "type": "number"
     },
+    "depth": {
+      "default": 1.0,
+      "description": "front to back as a share of its width: 1 round, a flask 0.4",
+      "maximum": 1,
+      "minimum": 0.1,
+      "title": "Depth",
+      "type": "number"
+    },
     "profile_parts": {
       "anyOf": [
         {

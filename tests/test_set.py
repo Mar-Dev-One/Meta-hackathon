@@ -1,13 +1,14 @@
 """The set: props placed clear of the product and of the pedestal's edge,
 the rules that keep a draft buildable, the look's own consistency."""
 
+import asyncio
 import importlib
 import math
 import unittest
 from unittest import mock
 
 from pipeline.agents.director import write
-from pipeline.schemas import Backdrop, Environment, Pedestal, PropPlace
+from pipeline.schemas import Backdrop, CameraMove, Environment, Pedestal, Product, PropPlace
 
 build = importlib.import_module("pipeline.studio.build")   # the module (pipeline.studio.build is also its function)
 
@@ -53,6 +54,64 @@ class Props(unittest.TestCase):
         self.assertTrue(any("would float" in p for p in write.problems(floating, None, floating.length)))
         standing = storyboard(props=[PropPlace(prop="lemon", angle=120, gap=2.0)])
         self.assertFalse(any("would float" in p for p in write.problems(standing, None, standing.length)))
+
+    def test_a_prop_with_no_floor_is_taken_out(self):   # a kettle's wooden bowl failed its ad, three drafts running
+        floating = storyboard(environment=Environment(show_skybox=True), pedestal=Pedestal(width=0.2, height=0.1),
+                              props=[PropPlace(prop="lemon", angle=120, gap=2.0)])
+        repaired, notes = write.repair(floating)
+        self.assertEqual(repaired.look.props, [])
+        self.assertFalse(any("would float" in p for p in write.problems(repaired, None, repaired.length)))
+        self.assertTrue(notes)
+
+
+class Hero(unittest.TestCase):
+    def test_a_three_quarter_hero_is_turned_to_the_front(self):   # five side-on products failed on it
+        sb = storyboard()
+        shots = sb.shots[:-1] + [sb.shots[-1].model_copy(update={"camera": CameraMove(move="static", azimuth=-40)})]
+        repaired, notes = write.repair(sb.model_copy(update={"shots": shots}))
+        self.assertEqual(repaired.shots[-1].camera.azimuth, -write.HERO_AZIMUTH)   # on the side Spark chose
+        self.assertFalse(any("must be the hero" in p for p in write.problems(repaired, None, repaired.length)))
+
+    def test_a_hero_from_the_front_is_left(self):
+        sb = storyboard()
+        shots = sb.shots[:-1] + [sb.shots[-1].model_copy(update={"camera": CameraMove(move="static", azimuth=10)})]
+        sb = sb.model_copy(update={"shots": shots})
+        self.assertEqual(write.repair(sb), (sb, []))
+
+
+class Flask(unittest.TestCase):
+    def test_a_flat_flask_is_edge_on_from_its_sides(self):   # SMERALDA's and SOLARE's were spun into balls
+        self.assertEqual(write.edge_on(Product(template="perfume", depth=0.4)), [90.0, 270.0])
+        self.assertIsNone(write.edge_on(Product(template="perfume")))
+
+    def test_the_depth_reaches_the_studio(self):
+        calls = []
+
+        class Recorder:
+            async def call(self, method, **params):
+                calls.append(params)
+
+        asyncio.run(build.create_product(Recorder(), Product(template="perfume", depth=0.4), 0.1))
+        self.assertEqual(calls[0]["depth"], 0.4)
+
+
+class Lights(unittest.TestCase):
+    def test_a_key_is_kept_to_the_studios_limit(self):   # LUMIERE's chandelier's rim asked for 1014
+        calls = []
+
+        class Recorder:
+            async def call(self, method, **params):
+                calls.append((method, params))
+
+        sb = storyboard()
+        sb = sb.model_copy(update={"look": sb.look.model_copy(update={
+            "lighting": sb.look.lighting.model_copy(update={"fade_in": 2.5})})})
+        with mock.patch.object(build, "build_scene", mock.AsyncMock(return_value={"light_rim": 1013.99})), \
+                mock.patch.object(build, "add_motion", mock.AsyncMock()), \
+                mock.patch.object(build, "add_titles", mock.AsyncMock()):
+            asyncio.run(build.build(Recorder(), sb))
+        keys = next(p["keys"] for m, p in calls if m == "timeline.set_track")
+        self.assertEqual(keys[-1]["value"], build.KEY_INTENSITY)
 
 
 class Matte(unittest.TestCase):

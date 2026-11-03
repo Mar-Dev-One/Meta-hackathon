@@ -79,7 +79,7 @@ def analyse(run: Run, photo: Path | str, category: str = "product") -> Analysis:
 
     profile = BrandProfile(
         brand=reading.brand, product_name=reading.product_name, category=reading.category, template=None,
-        height=reading.height, profile_parts=traced.parts, materials=reading.materials, palette=swatches,
+        height=reading.height, depth=reading.depth, profile_parts=traced.parts, materials=reading.materials, palette=swatches,
         typography=reading.typography, mood=reading.mood, do_not=reading.do_not, label=label, photos=[str(kept)],
         packshot=str(run.root / "packshot.png"))
     run.output("brand_profile", run.save_json("brand_profile.json", profile))

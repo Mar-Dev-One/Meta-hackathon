@@ -68,6 +68,7 @@ class BrandProfile(Strict):
     template: Literal["perfume", "bottle", "jar", "can", "dropper"] | None = Field(
         None, description="the Studio template closest to its shape; null when the traced profile is used")
     height: float = Field(gt=0.005, le=5, description="real height in meters (estimated from the category)")
+    depth: float = Field(1.0, ge=0.1, le=1, description="front to back as a share of its width: 1 round, a flask 0.4")
     profile_parts: list[ProfilePart] | None = Field(None, description="the shape traced from the photo's silhouette")
     model: str | None = Field(None, description="the product as a 3D model file (.glb), for shapes that aren't "
                                                 "round (found online or given); then no profile")
@@ -88,7 +89,8 @@ class BrandProfile(Strict):
         template with its parts dressed in the materials; with the label."""
         if self.model:
             return Product(model=self.model, height=self.height)
+        depth = self.depth if self.depth < 1 else None
         if self.profile_parts:
-            return Product(template=None, profile_parts=self.profile_parts, label=self.label)
+            return Product(template=None, profile_parts=self.profile_parts, label=self.label, depth=depth)
         looks = {m.name: PartLook(**m.surface()) for m in self.materials}
-        return Product(template=self.template, height=self.height, parts=looks, label=self.label)
+        return Product(template=self.template, height=self.height, parts=looks, label=self.label, depth=depth)

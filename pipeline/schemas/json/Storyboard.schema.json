@@ -1081,6 +1081,21 @@
           "description": "meters across at the widest",
           "title": "Width"
         },
+        "depth": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0.1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "a spun shape's depth front to back, as a share of its width: null or 1 round, a flask 0.4",
+          "title": "Depth"
+        },
         "parts": {
           "additionalProperties": {
             "$ref": "#/$defs/PartLook"

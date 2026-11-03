@@ -33,6 +33,9 @@ MOTION_AMOUNT = {"turn": 45.0, "float": 0.08, "drop": 0.35, "tilt": 8.0}
 DROP_LANDS = 0.4
 EDGE = 1e-3   # a shot's last key sits this far before the cut, so the next shot's first key has its own time
 TITLE_OUT = 0.4   # seconds the film's titles take to fade out before the end card dissolves in
+# The most a light's intensity key may be (timeline.set_track's limit). A big product's lights stand far off, and
+# balance() can raise them several times over: LUMIERE's chandelier asked a rim light for 1014 and the ad failed.
+KEY_INTENSITY = 1000.0
 
 # A painted background (Environment.painted): what Muse Image is asked for around the director's place.
 PAINT = ("A photograph of {place}, as the background of a premium product photo: an empty place, nothing in the "
@@ -210,7 +213,7 @@ async def create_product(studio: Studio, product: Product, top: float) -> None:
         args["parts"] = {name: _clean(part) for name, part in product.parts.items()}
     else:
         args["parts"] = [_clean(part) for part in product.profile_parts]
-    for key in ("height", "width"):
+    for key in ("height", "width", "depth"):
         if getattr(product, key) is not None:
             args[key] = getattr(product, key)
     if product.label:
@@ -278,7 +281,7 @@ async def build(studio: Studio, sb: Storyboard) -> float:
         for light, intensity in lights.items():
             await studio.call("timeline.set_track", entity=light, component="Light", field="intensity",
                               keys=[{"t": 0, "value": 0.0, "ease": "in"},
-                                    {"t": sb.look.lighting.fade_in, "value": intensity}])
+                                    {"t": sb.look.lighting.fade_in, "value": min(intensity, KEY_INTENSITY)}])
     for track in sb.tracks:
         await studio.call("timeline.set_track", **_clean(track))
     await add_motion(studio, sb)

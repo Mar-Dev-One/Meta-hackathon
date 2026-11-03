@@ -162,6 +162,29 @@ default_thickness(product_part* part)
     part->material.thickness = 2.0f * widest;
 }
 
+// Squeezes the spun parts front to back (z) to `depth` of their width: a flask
+// is round from the front and flat from the side, which spinning its outline
+// made a ball (SMERALDA's, SOLARE's). Normals are scaled the other way
+// (the inverse transpose) and tangents with the surface, and a glass's
+// thickness, the light's way through it from the front, with it.
+static void
+flatten(geo_part* parts, uint32 count, f32 depth)
+{
+    for (uint32 p = 0; p < count; ++p)
+    {
+        for (uint32 i = 0; i < parts[p].vertex_count; ++i)
+        {
+            geo_vertex* v = &parts[p].vertices[i];
+            v->position[2] *= depth;
+            v->normal[2] /= depth;
+            glm_vec3_normalize(v->normal);
+            v->tangent[2] *= depth;
+            glm_vec3_normalize(v->tangent);
+        }
+        parts[p].material.thickness *= depth;
+    }
+}
+
 // The body's radius at height y (the profile's outermost crossing), 0 if none.
 static f32
 radius_at(const product_part* part, f32 y)
@@ -361,11 +384,12 @@ cmd_product_create(void* user, command_context* ctx, const cJSON* args, cJSON** 
     if (template_name && !t)
         return set_error(error, error_size, "\"template\" must be perfume, bottle, jar, can or dropper (or leave it out and give \"parts\")");
 
-    f32 height = t ? t->height : 1.0f, width = t ? t->width : 1.0f, segments = 96;
+    f32 height = t ? t->height : 1.0f, width = t ? t->width : 1.0f, segments = 96, depth = 1.0f;
     vec3 position;
     int  has_position = arg_vec3(args, "position", position, error, error_size);
     if (arg_number(args, "height", 0.005f, 5.0f, &height, error, error_size) < 0
         || arg_number(args, "width", 0.005f, 5.0f, &width, error, error_size) < 0
+        || arg_number(args, "depth", 0.1f, 1.0f, &depth, error, error_size) < 0
         || arg_number(args, "segments", 12, 256, &segments, error, error_size) < 0 || has_position < 0)
         return false;
 
@@ -462,6 +486,8 @@ cmd_product_create(void* user, command_context* ctx, const cJSON* args, cJSON** 
         }
     }
 
+    if (ok && depth < 1.0f)
+        flatten(geo, geo_count, depth);
     if (ok)
         ok = build_and_place(s, name, geo, geo_count, hash, has_position ? position : NULL, out_result, error, error_size);
     for (uint32 p = 0; p < geo_count; ++p)
@@ -582,6 +608,7 @@ static const cmd_arg PRODUCT_ARGS[] = {
     { "template", "string", false, "perfume, bottle, jar, can or dropper; or leave it out and give \"parts\" with profiles" },
     { "height", "number", false, "meters (templates: perfume 0.12, bottle 0.30, jar 0.07, can 0.122, dropper 0.11)" },
     { "width", "number", false, "meters across at the widest" },
+    { "depth", "number", false, "front to back, as a share of the width (0.1..1, default 1: round): a flask 0.4" },
     { "parts", "object", false, "template: {\"cap\": {\"color\": \"#c9a45c\", \"metallic\": 1, \"roughness\": 0.2}, \"body\": {\"opacity\": 0.85}}; "
                                 "no template: [{\"name\", \"profile\": [[radius, height], ...] bottom to top in meters, \"color\", ...}]. "
                                 "Each part: color, opacity, metallic, roughness, emissive; glass: transmission (0..1), ior (1.5), "

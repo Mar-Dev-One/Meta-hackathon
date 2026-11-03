@@ -181,6 +181,8 @@ class Product(Strict):
         None, description="the shape; null with `profile_parts` for a shape traced from a photo")
     height: float | None = Field(None, gt=0.005, le=5, description="meters (templates have a typical size)")
     width: float | None = Field(None, gt=0.005, le=5, description="meters across at the widest")
+    depth: float | None = Field(None, ge=0.1, le=1, description="a spun shape's depth front to back, as a share of "
+                                                                "its width: null or 1 round, a flask 0.4")
     parts: dict[str, PartLook] = Field(default_factory=dict, description="template parts' looks by name: body, cap, lid, collar, bulb")
     profile_parts: list[ProfilePart] | None = Field(None, description="the shape as profiles (from the brand analyst), instead of a template")
     model: str | None = Field(None, description="the product as a 3D model file (.glb: meters, Y up, base at the "

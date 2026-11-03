@@ -239,7 +239,8 @@ static void
 start_server(studio_state* state)
 {
     const char* exe_dir = paths_executable_dir();
-    snprintf(state->discovery_path, sizeof(state->discovery_path), "%s%sserver.json", exe_dir, *exe_dir ? "/" : "");
+    if (!state->discovery_path[0])   // --server-json gives another: several Studios started at once each have one
+        snprintf(state->discovery_path, sizeof(state->discovery_path), "%s%sserver.json", exe_dir, *exe_dir ? "/" : "");
 
     server_config config = { .port = state->server_port, .discovery_path = state->discovery_path };
     state->server        = server_start(&config);
@@ -431,13 +432,15 @@ static void
 print_usage(void)
 {
     printf("usage: Studio [--demo-scene] [--hidden] [--width W --height H] [--check PNG] [--view NAME] [--port N]\n"
+           "              [--server-json FILE]\n"
            "  --demo-scene  start with the demo scene instead of an empty stage\n"
            "  --hidden      no visible window (the command server still runs)\n"
            "  --width, --height\n"
            "                the window's and frame's size in pixels (default %dx%d)\n"
            "  --check       render the demo scene once, hidden, into PNG and exit (0 = it was written)\n"
            "  --view        a debug view: albedo, normals, roughness, metallic, ao, shadow, lighting, wireframe, lights\n"
-           "  --port        the command server's port (default %d; another free one if it's taken)\n",
+           "  --port        the command server's port (default %d; another free one if it's taken)\n"
+           "  --server-json where to write the server's address (default server.json next to the executable)\n",
            DEFAULT_WIDTH, DEFAULT_HEIGHT, SERVER_DEFAULT_PORT);
 }
 
@@ -514,6 +517,17 @@ int main(int argc, char** argv)
                 return 1;
             }
             state.server_port = (uint16)port;
+        }
+        else if (strcmp(arg, "--server-json") == 0)
+        {
+            const char* path = i + 1 < argc ? argv[++i] : NULL;
+            if (!path || strlen(path) >= sizeof(state.discovery_path))
+            {
+                fprintf(stderr, "--server-json needs the file to write the server's address to\n");
+                print_usage();
+                return 1;
+            }
+            snprintf(state.discovery_path, sizeof(state.discovery_path), "%s", path);
         }
         else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0)
         {

@@ -22,7 +22,7 @@ from pipeline.schemas import BrandProfile, Storyboard
 
 from . import grammar
 from .write import (DirectorError, _errors, _profile_text, balance, hero_problems, jump_cuts, light_problems,
-                    on_beat, problems, prop_problems, title_contrast_problems, title_problems)
+                    on_beat, problems, prop_problems, repair, title_contrast_problems, title_problems)
 
 CHANGES = {"type": "object", "additionalProperties": True}
 
@@ -213,7 +213,9 @@ async def revise(sb: Storyboard, fix: str, profile: BrandProfile | None, *, stud
                                                                indent=1),
                              profile=_profile_text(profile), grammar=grammar.load())
         result = spark.run_tools(text, tools=TOOLS, handle=editor.handle, system=SYSTEM, max_turns=10)
-        revised = on_beat(editor.storyboard())
+        revised, repaired = repair(on_beat(editor.storyboard()))
+        if run and repaired:
+            run.event("repaired", round=round_, changes=repaired)
         must = problems(revised, profile, editor.seconds) + light_steps(sb, revised) + \
             (await title_problems(studio, revised) if studio else [])
         if studio and not must:   # a bright background brought down first (write.balance)
