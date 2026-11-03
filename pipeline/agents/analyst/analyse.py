@@ -30,7 +30,7 @@ from .label import CutLabel, onto, printed, unroll
 from .materials import Reading, dress, read
 from .palette import palette, strip
 from .profile import Traced, outline, trace
-from .segment import Segmentation, overlay, segment
+from .segment import Segmentation, lettering, overlay, segment
 
 
 @dataclass
@@ -63,11 +63,13 @@ def analyse(run: Run, photo: Path | str, category: str = "product") -> Analysis:
     traced.parts = dress(traced.parts, reading)
     outline(seg, traced).save(run.path("outline.png"))
 
-    glass = any(m.transmission >= 0.5 for m in reading.materials)   # its refractions would pass for print
     print_ = None
-    if "label" not in seg.parts and not glass and (print_ := printed(seg)):   # printed straight on: a can, a tube
-        seg.parts["label"] = print_
-        run.event("print_label", box=list(print_.box))
+    if "label" not in seg.parts:   # printed straight on: a can, a tube; on glass only where SAM sees lettering,
+        glass = any(m.transmission >= 0.5 for m in reading.materials)   # its refractions passing for print elsewhere
+        within = lettering(seg) if glass else None
+        if (not glass or within) and (print_ := printed(seg, within=within)):
+            seg.parts["label"] = print_
+            run.event("print_label", box=list(print_.box), glass=glass)
     cut = unroll(seg, traced, whole=print_ is not None)
     cut = cut and onto(cut, traced.parts)
     label = None

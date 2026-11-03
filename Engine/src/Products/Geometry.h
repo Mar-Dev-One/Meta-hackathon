@@ -30,6 +30,8 @@ typedef struct geo_material
     const char* texture;         // base colour image, a URI relative to the .gltf; NULL = none
     b8          texture_repeat;  // tile it (a backdrop's surface); otherwise clamp at its edges (a label)
     b8          alpha_mask;      // with a texture: discard its transparent pixels (a label's cut-out shape)
+    b8          alpha_blend;     // with a texture: blend them instead, so it's drawn after the glass (a label on
+                                 // glass: drawn with the opaque parts, the glass refracted it, a ghost under it)
     b8          double_sided;
 
     // Glass, clear coat and specular, written as glTF's KHR_materials_*

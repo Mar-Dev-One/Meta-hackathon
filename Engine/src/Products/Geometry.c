@@ -395,7 +395,9 @@ material_json(const geo_material* m, cJSON* textures, cJSON* images, cJSON* samp
         cJSON_AddNumberToObject(ref, "index", cJSON_GetArraySize(textures) - 1);
     }
 
-    if (m->texture && m->alpha_mask)
+    if (m->texture && m->alpha_blend)
+        cJSON_AddStringToObject(json, "alphaMode", "BLEND");
+    else if (m->texture && m->alpha_mask)
     {
         cJSON_AddStringToObject(json, "alphaMode", "MASK");
         cJSON_AddNumberToObject(json, "alphaCutoff", 0.5);

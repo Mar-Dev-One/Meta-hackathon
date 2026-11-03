@@ -25,6 +25,7 @@ PARTS: dict[str, list[str]] = {"cap": ["cap", "lid"], "label": ["label"]}
 
 ON_PRODUCT = 0.6    # a part's share that must lie on the product's mask
 WHOLE = 0.9         # a "part" this big a share of the product is the product itself
+LETTERING_PAD = 0.15   # of the lettering's height, round SAM's box: the letters' soft edges
 
 COLORS = {"product": (255, 70, 70), "cap": (70, 150, 255), "label": (60, 210, 110)}
 
@@ -94,6 +95,20 @@ def segment(photo: Path | str, category: str = "product", parts: dict[str, list[
         if region:
             found[name] = region
     return Segmentation(photo, Image.open(photo).convert("RGB"), product, found)
+
+
+def lettering(seg: Segmentation) -> tuple[int, int, int, int] | None:
+    """The box round the brand's name or mark on the product (SAM's "logo":
+    the whole word; "lettering" finds it letter by letter), padded by
+    LETTERING_PAD of its height for the letters' soft edges; None if SAM
+    sees none there."""
+    found = _part(seg.photo, "logo", ["logo"], seg.product)
+    if not found:
+        return None
+    left, top, right, bottom = found.box
+    pad = round(LETTERING_PAD * (bottom - top))
+    width, height = seg.image.size
+    return max(left - pad, 0), max(top - pad, 0), min(right + pad, width), min(bottom + pad, height)
 
 
 def overlay(seg: Segmentation) -> Image.Image:

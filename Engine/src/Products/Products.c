@@ -28,6 +28,9 @@
 #define MAX_PARTS          8
 #define MAX_PROFILE_POINTS 64
 #define LABEL_LIFT         0.0006f   // meters the label stands off the glass, so it doesn't flicker into it
+// What a request builds, as a version in its file's name: bumped when the same request builds something else
+// (2: a label on glass is blended), so the files made before aren't loaded in its place.
+#define PRODUCT_FORMAT     2
 
 // --- Templates ------------------------------------------------------------------------
 // Profiles in units of the product's radius (r) and height (y), bottom to top.
@@ -228,7 +231,8 @@ build_and_place(studio* s, const char* name, geo_part* parts, uint32 count, uint
     if (!dir)
         return false;
     char key[160], path[1200];
-    snprintf(key, sizeof(key), "products/%s_%08x.gltf", name, short_hash(hash));
+    uint32 format = PRODUCT_FORMAT;
+    snprintf(key, sizeof(key), "products/%s_%08x.gltf", name, short_hash(fnv1a(hash, &format, sizeof(format))));
     snprintf(path, sizeof(path), "%s/%s", dir, key + strlen("products/"));
     free(dir);
 
@@ -452,6 +456,7 @@ cmd_product_create(void* user, command_context* ctx, const cJSON* args, cJSON** 
             geo_material paper = MATTE(1.0f, 1.0f, 1.0f, 0.55f);
             paper.texture      = label_uri;
             paper.alpha_mask   = true;
+            paper.alpha_blend  = body->material.transmission > 0.0f;   // on glass: after it, not refracted by it
             geo_part_init(&geo[geo_count], "label", &paper);
             geo_lathe(&geo[geo_count++], band, band_count, (uint32)segments, -0.5f * arc, 0.5f * arc, 35.0f, label_to, label_from);
         }

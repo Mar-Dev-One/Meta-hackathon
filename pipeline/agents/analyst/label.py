@@ -37,6 +37,10 @@ FINE_REACH = 0.01
 INSIDE = 0.005      # of its height: how far in from the body's edges print is looked for (not a cap's seam)
 BLOB = 0.0004       # of the body's pixels: a piece of print smaller than this is a speck (fabric, noise)
 PRINT_SHARE = (0.005, 0.7)   # of the body: less is specks, more is no body colour to tell print from
+LETTER = 8.0        # Lab distance (lightness counting half) from the glass round some lettering that's a letter
+                    # (at 12, SOLARE's gold E lost its arms to the amber glass)
+LETTER_SHARE = (0.03, 0.7)   # of the lettering's box: letters fill a good part of it, and leave some glass
+LETTER_SPECK = 0.002         # of the lettering's box: a smaller piece is a speck (NOCTIS's "I" is 0.011)
 
 
 @dataclass
@@ -140,15 +144,19 @@ def unroll(seg: Segmentation, traced: Traced, flatten: bool = True, whole: bool 
                     arc=arc)
 
 
-def printed(seg: Segmentation) -> Region | None:
+def printed(seg: Segmentation, within: tuple[int, int, int, int] | None = None) -> Region | None:
     """The print on the body itself, as a label region, for a product with
     no paper label (a can's logo, a tube's lettering, SAM finds no "label"):
     the body's pixels far from its own colour (big letters), or from their
     neighbourhood's (fine line art), lightness counting half so a can's
     darker edges and highlight stripes, which change slowly, stay body.
-    Wrapped, only the print shows (the region is the label's alpha) over
-    the body's material. None when there's too little to be print, or too
-    much to tell it from the body."""
+    Given the box `within` round some lettering (glass: its refractions
+    pass for print anywhere else), the print is the box's pixels far from
+    the box's own colour, the glass right round the letters (LETTER): gold
+    on amber glass is too near the whole body's colour for PRINT. Wrapped,
+    only the print shows (the region is the label's alpha) over the body's
+    material. None when there's too little to be print, or too much to tell
+    it from the body."""
     product = np.asarray(seg.product.mask) > 127
     cap = np.asarray(seg.parts["cap"].mask) > 127 if "cap" in seg.parts else np.zeros_like(product)
     body = product & ~cap
@@ -156,23 +164,35 @@ def printed(seg: Segmentation) -> Region | None:
         return None
     weight = np.array([0.5, 1.0, 1.0])
     lab = to_lab(np.asarray(seg.image, dtype=float).reshape(-1, 3)).reshape(*body.shape, 3)
-    far = np.linalg.norm((lab - np.median(lab[body], axis=0)) * weight, axis=2) > PRINT
-    reach = FINE_REACH * (seg.product.box[3] - seg.product.box[1])   # around, within the body only
-    near = gaussian_filter(body.astype(float), reach)
-    around = np.dstack([gaussian_filter(lab[..., k] * body, reach) for k in range(3)]) / np.maximum(near, 1e-6)[..., None]
-    fine = np.linalg.norm((lab - around) * weight, axis=2) > FINE
     inside = binary_erosion(body, iterations=max(2, round(INSIDE * (seg.product.box[3] - seg.product.box[1]))))
-    big = Image.fromarray((far & inside).astype(np.uint8) * 255, "L").filter(ImageFilter.MinFilter(3))
-    thin = Image.fromarray((fine & inside).astype(np.uint8) * 255, "L").filter(ImageFilter.MedianFilter(3))
-    found = np.asarray(ImageChops.lighter(big, thin)) > 127
+    if within:
+        left, top, right, bottom = within
+        area = np.zeros_like(body)
+        area[top:bottom, left:right] = True
+        area &= body
+        if area.sum() < 100:
+            return None
+        far = np.linalg.norm((lab - np.median(lab[area], axis=0)) * weight, axis=2) > LETTER
+        found = far & area & inside   # no median filter: it took a serif E's thin arms (SOLARE read SOLARL)
+        shares, speck = LETTER_SHARE, LETTER_SPECK * area.sum()
+    else:
+        far = np.linalg.norm((lab - np.median(lab[body], axis=0)) * weight, axis=2) > PRINT
+        reach = FINE_REACH * (seg.product.box[3] - seg.product.box[1])   # around, within the body only
+        near = gaussian_filter(body.astype(float), reach)
+        around = np.dstack([gaussian_filter(lab[..., k] * body, reach) for k in range(3)]) / np.maximum(near, 1e-6)[..., None]
+        fine = np.linalg.norm((lab - around) * weight, axis=2) > FINE
+        big = Image.fromarray((far & inside).astype(np.uint8) * 255, "L").filter(ImageFilter.MinFilter(3))
+        thin = Image.fromarray((fine & inside).astype(np.uint8) * 255, "L").filter(ImageFilter.MedianFilter(3))
+        found = np.asarray(ImageChops.lighter(big, thin)) > 127
+        area, shares, speck = body, PRINT_SHARE, BLOB * body.sum()
     pieces, count = label_pieces(found)
     sizes = np.bincount(pieces.ravel(), minlength=count + 1)
-    keep = sizes >= BLOB * body.sum()
+    keep = sizes >= speck
     keep[0] = False
     image = Image.fromarray(keep[pieces].astype(np.uint8) * 255, "L").filter(ImageFilter.MaxFilter(3))   # whole edges
     image = Image.fromarray(np.where(body, np.asarray(image), 0).astype(np.uint8), "L")
-    share = (np.asarray(image) > 127).sum() / body.sum()
-    if not PRINT_SHARE[0] <= share <= PRINT_SHARE[1]:
+    share = (np.asarray(image) > 127).sum() / area.sum()
+    if not shares[0] <= share <= shares[1]:
         return None
     return Region("label", "print on the body", image, image.getbbox())
 

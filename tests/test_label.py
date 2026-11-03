@@ -73,6 +73,28 @@ class Printed(unittest.TestCase):
     def test_shade_highlights_and_specks_are_not(self):
         self.assertIsNone(printed(can(letters=False)))
 
+    def test_on_glass_only_the_lettering(self):   # SOLARE's: gold letters on amber glass, bright refractions round
+        found = printed(glass(), within=(80, 240, 220, 340))
+        self.assertIsNotNone(found)
+        left, top, right, bottom = found.box
+        self.assertTrue(85 <= left <= 92 and 205 <= right <= 215 and 245 <= top <= 252 and 328 <= bottom <= 335)
+        self.assertGreater(printed(glass()).box[2] - printed(glass()).box[0], 150)   # unboxed: the refractions too
+
+
+def glass() -> Segmentation:
+    """An amber glass bottle with bright refractions down its sides, and gold
+    letters on its front a little lighter than the glass."""
+    w, h = 300, 600
+    rgb = np.full((h, w, 3), 90.0)
+    rgb[100:500, 50:250] = [200, 130, 30]
+    rgb[100:500, 60:75] = rgb[100:500, 225:240] = [255, 235, 170]   # refractions: further from the glass than the letters
+    for left in (90, 130, 170, 200):   # strokes, a quarter of the lettering's box
+        rgb[250:330, left:left + 10] = [235, 180, 80]
+    mask = np.zeros((h, w), np.uint8)
+    mask[100:500, 50:250] = 255
+    product = Region("product", "perfume bottle", Image.fromarray(mask), (50, 100, 250, 500))
+    return Segmentation(Path("glass.png"), Image.fromarray(rgb.astype(np.uint8)), product)
+
 
 if __name__ == "__main__":
     unittest.main()
