@@ -1,6 +1,6 @@
 # Studio: a product photo and a brief in, a finished 3D ad out
 
-Give it one photo of a product and a brief like *"Luxury perfume ad, dark and moody, 15 seconds"*, typed or spoken. A team of AI agents reads the brand from the photo and rebuilds the product in 3D. They plan the film shot by shot, dress the set, and render it in a real-time PBR renderer. You get a finished MP4, 16:9 or 9:16, from 15 seconds to 2 minutes, with titles, an end card and music.
+Give it one photo of a product and a brief like *"Luxury perfume ad, dark and moody, 15 seconds"*, typed or spoken. A team of AI agents reads the brand from the photo and rebuilds the product in 3D. They plan the film shot by shot, dress the set, and render it in a real-time PBR renderer. You get a finished MP4, 16:9 or 9:16, from 15 seconds to 2 minutes, with titles, an end card, music and an optional voice-over. An optional critic agent watches the ad before it's final, measures what's wrong and has it fixed.
 
 Built for the **Meta Global AI Developer Hackathon** (October 27 to November 4, 2026) on Meta's models: **Muse Spark**, **Muse Spark Open**, **SAM 3.1**, **Muse Image** and **Muse Voice**.
 
@@ -13,12 +13,15 @@ Built for the **Meta Global AI Developer Hackathon** (October 27 to November 4, 
  ┌───────────────┐    ┌───────────────┐    ┌──────────────┐    ┌──────────────┐
  │ Brand analyst │ ─► │ Scout + stager│ ─► │   Director   │ ─► │    Studio    │ ─► final cut
  │ SAM 3.1       │    │ + colourist   │    │  Muse Spark  │    │ C renderer,  │    16:9 / 9:16,
- │ Muse Spark    │    │ Muse Spark    │    │ + code rules │    │ JSON-RPC     │    titles, music
- └───────────────┘    └───────────────┘    └──────────────┘    └──────────────┘
-  brand profile:       a 3D model when       storyboard: set,     frames, offscreen,
-  palette, materials,  the product isn't     props, lights,       motion blur
-  label, typography    round, stood and      shots, titles,
-                       repainted             music
+ │ Muse Spark    │    │ Muse Spark    │    │ + code rules │    │ JSON-RPC     │    titles, music,
+ └───────────────┘    └───────────────┘    └──────▲───────┘    └──────┬───────┘    voice-over
+  brand profile:       a 3D model when            │                   │            (Muse Spark +
+  palette, materials,  the product isn't          │ its fixes, as     │ frames      MMS-TTS)
+  label, typography    round, stood and           │ storyboard edits  ▼
+                       repainted          ┌───────┴───────────────────┴──────┐
+                                          │ Critic (optional): measures each │
+                                          │ frame, Muse Spark Open judges it │
+                                          └──────────────────────────────────┘
 ```
 
 1. **Brand analyst** (photo → brand profile). SAM 3.1 finds the product, its cap and its label. Muse Spark reads what pixels can't: the brand name, each part's material (glass holding amber liquid, brushed aluminium, matte plastic), the typography, the mood, and what an ad for this brand must avoid. The palette comes from clustering in Lab colour space, skipping shade and highlights. A round product is traced from its silhouette and spun into 3D; a flat round flask is squeezed to the depth Spark judges from the photo. Its label is cut from the photo, unrolled from the curve and wrapped back on. Print straight on the body, like a can's logo or an engraving, is found by colour and wrapped the same way. On glass, whose refractions would pass for print, only the lettering SAM 3.1 finds as a logo is taken, and only if the whole word is found.
@@ -30,7 +33,8 @@ Built for the **Meta Global AI Developer Hackathon** (October 27 to November 4, 
 
    Code then checks the craft rules: lengths add up, consecutive shots move differently, the last shot is a hero with the brand's name, titles are readable and stay off the product, props don't float or hide it. It also checks that a coloured product isn't greyed by the tonemapper. What code can mend, it mends itself: a hero turned too far is brought round to the front (or, for a long product photographed head-on, like a motorbike, to a three-quarter view), and a prop with nothing to stand on is taken out. Other problems go back to Spark for the next draft; most ads need 2–3 drafts.
 5. **Studio** (storyboard → frames). The C renderer builds the set and the product as glTF, keys every move on a timeline, draws titles with signed-distance-field fonts, and renders frames offscreen at any size, with a 180° shutter's motion blur.
-6. **Final cut.** Shots are cut to the music's beat. The music is synthesized for the chosen mood and tempo, mastered to -16 LUFS. The end card shows the product's photo with the brand's name on a calm colour, and the film is encoded as H.264 and AAC. A second format (9:16 from a 16:9 plan) is reframed from the same storyboard.
+6. **Critic** (optional: `--critic`, or **critic loop** in the app; frames → fixes). Before the final render, the critic watches the ad and has it revised. It **measures first**: the Studio renders each frame with and without the product, which gives the product's exact pixels, so the critic knows how much of the frame it fills, which edges cut it, where its outline is lost in the background, and whether it's blown out, off the brand's colours or under a title. Then **Muse Spark Open judges** each shot and the whole ad against written anchors, bound to those measurements. Its fixes come back as storyboard edits (`shots[1].camera.fill 0.9 -> 0.65`), which the director applies and code checks; the ad is rebuilt and judged again, up to 3 times, keeping the best round. [More below.](#the-critic-optional)
+7. **Final cut.** Shots are cut to the music's beat. The music is synthesized for the chosen mood and tempo, mastered to -16 LUFS. An optional **voice-over** is written by Muse Spark, timed to the shots, spoken by Meta's MMS-TTS, with the music ducking under it. The end card shows the product's photo with the brand's name on a calm colour, and the film is encoded as H.264 and AAC. A second format (9:16 from a 16:9 plan) is reframed from the same storyboard.
 
 Every run is a folder (`runs/<time>-<name>/`) holding its inputs, the brand profile, each storyboard draft, the model sheets Spark chose from, the videos, and a timed log of every model call and renderer command. A failed run also keeps its traceback. Any run can be made again from its inputs (`--again`) or replayed in the app at its real pace.
 
@@ -73,39 +77,57 @@ A second batch, **50 products with a voice-over** (`scripts/voice_ads.py`), from
 
 ## Quick start
 
-**Requirements:**
-- Windows 10 or 11, with an OpenGL 4.x GPU.
-- Visual Studio with "Desktop development with C++": any edition, or the free Build Tools. 2022 or newer is recommended; 2019 16.8 is the minimum, for C11, and may not link the engine's prebuilt libraries.
-- CMake 3.26+ (Visual Studio's own is fine).
-- Python 3.11+ (developed on 3.13).
-- ffmpeg on the `PATH`.
+There are two ways to run it, both on **Windows 10 or 11 with an OpenGL 4.x GPU**. Either way you need **Python 3.11+** (developed on 3.13), **ffmpeg** on the `PATH` (`start.bat` offers to install both with winget) and a **Meta Model API key** from [dev.meta.ai](https://dev.meta.ai).
 
-**The quick way: run `start.bat`.** It checks each of these and sets up what's missing or out of date:
-- **Python and ffmpeg:** offers to install them with winget.
-- **The environment:** creates `.venv` and installs the packages, again whenever `pipeline\requirements.txt` changes.
-- **The voice-over:** installs `pipeline\requirements-voice.txt` (torch for the CPU and transformers, about 300 MB) and fetches Meta's MMS voice (about 150 MB), once. If it can't, the app still runs, and its ads are made without a voice-over.
-- **The Studio:** builds it with CMake and Visual Studio (found with vswhere; any edition 2019 16.8+ or the Build Tools), and on every run brings it up to date with its code, compiling only what changed (seconds when nothing has). A Studio just built renders its test frame as a check. A release zip's prebuilt Studio is used as it is.
-- **API keys:** asks for them, typed hidden, and saves them to `.env` (`scripts/setup_env.py`).
+### Option A: the release, prebuilt (no compiler needed)
 
-Each step acts only if something is missing or changed, so the second run goes straight to the app. Then it starts the app on http://127.0.0.1:8000 and opens the browser; its window shows the app's log, and the Studio's window shows each shot rendering. Other modes: `start.bat keys` asks for the keys again, `start.bat setup` only sets up, and `start.bat hidden` runs without the Studio's window.
+1. Download **`Studio-submission-windows-x64.zip`** from [Releases](https://github.com/Mar-Dev-One/Meta-hackathon/releases) and unzip it.
+2. Run **`start.bat`**.
 
-**No Visual Studio?** Download the release zip (`Studio-…-windows-x64.zip`): the Studio comes prebuilt in `build\Release`, so `start.bat` skips the build and needs only Python and ffmpeg. `scripts/release.py` makes it from the commit checked out.
+The Studio comes **precompiled** in `build\Release`, with its runtime DLL, shaders and assets, so nothing is built: `start.bat` sets up Python, asks for the keys and starts the app. The zip is this repository at the release's commit plus the built Studio (`scripts/release.py` makes it).
 
-**By hand.** API keys: copy `.env.example` to `.env` and fill in:
-- `MODEL_API_KEY`: the Meta Model API, from [dev.meta.ai](https://dev.meta.ai).
-- `BASETEN_API_KEY`: Muse Spark Open, for the critic.
-- `SKETCHFAB_API_TOKEN` (optional): downloads from Sketchfab. Without it the scout uses Objaverse and Poly Haven.
+### Option B: from source (compiles the Studio)
 
-`.env` is git-ignored.
+This also needs:
+- **Visual Studio** with "Desktop development with C++": any edition, or the free Build Tools. 2022 or newer is recommended; 2019 16.8 is the minimum, for C11, and may not link the engine's prebuilt libraries.
+- **CMake** 3.26+ (Visual Studio's own is fine).
 
 ```bat
-:: The renderer
+git clone https://github.com/Mar-Dev-One/Meta-hackathon.git
+cd Meta-hackathon
+start.bat
+```
+
+`start.bat` finds Visual Studio (with vswhere) and builds the Studio the first time, in a few minutes. On every run after, it brings the Studio up to date with its code, compiling only what changed (seconds when nothing has).
+
+### What `start.bat` does
+
+Each step acts only if something is missing or changed, so the second run goes straight to the app:
+1. **Python and ffmpeg:** offers to install them with winget.
+2. **The environment:** creates `.venv` and installs the packages, again whenever `pipeline\requirements.txt` changes.
+3. **The voice-over:** installs `pipeline\requirements-voice.txt` (torch for the CPU and transformers, about 300 MB) and fetches Meta's MMS voice (about 150 MB), once. If it can't, the app still runs, and its ads are made without a voice-over.
+4. **The Studio:** the release's prebuilt one is used as it is; from source, it's built or brought up to date, and a Studio just built renders its test frame as a check.
+5. **API keys:** asks for them, typed hidden, and saves them to `.env` (git-ignored; `scripts/setup_env.py`):
+   - `MODEL_API_KEY` (needed): the Meta Model API: Muse Spark, SAM 3.1, Muse Image, Muse Voice.
+   - `BASETEN_API_KEY` (optional): Muse Spark Open on Baseten, for the critic.
+   - `SKETCHFAB_API_TOKEN` (optional): downloads from Sketchfab. Without it the scout uses Objaverse and Poly Haven.
+6. **The app:** starts on http://127.0.0.1:8000 and opens the browser. Its window shows the app's log, and the Studio's window shows each shot rendering.
+
+Other modes: `start.bat keys` asks for the keys again, `start.bat setup` only sets up, and `start.bat hidden` runs without the Studio's window.
+
+### By hand (from source)
+
+Copy `.env.example` to `.env` and fill in the keys above, then:
+
+```bat
+:: The renderer ("Visual Studio 18 2026" for Visual Studio 2026)
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 
-:: The pipeline
+:: The pipeline, and the voice-over (optional)
 python -m venv .venv
 .venv\Scripts\python -m pip install -r pipeline\requirements.txt
+.venv\Scripts\python -m pip install -r pipeline\requirements-voice.txt
 
 :: The app: http://127.0.0.1:8000
 .venv\Scripts\python -m app
@@ -113,7 +135,7 @@ python -m venv .venv
 
 ### The app
 
-Drop a product photo, type a brief or press **Speak it**, choose the format and press **Make the ad**. The 3D model is found automatically; to give your own `.glb`, use the command line's `--model`. The page fills in as the agents work:
+Drop a product photo, type a brief or press **Speak it**, choose the format, tick **critic loop** or **voice-over** if you want them, and press **Make the ad**. The 3D model is found automatically; to give your own `.glb`, use the command line's `--model`. The page fills in as the agents work:
 - the brand profile and the 3D model with its credit;
 - each storyboard draft, with what the checks found and what changed;
 - **How Spark decided**: every choice in order, with the sheet it chose from;
