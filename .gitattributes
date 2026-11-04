@@ -1,2 +1,7 @@
 # Batch files need CRLF: cmd can mis-jump to labels in LF-only files.
 *.bat text eol=crlf
+
+# Left out of the release zip (git archive: scripts/release.py), 169 MB of batch photos the batch
+# scripts make again with Muse Image if missing; they stay in the repository.
+Assets/photos/batch/** export-ignore
+Assets/photos/voice/** export-ignore

@@ -28,7 +28,8 @@ The pipeline starts a hidden Studio for each ad and drives it. Everything an ad 
 | `product.glb`, `model_credit.json` | The fitted model and its licence credit |
 | `drafts/draft_N.json` / `.png` | Each storyboard draft, its preview, and what the checks found |
 | `storyboard.json` | The final plan |
-| `final/` | The videos |
+| `voiceover.json` | The voice-over's lines and times, if it has one |
+| `final/` | The videos, their music, and the voice-over's track and mix |
 | `run.json` | The summary: status, time, model calls, cost, outputs |
 | `traceback.txt` | Why it failed, if it did |
 
@@ -57,12 +58,13 @@ How the client behaves:
 
 1. **Segment** (`segment.py`). SAM 3.1 finds the product (by its category, else "product"), then its cap and its label. A part must lie mostly on the product and be cut to its mask. SAM also finds the caps and labels of things in the background.
 2. **Palette** (`palette.py`). Each part's pixels are clustered in Lab colour space. Clusters of one hue form a family, and a family's colour is how it looks lit: its darkest clusters (shade) and near-white ones (specular highlights) are left out.
-3. **Read** (`materials.py`). Muse Spark sees the photo with the masks. It reads the brand name, each part's material (colour, metallic, roughness, transmission, the colour of a liquid held in glass), the typography, the mood, and what the brand must avoid.
-4. **Trace** (`profile.py`). The silhouette's half-width, row by row, becomes a profile `[radius, height]` per part, scaled to the product's real height. Spun round its axis, it is the 3D shape of a round product.
+3. **Read** (`materials.py`). Muse Spark sees the photo with the masks. It reads the brand name, each part's material (colour, metallic, roughness, transmission, the colour of a liquid held in glass), the typography, the mood, and what the brand must avoid. It also judges the product's real height (a ring at 2 cm to a fridge at 1.5 m) and its depth front to back: the photo shows the front only, and a flat flask and a ball have the same outline.
+4. **Trace** (`profile.py`). The silhouette's half-width, row by row, becomes a profile `[radius, height]` per part, scaled to the product's real height. Spun round its axis, it is the 3D shape of a round product; a flat one is squeezed front to back to its depth.
 5. **Label** (`label.py`). The label is cut from the photo and unrolled: on a round body, a point at angle *a* shows at *x = axis + r·sin a*, so the photo is sampled back at even angles. The light across it is divided out, and it goes on the part its band lies on.
    - **No paper label:** with no label found, print on the body becomes the label, like a can's logo, an engraving or gold leaf. That means body pixels far from the body's own colour (big letters) or from their neighbourhood's (fine lines).
    - **Ignored:** slow shading, highlight stripes, specks and the cap's seam.
-   - **The result** is a see-through decal over the body's material. Glass is skipped, since its refractions would pass for print.
+   - **On glass,** whose refractions would pass for print anywhere, only the lettering SAM 3.1 finds as a logo is looked at, against the glass right round it (gold on amber glass is too near the whole body's colour). A word found only in part is dropped: a fragment reads worse than none.
+   - **The result** is a see-through decal over the body's material.
 
 If the photo shows no brand name, the brand comes from the brief (a word in capitals) or the photo's file name. If neither has one, the director is told never to invent one.
 
@@ -87,7 +89,7 @@ Downloads are cached in `cache/models/`, each with a `.credit.json` that follows
 **Fitting** (`studio/models.py`):
 - **Base stripped:** whatever the model came standing on (a coaster, a display stand, a patch of floor) is removed. That means thin, wide parts at its very bottom, found as connected pieces; the product's own flat bottom stays.
 - **Normalised:** to the product's real height.
-- **Glass:** a glass product is dressed in the analyst's materials.
+- **Glass:** a glass product is dressed in the analyst's materials. A stopper its modeller made part of the bottle's mesh is split off by its connected pieces, so it's dressed as the cap.
 - **Finish:** materials without a finish of their own get the photo's.
 
 **The colourist** (`colourist.py`, `studio/recolour.py`). The model comes in its modeller's colours, so its textures are repainted in the photo's colours.
@@ -128,11 +130,12 @@ Downloads are cached in `cache/models/`, each with a `.credit.json` that follows
 - **Hard rules:** a draft that breaks one goes back.
   - The shots add up to the length.
   - Each shot is 1.2–5 s (8 s past 30 s).
-  - The last shot is a static hero from the front with the brand's name.
+  - The last shot is a static hero from the front (within 25°) with the brand's name. A long, thin product photographed head-on, like a motorbike, is end-on from the front, so its hero is a three-quarter view (30–60°).
   - Titles enter late enough and stay long enough.
   - No jump cuts: each cut changes size, side or height enough.
   - A flat product is seen from above, and a thin one never edge-on.
   - Props don't float.
+- **Repairs:** what code can mend, it mends before checking, and logs: a static hero turned too far is brought within its limit, on Spark's side; a prop with nothing to stand on is taken out.
 - **Taste rules:** these are told to Spark too, and a last draft that only breaks these is kept with warnings.
   - The product separates from its backdrop in tone.
   - Glass and metal have an environment to reflect.
@@ -153,8 +156,8 @@ Each draft is built in the Studio and previewed (`drafts/`). What's wrong goes b
 
 | Module | What it does |
 |---|---|
-| `Studio/` | The command server (JSON-RPC 2.0 over WebSocket, a per-run token), studio commands, camera moves and framing, the 8 lighting presets |
-| `Products/` | Products spun from profiles, labels wrapped round a part's band, backdrops and pedestals; all as glTF |
+| `Studio/` | The command server (JSON-RPC 2.0 over WebSocket, a per-run token, its address in its own file with `--server-json`, so Studios started at once don't share one), studio commands, camera moves and framing, the 8 lighting presets |
+| `Products/` | Products spun from profiles (flattened to a depth for a flask), labels wrapped round a part's band (blended on glass, so the glass doesn't refract them into a ghost), backdrops and pedestals (a rough one matte, so rim lights don't glare off its top); all as glTF, their files named with a format version so an engine change isn't hidden by files made before it |
 | `Timeline/` | Keyframed tracks on any component field, with easing; the camera moves are keys on it |
 | `Text/` | Titles with signed-distance-field fonts and kerning, sized as a share of the frame's height |
 | `Shot/` | Offscreen rendering: PNGs at given times, or a time range straight into an mp4 through ffmpeg; where an entity is in the frame (`shot.bounds`) |
@@ -179,6 +182,7 @@ Each draft is built in the Studio and previewed (`drafts/`). What's wrong goes b
   - **The sound:** a synthesized stereo room (convolution reverb), the kick pumping the pads, soft saturation.
   - **Mastering:** to -16 LUFS (BS.1770), peaks at -1 dB.
   - **Licensed music:** a track at `Assets/music/<mood>.mp3` is used instead.
+- **Voice-over** (optional, `--voice`; `agents/voiceover.py`, `encode/speech.py`): Muse Spark writes two to four short lines for the finished storyboard, timed to its shots, with the brand's name spelt as it sounds. Code checks each line fits its time at the voice's pace, the last says the brand, and numbers are words. Meta's MMS-TTS speaks them locally on the CPU, and the music ducks about 7 dB under the voice (sidechain compression). If it can't be made, the ad goes on without one.
 - **End card** (`endcard.py`): the product's photo, cut out (the analyst's packshot), on a calm colour, with the brand's name in the titles' font and a short line under it.
 - **Finish** (`finish.py`): H.264 and AAC.
 - **A second frame** (`studio/reframe.py`): 9:16 from a 16:9 plan, or the reverse.
@@ -218,7 +222,7 @@ Each draft is built in the Studio and previewed (`drafts/`). What's wrong goes b
 
 ## Tests
 
-`tests/`, run with `python -m unittest discover -s tests -t .`: 53 tests, no GPU or network. Each guards something that went wrong once:
+`tests/`, run with `python -m unittest discover -s tests -t .`: 83 tests, no GPU or network. Each guards something that went wrong once:
 - music cut off the beat;
 - props placed off the pedestal;
 - a coaster left under a mug, and a stand in two pieces;
@@ -229,6 +233,12 @@ Each draft is built in the Studio and previewed (`drafts/`). What's wrong goes b
 - a label past its part, and print versus shading;
 - highlights in the palette;
 - the scout guessing a shape;
-- an invented brand, and honey turning black in glass.
+- an invented brand, and honey turning black in glass;
+- a gold stopper dressed as glass, and a black plinth glaring white;
+- lettering on glass lost, or kept as a fragment;
+- a light key too bright for the Studio, a ring too small, a prop with nothing under it;
+- a three-quarter hero failing every draft, and an azimuth of 340 read as far from the front;
+- a flask spun into a ball;
+- the voice-over's lines, timing and mix, and the critic keeping its best round when Spark fails.
 
 `ctest` runs the Studio's timeline and text layout tests.

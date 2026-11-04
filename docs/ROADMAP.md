@@ -33,9 +33,10 @@ phases 8-9._
 14. [Phase 10: Built beyond the plan (Oct 29-31)](#phase-10-built-beyond-the-plan-oct-29-31)
 15. [Phase 11: Enhancements (Oct 31 - Nov 2)](#phase-11-enhancements-oct-31---nov-2)
 16. [Phase 12: The 30-ad batch and its fixes (Nov 1-2)](#phase-12-the-30-ad-batch-and-its-fixes-nov-1-2)
-17. [Risks and fallbacks](#risks-and-fallbacks)
-18. [Cut list if behind](#cut-list-if-behind)
-19. [After the hackathon: the engine's module system](#after-the-hackathon-the-engines-module-system)
+17. [Phase 13: The voice-over and the 50-ad batch (Nov 2-3)](#phase-13-the-voice-over-and-the-50-ad-batch-nov-2-3)
+18. [Risks and fallbacks](#risks-and-fallbacks)
+19. [Cut list if behind](#cut-list-if-behind)
+20. [After the hackathon: the engine's module system](#after-the-hackathon-the-engines-module-system)
 
 ---
 
@@ -143,9 +144,9 @@ work stops for a report after each one.
 | ~~Fri Oct 30~~ | ~~10.2-10.11~~ done | ~~Photo-only models; live director; sets, motion, painted backgrounds, beat cuts, end cards~~ |
 | ~~Sat Oct 31~~ | ~~10.12-10.13, 11.1~~ done | ~~Positioning of any-shape models; textured models~~ |
 | ~~Sun Nov 1~~ | ~~11.2, 11.3, 11.4; 8a demo ads; the 30-ad batch~~ done | ~~Models in the product's colours; resumable runs; 30 ads overnight~~ |
-| Mon Nov 2 | ~~Phase 12 fixes from the batch; 8b evaluation; README and ARCHITECTURE.md~~ done; the rest of Phase 12 | **Feature freeze at night** |
-| Tue Nov 3 | 8c release zip, clean clone; 9a video | The video recorded |
-| Wed Nov 4 | 9b | Submitted by 6 PM ET (deadline 9 PM ET) |
+| ~~Mon Nov 2~~ | ~~Phase 12 fixes from the batch; 8b evaluation; README and ARCHITECTURE.md; the voice-over; the 50-ad batch~~ done | ~~**Feature freeze at night**~~ |
+| ~~Tue Nov 3~~ | ~~Phase 13 fixes from the 50-ad batch; start.bat sets up everything~~ done | ~~Fixes made and remade~~ |
+| Wed Nov 4 | 8c release zip, clean clone; 9a video; 9b | Submitted by 6 PM ET (deadline 9 PM ET) |
 
 ### Step plan
 
@@ -749,6 +750,38 @@ each with a test, and the ads made again: **29 of 30** now.
 | 12.2e | Long ads (1-2 min) vary little: the product small, few close-ups | measured variety rules past 30 s (share of close-ups, elevation spread) | Medium | M |
 | 12.2f | Some recolourings miss (HAVEN tan, not olive) | look at the colourist's sheets for HAVEN | Low | S-M |
 | ~~12.2g~~ done | The crossfade into the end card shows two titles at once | the film's titles fade out over 0.4 s, gone when the card dissolves in (`build.title_opacity`) | Low | S |
+
+## Phase 13: The voice-over and the 50-ad batch (Nov 2-3)
+
+The optional **voice-over** (`--voice`): Muse Spark writes timed lines, checked in code; Meta's MMS-TTS
+speaks them locally; the music ducks under the voice. Then `scripts/voice_ads.py` made **50 ads with a
+voice-over for 50 new products** overnight, unattended: a ring to a grand piano, glass, metal and rough
+materials, 15 to 45 s. **41 of 50** were made (4 h 10 min, $12.60). Every ad was reviewed from its frames,
+and four perfumes made by hand (AURUM, NOCTIS, SMERALDA, SOLARE) found more.
+
+### 13.1 Fixed (Nov 3)
+| # | Flaw found | Fix | Where |
+|---|---|---|---|
+| ~~13.1a~~ | A chandelier failed: a light key over the Studio's 1000 | light keys kept to the limit | `studio/build.py` |
+| ~~13.1b~~ | A ring failed (2 cm, under the reader's 2 cm floor); every big product came out 0.6 m or less | the reader's heights as the profile allows, 0.005 to 5 m | `analyst/materials.py` |
+| ~~13.1c~~ | A prop with nothing to stand on failed three drafts | taken out in code (`repair`) | `director/write.py` |
+| ~~13.1d~~ | **Five products photographed head-on failed every draft** (motorbike, bicycle, scooter, boots, vacuum): the hero rule and the edge-on rule ruled out every angle | a three-quarter hero (30-60°) for a thin product end-on from the front; a hero turned too far brought within its limit in code; 340 read as 20 from the front | `director/write.py` (`hero_limit`, `repair`, `from_front`) |
+| ~~13.1e~~ | Two Studios started at once raced on `server.json`, one timing out | each launch writes its own (`--server-json`) | `Studio/main.c`, `studio/client.py` |
+| ~~13.1f~~ | NOCTIS's gold stopper came out smoked glass: its modeller made it part of the bottle's mesh | a mesh's connected pieces in the cap zone dressed as the cap (`split_caps`) | `studio/models.py` |
+| ~~13.1g~~ | Black plinths glared white under rim lights, whatever their colour | a rough pedestal matte (`backdrop.create` takes `specular`) | `studio/build.py`, `Products.c` |
+| ~~13.1h~~ | Lettering printed on glass was dropped (SMERALDA, SOLARE, NOCTIS) | looked for only in the logo SAM 3.1 finds, against the glass round it; kept only whole | `analyst/segment.py`, `analyst/label.py` |
+| ~~13.1i~~ | A label on glass showed a refracted ghost under it | blended, drawn after the glass | `Products.c`, `Geometry.c` |
+| ~~13.1j~~ | Engine changes didn't reach products built before (cached by request alone) | product files named with a format version | `Products.c` |
+| ~~13.1k~~ | Flat round flasks came out as balls | the reader judges the depth; the spun shape is flattened to it, its label kept off it | `analyst/materials.py`, `Products.c` |
+| ~~13.1l~~ | `start.bat` never rebuilt the Studio once built, nor set up the voice-over | it sets up the voice-over, brings the Studio up to date every run (seconds when nothing changed) and checks a new build | `start.bat` |
+
+### 13.2 Left
+| # | Flaw | Idea |
+|---|---|---|
+| 13.2a | Clear glass holding a liquid reads as one tinted solid (a decanter, Maison Héritage's perfume) | an inner liquid part inside a clear shell |
+| 13.2b | A 3D model's product has no label (a label wraps only a spun shape) | the label laid on the model's front as a decal (built, then reverted for the freeze) |
+| 13.2c | Gold print on white partly found (VELOURA read "V LOURA") | the logo box and the whole-word check for every product, not only glass |
+| 13.2d | One voice for every ad | pace, pitch and expressiveness by the ad's mood |
 
 ---
 

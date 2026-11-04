@@ -21,14 +21,14 @@ Built for the **Meta Global AI Developer Hackathon** (October 27 to November 4, 
                        repainted             music
 ```
 
-1. **Brand analyst** (photo → brand profile). SAM 3.1 finds the product, its cap and its label. Muse Spark reads what pixels can't: the brand name, each part's material (glass holding amber liquid, brushed aluminium, matte plastic), the typography, the mood, and what an ad for this brand must avoid. The palette comes from clustering in Lab colour space, skipping shade and highlights. A round product is traced from its silhouette and spun into 3D. Its label is cut from the photo, unrolled from the curve and wrapped back on. Print straight on the body, like a can's logo or an engraving, is found by colour and wrapped the same way.
+1. **Brand analyst** (photo → brand profile). SAM 3.1 finds the product, its cap and its label. Muse Spark reads what pixels can't: the brand name, each part's material (glass holding amber liquid, brushed aluminium, matte plastic), the typography, the mood, and what an ad for this brand must avoid. The palette comes from clustering in Lab colour space, skipping shade and highlights. A round product is traced from its silhouette and spun into 3D; a flat round flask is squeezed to the depth Spark judges from the photo. Its label is cut from the photo, unrolled from the curve and wrapped back on. Print straight on the body, like a can's logo or an engraving, is found by colour and wrapped the same way. On glass, whose refractions would pass for print, only the lettering SAM 3.1 finds as a logo is taken, and only if the whole word is found.
 2. **Scout** (photo → 3D model, for shapes that aren't round). Muse Spark decides whether the product is round. If not, it searches three free catalogues (Sketchfab, Objaverse, Poly Haven), keeping only CC0 and CC-BY models, and picks finalists from their thumbnails. Those are downloaded and rendered alike, and Spark picks the closest by its renders. **Models carrying another company's brand are refused**, whether it shows in a logo, lettering, the model's title or a specific real product. If nothing fits, the ad stops and asks for a model (`.glb`); it never guesses a shape.
 3. **Stager and colourist.** Spark sees the model from several sides and says which way is up and which side faces the camera. The colourist repaints the model's own textures in the photo's colours, region by region, if Spark sees that closer to the product.
 4. **Director** (brief + brand profile → storyboard). Muse Spark plans the ad as data:
    - **the set:** a style from a library of 13 looks, a surface and a light environment from Poly Haven, props at their real sizes;
    - **the film:** lights, and shots with one camera move each (orbit, dolly, crane, truck, reveal, zoom, or a free path through waypoints), product motion, titles, an end card and the music's mood and tempo.
 
-   Code then checks the craft rules: lengths add up, consecutive shots move differently, the last shot is a hero with the brand's name, titles are readable and stay off the product, props don't float or hide it. It also checks that a coloured product isn't greyed by the tonemapper. Problems go back to Spark for the next draft; most ads need 2–3 drafts.
+   Code then checks the craft rules: lengths add up, consecutive shots move differently, the last shot is a hero with the brand's name, titles are readable and stay off the product, props don't float or hide it. It also checks that a coloured product isn't greyed by the tonemapper. What code can mend, it mends itself: a hero turned too far is brought round to the front (or, for a long product photographed head-on, like a motorbike, to a three-quarter view), and a prop with nothing to stand on is taken out. Other problems go back to Spark for the next draft; most ads need 2–3 drafts.
 5. **Studio** (storyboard → frames). The C renderer builds the set and the product as glTF, keys every move on a timeline, draws titles with signed-distance-field fonts, and renders frames offscreen at any size, with a 180° shutter's motion blur.
 6. **Final cut.** Shots are cut to the music's beat. The music is synthesized for the chosen mood and tempo, mastered to -16 LUFS. The end card shows the product's photo with the brand's name on a calm colour, and the film is encoded as H.264 and AAC. A second format (9:16 from a 16:9 plan) is reframed from the same storyboard.
 
@@ -48,12 +48,16 @@ Every ad made between November 1 and 2, 2026 (72 runs), from `scripts/evaluate.p
 
 The batch behind most of these is **30 ads for 30 fictional products**, made unattended in one night (`scripts/batch_ads.py`): a candle, a drone, an espresso machine, a guitar… from 15 seconds to 2 minutes. Reviewing its frames drove the latest fixes: the logo guard, print on the body as a label, liquids that keep their colour in glass, and colours the tonemapper no longer greys.
 
+A second batch, **50 products with a voice-over** (`scripts/voice_ads.py`), from a ring to a grand piano and from glass to metal to rough wood and stone, made **41 of 50** unattended in one night (median 5 minutes and $0.27 an ad). Its nine failures drove the fixes since: a light too bright for the Studio on a chandelier, a ring judged too small, a prop with nothing to stand on, a three-quarter hero for products photographed head-on, and big products made their real size. Four of the nine were made again after the fixes, and all four were made; four others failed on the same hero rule, and one, a bar of soap, had no free 3D model.
+
 ### Known limits
 
 - A product with no suitable free 3D model needs one given (`--model`); the scout won't guess its shape.
 - A model stands the way the photo shows the product, not always the way it would rest: a wallet or a knife can stand on end.
 - A label wraps only a round, traced body; a model keeps its own surface.
 - Glass and the liquid it holds are one surface, so a bottle can look like coloured plastic.
+- What's inside a glass product (a snow globe's scene, a terrarium's plants) isn't built: a traced shape is solid.
+- The voice-over has one voice: MMS-TTS has a single speaker, clear but plain.
 - Long ads (1–2 minutes) vary their framing less than a human editor would.
 
 ## Meta models
@@ -157,14 +161,14 @@ Its fixes are storyboard edits (`shots[1].camera.fill 0.9 -> 0.65`), applied by 
 
 ## The Studio
 
-`build\Release\Studio.exe` is the renderer the agents drive. It serves **JSON-RPC 2.0 over WebSocket** on `127.0.0.1:7468` (`--port N` for another), and writes the URL with a per-run token to `server.json` next to the exe. The method is the command and the params are its arguments:
+`build\Release\Studio.exe` is the renderer the agents drive. It serves **JSON-RPC 2.0 over WebSocket** on `127.0.0.1:7468` (`--port N` for another), and writes the URL with a per-run token to `server.json` next to the exe (`--server-json FILE` for another, so several Studios can start at once). The method is the command and the params are its arguments:
 
 ```json
 -> {"jsonrpc": "2.0", "id": 1, "method": "camera.move", "params": {"move": "orbit", "subject": "product",
     "start": 0, "duration": 4, "azimuth": -40, "to_azimuth": 40, "elevation": 8, "fill": 0.6}}
 ```
 
-`commands.list` describes every command and its arguments. A failed command changes nothing and says which argument is wrong and what it accepts. Options: `--hidden` (no window; how the pipeline runs it), `--demo-scene`, `--width W --height H`, `--check out.png`, `--view NAME` (albedo, normals, roughness, metallic, ao, shadow, lighting, wireframe, lights).
+`commands.list` describes every command and its arguments. A failed command changes nothing and says which argument is wrong and what it accepts. Options: `--hidden` (no window; how the pipeline runs it), `--demo-scene`, `--width W --height H`, `--check out.png`, `--server-json FILE`, `--view NAME` (albedo, normals, roughness, metallic, ao, shadow, lighting, wireframe, lights).
 
 <details>
 <summary>The Studio's commands</summary>
@@ -175,8 +179,8 @@ Its fixes are storyboard edits (`shots[1].camera.fill 0.9 -> 0.65`), applied by 
 | `environment.get` / `environment.set` | HDRI, image-based lighting, exposure, bloom, tone mapping (`aces`, `agx`, `neutral`), SSAO |
 | `render.get` / `render.set` | Antialiasing, shadows, background colour |
 | `camera.get` / `camera.set` | Creates or moves a camera and makes it the one the frame is seen through |
-| `product.create` | A product spun from a profile: a template (`perfume`, `bottle`, `jar`, `can`, `dropper`) or your own parts, with colours and a label image wrapped round one part. A part can be glass (transmission, index of refraction, thickness, the colour of what it holds), clear-coated, or have its own specular |
-| `backdrop.create` | A cyclorama or a round pedestal, optionally covered with a texture |
+| `product.create` | A product spun from a profile: a template (`perfume`, `bottle`, `jar`, `can`, `dropper`) or your own parts, with colours and a label image wrapped round one part (on glass, drawn after the glass so it isn't refracted). A part can be glass (transmission, index of refraction, thickness, the colour of what it holds), clear-coated, or have its own specular; `depth` flattens the spun shape front to back, for a flask |
+| `backdrop.create` | A cyclorama or a round pedestal, optionally covered with a texture; `specular` makes it matte, so rim lights don't glare off a pedestal's top |
 | `lighting.preset` | A lighting setup around a subject: `three_point`, `rim_dark`, `high_key`, `top_soft`, `split`, `neon_dual`, `overhead_soft`, `edge_rim`; `glow` adds a pool of light behind it |
 | `camera.move` | A shot's camera move around a subject: `static`, `orbit`, `dolly`, `crane`, `truck`, `reveal`, `zoom`, or `path` through up to 8 waypoints on a curve that never overshoots. `fill` is the subject's share of the frame's height, so a jar and a bottle frame alike. `aperture` sets a shallow focus that keeps the subject sharp. Moves placed end to end are cuts |
 | `timeline.set_track` / `add_key` / `remove_track` / `clear` / `get` | Keyframes any number, vector or colour field of any component, with easing (linear, in, out, in_out, step, cubic bezier) |
@@ -217,8 +221,8 @@ pipeline/
   schemas/                  pydantic models: BrandProfile, Storyboard, Critique (JSON schemas in json/)
   runs.py, cleanup.py       run folders: log, outputs, replay; cleaning old ones
 app/                        the web app: FastAPI backend, one HTML page
-scripts/                    the demo ads, the 30-product batch, the evaluation, test photos, font kerning,
-                            the API key setup
+scripts/                    the demo ads, the 30-product batch, the 50-product voice-over batch, the
+                            evaluation, test photos, font kerning, the API key setup, the release zip
 start.bat                   one-click setup and launch
 tests/                      the pipeline's regression tests
 Assets/                     fonts (OFL), HDRIs (CC0), shaders, test product photos
@@ -227,7 +231,7 @@ docs/                       the architecture, the roadmap, two overview PDFs
 ```
 
 **Tests:**
-- `.venv\Scripts\python -m unittest discover -s tests -t .` runs the pipeline's 69 tests, with no GPU or network.
+- `.venv\Scripts\python -m unittest discover -s tests -t .` runs the pipeline's 83 tests, with no GPU or network.
 - `ctest --test-dir build -C Release` runs the Studio's timeline and text layout tests.
 - `pipeline/meta/smoke/run_all.py` makes one test call to each model.
 
@@ -250,7 +254,18 @@ The rendering engine (`PBR_Engine`, [AI-Powered-PBR-Renderer](https://github.com
 
 ## Credits and licences
 
-- **3D models:** downloaded per ad from Sketchfab, Objaverse and Poly Haven. Only CC0 and CC-BY models are used. Each CC-BY model's credit is saved with the run (`model_credit.json`) and shown in the app.
+- **3D models:** downloaded per ad from Sketchfab, Objaverse and Poly Haven. Only CC0 and CC-BY models are used. Each CC-BY model's credit is saved with the run (`model_credit.json`) and shown in the app. The models in the ads shown in the demo, all CC BY 4.0 from Sketchfab unless said:
+  - "Wind-up Tin Robot - toy" by Brian Trepanier (TICKER)
+  - "Grand Piano" by farhad.Guli (ALLEGRO)
+  - "Wooden Chess Set" by Vltava (GAMBIT)
+  - "05 Parfum" by Pedro França (NOCTIS)
+  - "Rubber duck" by Ikki_3d (QUACKO)
+  - "CC0 - Kettlebell" by plaggy (IRONCLAD)
+  - "Cafe Racer" by kowalski_30 (VANTA)
+  - "USSR Fridge" by LongLight (CHILLA)
+  - "Camera 01" by Rajil Jose Macatangay, Poly Haven, CC0 (OCULA)
+
+  AURUM, FIZZO, ORLO, SOLARE and ELIX were traced from their photos.
 - **Sets and props:** surfaces, HDRIs and prop models from [Poly Haven](https://polyhaven.com), CC0.
 - **Fonts:** Playfair Display, Montserrat, Oswald and Great Vibes, under the SIL Open Font License 1.1 (licences in `Assets/fonts`).
 - **Voice:** spoken by Meta's [MMS-TTS](https://huggingface.co/facebook/mms-tts-eng), CC BY-NC 4.0: non-commercial use only.
