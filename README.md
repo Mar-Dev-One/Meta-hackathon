@@ -72,7 +72,7 @@ A second batch, **50 products with a voice-over** (`scripts/voice_ads.py`), from
 | **Muse Spark Open** (Baseten) | The critic (optional): per-shot and whole-ad judgment from rendered frames |
 | **SAM 3.1** | Segmenting the product, cap and label: its silhouette becomes the 3D shape, its label the texture |
 | **Muse Voice** (`muse-voice-transcribe-1.0`) | The spoken brief: "Speak it" in the app |
-| **Muse Image** (`muse-image-1.0`) | The product photos of fictional brands used for testing (`Assets/photos`) |
+| **Muse Image** (`muse-image-1.0`) | Test product photos of fictional brands (`Assets/photos`); any real product photo works as well |
 | **MMS-TTS** (`facebook/mms-tts-eng`, open weights, run locally) | The voice-over (optional): Muse Spark writes the lines, MMS speaks them. The Meta Model API has no text to speech |
 
 ## Quick start
@@ -292,4 +292,4 @@ The rendering engine (`PBR_Engine`, [AI-Powered-PBR-Renderer](https://github.com
 - **Fonts:** Playfair Display, Montserrat, Oswald and Great Vibes, under the SIL Open Font License 1.1 (licences in `Assets/fonts`).
 - **Voice:** spoken by Meta's [MMS-TTS](https://huggingface.co/facebook/mms-tts-eng), CC BY-NC 4.0: non-commercial use only.
 - **Music:** synthesized note by note by `pipeline/encode/music.py`: original, with nothing to license. A track placed at `Assets/music/<mood>.mp3` is used instead.
-- **Brands:** every brand in the photos, ads and examples is fictional. Catalogue models showing a real brand are refused.
+- **Brands:** Studio works on any product photo: a real brand's, a maker's own, or one generated for a test. The test photos in `Assets/photos` and the two batches are fictional brands made with Muse Image; some ads shown are of real products (such as Sony's WH-1000XM5 headphones), made to demonstrate the tool, not endorsed by or affiliated with their makers. Trademarks belong to their owners. Catalogue 3D models showing a brand other than the product's own are refused, so an ad never carries another company's mark.
